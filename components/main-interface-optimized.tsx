@@ -5,7 +5,7 @@ import { ChatInterface } from "@/components/chat-interface"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { DocumentPanel } from "@/components/document-panel"
-import { AgentSelector } from "@/components/agent-selector"
+
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
@@ -204,14 +204,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         <div className="flex-1 flex overflow-hidden">
           {/* Central Chat Area */}
           <div className="flex-1 flex flex-col overflow-hidden h-full">
-            {/* Agent Selector (desktop only) */}
-            {!isMobile && (
-              <AgentSelector
-                activeAgent={systemState.activeAgent}
-                onAgentChange={handleAgentChange}
-                isProcessing={systemState.isLoading}
-              />
-            )}
+
 
             {/* Chat Interface */}
             <ChatInterface

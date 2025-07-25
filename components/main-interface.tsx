@@ -5,7 +5,7 @@ import { ChatInterface } from "@/components/chat-interface"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { DocumentPanel } from "@/components/document-panel"
-import { AgentSelector } from "@/components/agent-selector"
+
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useHopeAI } from "@/hooks/use-hopeai"
@@ -117,14 +117,7 @@ export function MainInterface() {
         <div className="flex-1 flex overflow-hidden">
           {/* Central Chat Area */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Agent Selector (desktop only) */}
-            {!isMobile && (
-              <AgentSelector
-                activeAgent={currentSession?.activeAgent || "socratico"}
-                onAgentChange={handleAgentChange}
-                isProcessing={isLoading}
-              />
-            )}
+
 
             {/* Chat Interface */}
             <ChatInterface
