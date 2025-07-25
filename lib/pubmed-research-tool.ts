@@ -28,9 +28,9 @@ export class PubMedResearchTool {
     const { query, maxResults = 10, dateRange, sortBy = "relevance" } = params
 
     try {
-      // Step 1: Search for PMIDs
+      // Step 1: Search for PMIDs with retry logic
       const searchUrl = this.buildSearchUrl(query, maxResults, dateRange, sortBy)
-      const searchResponse = await fetch(searchUrl)
+      const searchResponse = await this.fetchWithRetry(searchUrl, 'búsqueda de PMIDs')
       const searchData = await searchResponse.text()
 
       const pmids = this.extractPMIDs(searchData)
@@ -39,9 +39,9 @@ export class PubMedResearchTool {
         return []
       }
 
-      // Step 2: Fetch article details
+      // Step 2: Fetch article details with retry logic
       const detailsUrl = this.buildDetailsUrl(pmids)
-      const detailsResponse = await fetch(detailsUrl)
+      const detailsResponse = await this.fetchWithRetry(detailsUrl, 'detalles de artículos')
       const detailsData = await detailsResponse.text()
 
       return this.parseArticleDetails(detailsData)
@@ -49,6 +49,61 @@ export class PubMedResearchTool {
       console.error("Error searching PubMed:", error)
       throw new Error("Failed to search PubMed database")
     }
+  }
+
+  private async fetchWithRetry(
+    url: string, 
+    operation: string, 
+    maxRetries: number = 3, 
+    timeoutMs: number = 10000
+  ): Promise<Response> {
+    let lastError: Error | null = null
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[PubMedTool] Intento ${attempt}/${maxRetries} para ${operation}`)
+        
+        // Crear AbortController para timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+        
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'HopeAI-Research-Tool/1.0 (contact@hopeai.com)'
+          }
+        })
+        
+        clearTimeout(timeoutId)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        // Rate limiting: esperar entre requests
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+        
+        return response
+        
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        console.warn(`[PubMedTool] Error en intento ${attempt} para ${operation}:`, lastError.message)
+        
+        // Si es el último intento, lanzar el error
+        if (attempt === maxRetries) {
+          break
+        }
+        
+        // Backoff exponencial: esperar más tiempo entre reintentos
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+        console.log(`[PubMedTool] Esperando ${backoffMs}ms antes del siguiente intento...`)
+        await new Promise(resolve => setTimeout(resolve, backoffMs))
+      }
+    }
+    
+    throw new Error(`Falló ${operation} después de ${maxRetries} intentos. Último error: ${lastError?.message}`)
   }
 
   private buildSearchUrl(query: string, maxResults: number, dateRange?: string, sortBy?: string): string {
@@ -258,12 +313,78 @@ ${article.abstract.substring(0, 300)}${article.abstract.length > 300 ? "..." : "
     }
   }
 
-  async executeTool(parameters: any): Promise<string> {
+  async executeTool(parameters: any): Promise<{ output?: string; error?: { code: number; message: string; details: string[] } }> {
     try {
+      // Validación robusta de parámetros
+      if (!parameters || typeof parameters !== 'object') {
+        return {
+          error: {
+            code: 400,
+            message: "Parámetros inválidos",
+            details: ["Los parámetros deben ser un objeto válido"]
+          }
+        }
+      }
+
+      const { query, maxResults = 10, dateRange, sortBy = "relevance" } = parameters
+
+      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return {
+          error: {
+            code: 400,
+            message: "Query de búsqueda requerido",
+            details: ["Debe proporcionar un término de búsqueda válido"]
+          }
+        }
+      }
+
+      if (maxResults && (typeof maxResults !== 'number' || maxResults < 1 || maxResults > 20)) {
+        return {
+          error: {
+            code: 400,
+            message: "Número de resultados inválido",
+            details: ["maxResults debe ser un número entre 1 y 20"]
+          }
+        }
+      }
+
       const articles = await this.searchPubMed(parameters)
-      return this.formatSearchResults(articles)
+      const formattedResults = this.formatSearchResults(articles)
+      
+      return {
+        output: formattedResults
+      }
     } catch (error) {
-      return `Error al buscar en PubMed: ${error instanceof Error ? error.message : "Error desconocido"}`
+      console.error('[PubMedTool] Error en executeTool:', error)
+      
+      // Manejo estructurado de diferentes tipos de errores
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return {
+          error: {
+            code: 503,
+            message: "Error de conectividad con PubMed",
+            details: ["No se pudo conectar con la base de datos de PubMed. Verifique su conexión a internet."]
+          }
+        }
+      }
+      
+      if (error instanceof Error && error.message.includes('timeout')) {
+        return {
+          error: {
+            code: 408,
+            message: "Timeout en la búsqueda",
+            details: ["La búsqueda en PubMed tardó demasiado tiempo. Intente con términos más específicos."]
+          }
+        }
+      }
+      
+      return {
+        error: {
+          code: 500,
+          message: "Error interno en la búsqueda",
+          details: [error instanceof Error ? error.message : "Error desconocido en PubMed"]
+        }
+      }
     }
   }
 }

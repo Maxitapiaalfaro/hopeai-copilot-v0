@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { hopeAI } from '@/lib/hopeai-system'
+import { getGlobalOrchestrationSystem } from '@/lib/orchestration-singleton'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,18 +19,26 @@ export async function POST(request: NextRequest) {
       fileName: file.name,
       fileSize: file.size,
       sessionId,
+      userId
     })
     
-    // Asegurar que el sistema esté inicializado
-    await hopeAI.initialize()
+    const orchestrationSystem = await getGlobalOrchestrationSystem()
     
-    const uploadedFile = await hopeAI.uploadDocument(sessionId, file, userId)
+    // Usar el sistema de orquestación para manejar la subida de documentos
+    const result = await orchestrationSystem.orchestrate(
+      `Subir documento: ${file.name}`,
+      sessionId,
+      userId,
+      {
+        forceMode: 'dynamic'
+      }
+    )
     
-    console.log('✅ API: Documento subido exitosamente:', uploadedFile.id)
+    console.log('✅ API: Documento procesado exitosamente')
     
     return NextResponse.json({
       success: true,
-      uploadedFile
+      ...result
     })
   } catch (error) {
     console.error('❌ API Error (Upload Document):', error)

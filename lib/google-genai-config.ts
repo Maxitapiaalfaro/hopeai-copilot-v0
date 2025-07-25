@@ -56,6 +56,6 @@ export const clinicalModelConfig = {
   temperature: 0.3, // Conservative for clinical recommendations
   topK: 40,
   topP: 0.95,
-  maxOutputTokens: 2048,
+  maxOutputTokens: 4096,
   safetySettings: clinicalSafetySettings,
 }

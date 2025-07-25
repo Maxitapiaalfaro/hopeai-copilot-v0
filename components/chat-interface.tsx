@@ -291,53 +291,59 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
           )}
 
           {/* Chat History - Solo mensajes visibles */}
-          {currentSession?.history?.slice(-visibleMessageCount).map((message) => (
-            <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-              {message.role === "model" && (
-                <div
-                  className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
-                    config.bgColor,
-                    config.borderColor,
-                  )}
-                >
-                  <IconComponent className={cn("h-4 w-4", config.textColor)} />
-                </div>
-              )}
-
-              <div
-                className={cn(
-                  "max-w-[80%] mx-2 p-4 rounded-lg",
-                  message.role === "user" ? "bg-blue-600 text-white" : `${config.bgColor} border ${config.borderColor}`,
-                )}
-              >
-                <MarkdownRenderer 
-                  content={message.content}
-                  className="text-sm"
-                  trusted={message.role === "model"}
-                />
-                {message.attachments && message.attachments.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {message.attachments.map((file, index) => (
-                      <div key={index} className="text-xs opacity-75 flex items-center gap-1">
-                        <Paperclip className="h-3 w-3" />
-                        {file.name}
-                      </div>
-                    ))}
+          {currentSession?.history?.slice(-visibleMessageCount).map((message) => {
+            // Usar la configuración del agente que generó el mensaje, no el agente activo
+            const messageAgentConfig = message.agent ? agentConfig[message.agent] : config;
+            const MessageIconComponent = messageAgentConfig.icon;
+            
+            return (
+              <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                {message.role === "model" && (
+                  <div
+                    className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
+                      messageAgentConfig.bgColor,
+                      messageAgentConfig.borderColor,
+                    )}
+                  >
+                    <MessageIconComponent className={cn("h-4 w-4", messageAgentConfig.textColor)} />
                   </div>
                 )}
-                <div className={cn("text-xs mt-1", message.role === "user" ? "text-blue-100" : "text-gray-500")}>
-                  {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </div>
-              </div>
 
-              {message.role === "user" && (
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-1">
-                  <User className="h-4 w-4 text-white" />
+                <div
+                  className={cn(
+                    "max-w-[80%] mx-2 p-4 rounded-lg",
+                    message.role === "user" ? "bg-blue-600 text-white" : `${messageAgentConfig.bgColor} border ${messageAgentConfig.borderColor}`,
+                  )}
+                >
+                  <MarkdownRenderer 
+                    content={message.content}
+                    className="text-sm"
+                    trusted={message.role === "model"}
+                  />
+                  {message.attachments && message.attachments.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {message.attachments.map((file, index) => (
+                        <div key={index} className="text-xs opacity-75 flex items-center gap-1">
+                          <Paperclip className="h-3 w-3" />
+                          {file.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className={cn("text-xs mt-1", message.role === "user" ? "text-blue-100" : "text-gray-500")}>
+                    {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {message.role === "user" && (
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-1">
+                    <User className="h-4 w-4 text-white" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* Streaming Response */}
           {isStreaming && streamingResponse && (

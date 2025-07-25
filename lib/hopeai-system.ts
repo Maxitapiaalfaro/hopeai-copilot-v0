@@ -94,16 +94,31 @@ export class HopeAISystem {
     sessionId: string,
     message: string,
     useStreaming = true,
+    suggestedAgent?: string
   ): Promise<{
     response: any
     updatedState: ChatState
   }> {
     if (!this.initialized) await this.initialize()
 
-    // Load current session state
-    const currentState = await this.storage.loadChatSession(sessionId)
+    // Load current session state or create a new one if it doesn't exist
+    let currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
-      throw new Error(`Session not found: ${sessionId}`)
+      console.log(`[HopeAI] Creating new session: ${sessionId}`)
+      currentState = {
+        sessionId,
+        userId: 'default-user',
+        activeAgent: 'socratic-philosopher', // Default agent
+        history: [],
+        metadata: {
+          createdAt: new Date(),
+          lastUpdated: new Date(),
+          totalTokens: 0,
+          messageCount: 0
+        }
+      }
+      // Save the new session
+      await this.storage.saveChatSession(currentState)
     }
 
     try {
@@ -113,12 +128,27 @@ export class HopeAISystem {
         parts: [{ text: msg.content }]
       }))
 
-      // Usar el router inteligente para clasificar la intención y enrutar automáticamente
-      const routingResult = await this.intentRouter.routeUserInput(
-        message,
-        sessionContext,
-        currentState.activeAgent
-      )
+      // Si hay un agente sugerido por el orquestador, usarlo; sino usar el router inteligente
+      let routingResult;
+      if (suggestedAgent) {
+        console.log(`[HopeAI] Usando agente sugerido por orquestador: ${suggestedAgent}`)
+        routingResult = {
+          targetAgent: suggestedAgent,
+          enrichedContext: {
+            detectedIntent: 'orchestrator_suggestion',
+            confidence: 0.95,
+            extractedEntities: [],
+            isExplicitRequest: false
+          }
+        }
+      } else {
+        // Usar el router inteligente para clasificar la intención y enrutar automáticamente
+        routingResult = await this.intentRouter.routeUserInput(
+          message,
+          sessionContext,
+          currentState.activeAgent
+        )
+      }
 
       // Manejar solicitudes explícitas de cambio de agente
       if (routingResult.enrichedContext?.isExplicitRequest) {

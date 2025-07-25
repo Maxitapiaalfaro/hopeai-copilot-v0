@@ -100,8 +100,8 @@ export class HopeAIOrchestrationBridge {
       enableDynamicOrchestration: true,
       fallbackToLegacy: true,
       enablePerformanceMonitoring: true,
-      enableGradualMigration: true,
-      migrationPercentage: 80, // 80% de requests usan orquestación dinámica
+      enableGradualMigration: false, // Desactivar migración gradual
+      migrationPercentage: 100, // 100% de requests usan orquestación dinámica
       logLevel: 'info',
       ...config
     };

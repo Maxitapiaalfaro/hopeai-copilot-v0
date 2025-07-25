@@ -6,7 +6,11 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "test:orchestration": "node test-orchestration-migration.js",
+    "monitor:orchestration": "curl -s http://localhost:3000/api/orchestration/health | jq",
+    "metrics:orchestration": "curl -s http://localhost:3000/api/orchestration/metrics | jq",
+    "reset:metrics": "curl -X POST -H 'Content-Type: application/json' -d '{\"action\":\"reset\"}' http://localhost:3000/api/orchestration/metrics"
   },
   "dependencies": {
     "@google/genai": "latest",

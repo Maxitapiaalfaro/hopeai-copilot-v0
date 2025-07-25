@@ -154,6 +154,28 @@ export class HopeAIOrchestrationSystem {
   }
 
   /**
+   * Inicializa el sistema de orquestación
+   */
+  public async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+    
+    try {
+      // Inicializar el sistema HopeAI subyacente
+      await this.hopeAISystem.initialize();
+      
+      // Inicializar componentes del orquestador
+      this.initializeComponents();
+      
+      this.log('info', 'Sistema de orquestación HopeAI inicializado correctamente');
+    } catch (error) {
+      this.log('error', `Error inicializando sistema: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
    * Inicializa todos los componentes del sistema
    */
   private initializeComponents(): void {
