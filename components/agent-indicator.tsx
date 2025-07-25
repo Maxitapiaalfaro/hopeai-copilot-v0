@@ -1,7 +1,8 @@
 "use client"
 
-import { Brain, BookOpen, Stethoscope, Zap } from "lucide-react"
+import { Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getAgentVisualConfig } from "@/config/agent-visual-config"
 
 type AgentType = "socratico" | "clinico" | "academico"
 
@@ -10,38 +11,10 @@ interface AgentIndicatorProps {
   isTyping: boolean
 }
 
-const agentConfig = {
-  socratico: {
-    name: "HopeAI Socrático",
-    description: "Especialista en diálogo terapéutico y reflexión profunda",
-    icon: Brain,
-    color: "blue",
-    bgColor: "bg-blue-50",
-    textColor: "text-blue-700",
-    borderColor: "border-blue-200",
-  },
-  clinico: {
-    name: "HopeAI Clínico",
-    description: "Especialista en síntesis y documentación clínica",
-    icon: Stethoscope,
-    color: "green",
-    bgColor: "bg-green-50",
-    textColor: "text-green-700",
-    borderColor: "border-green-200",
-  },
-  academico: {
-    name: "HopeAI Académico",
-    description: "Especialista en investigación y evidencia científica",
-    icon: BookOpen,
-    color: "purple",
-    bgColor: "bg-purple-50",
-    textColor: "text-purple-700",
-    borderColor: "border-purple-200",
-  },
-}
+// Configuración de agentes ahora centralizada en agent-visual-config.ts
 
 export function AgentIndicator({ activeAgent, isTyping }: AgentIndicatorProps) {
-  const config = agentConfig[activeAgent]
+  const config = getAgentVisualConfig(activeAgent)
   const IconComponent = config.icon
 
   return (

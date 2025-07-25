@@ -8,6 +8,7 @@ import type { ChatMessage, AgentType } from "@/types/clinical-types"
 // Tipos específicos para el contexto optimizado
 interface OptimizedContextState {
   nativeChat: any | null
+  currentAgent: AgentType
   curatedHistory: ChatMessage[]
   comprehensiveHistory: ChatMessage[]
   tokenCount: number
@@ -58,8 +59,10 @@ const COMPRESSION_THRESHOLD = 50000 // caracteres
 const MAX_CONTEXT_WINDOW = 1000000 // tokens aproximados
 
 export function useOptimizedContext(): UseOptimizedContextReturn {
+  // Estado inicial del contexto optimizado
   const [contextState, setContextState] = useState<OptimizedContextState>({
     nativeChat: null,
+    currentAgent: 'socratico',
     curatedHistory: [],
     comprehensiveHistory: [],
     tokenCount: 0,
@@ -139,6 +142,7 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
       setContextState(prev => ({
         ...prev,
         nativeChat: chat,
+        currentAgent: agent,
         curatedHistory: history.slice(-10), // Mantener últimos 10 mensajes
         comprehensiveHistory: history,
         contextWindow: {
@@ -236,6 +240,7 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
         id: `msg_${Date.now() + 1}_${Math.random().toString(36).substr(2, 9)}`,
         content: responseText,
         role: 'model',
+        agent: contextState.currentAgent,
         timestamp: new Date()
       }
 
@@ -302,6 +307,12 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
       // Crear nuevo chat con el agente objetivo usando configuraciones específicas
       const newChat = await createOptimizedChat(newAgent, optimizedHistory)
       
+      // Actualizar el agente actual en el estado
+      setContextState(prev => ({
+        ...prev,
+        currentAgent: newAgent
+      }))
+      
       console.log(`✅ Contexto transferido exitosamente a agente: ${newAgent} con configuraciones específicas`)
       return newChat
     } catch (error) {
@@ -325,6 +336,7 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
   const resetContext = useCallback(() => {
     setContextState({
       nativeChat: null,
+      currentAgent: 'socratico',
       curatedHistory: [],
       comprehensiveHistory: [],
       tokenCount: 0,

@@ -1,9 +1,10 @@
 "use client"
 
-import { Brain, Stethoscope, BookOpen, Zap } from "lucide-react"
+import { Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { AGENT_VISUAL_CONFIG } from "@/config/agent-visual-config"
 
 interface AgentSelectorProps {
   activeAgent: "socratico" | "clinico" | "academico"
@@ -11,29 +12,14 @@ interface AgentSelectorProps {
   isProcessing: boolean
 }
 
-const agents = [
-  {
-    id: "socratico",
-    name: "HopeAI Socrático",
-    description: "Diálogo terapéutico y reflexión profunda",
-    icon: Brain,
-    color: "blue",
-  },
-  {
-    id: "clinico",
-    name: "HopeAI Clínico",
-    description: "Síntesis y documentación clínica",
-    icon: Stethoscope,
-    color: "green",
-  },
-  {
-    id: "academico",
-    name: "HopeAI Académico",
-    description: "Investigación y evidencia científica",
-    icon: BookOpen,
-    color: "purple",
-  },
-]
+// Configuración de agentes ahora centralizada en agent-visual-config.ts
+const agents = Object.entries(AGENT_VISUAL_CONFIG).map(([id, config]) => ({
+  id,
+  name: config.name,
+  description: config.description,
+  icon: config.icon,
+  color: config.color,
+}))
 
 export function AgentSelector({ activeAgent, onAgentChange, isProcessing }: AgentSelectorProps) {
   return (
@@ -44,6 +30,7 @@ export function AgentSelector({ activeAgent, onAgentChange, isProcessing }: Agen
             {agents.map((agent) => {
               const IconComponent = agent.icon
               const isActive = activeAgent === agent.id
+              const agentConfig = AGENT_VISUAL_CONFIG[agent.id as keyof typeof AGENT_VISUAL_CONFIG]
 
               return (
                 <Tooltip key={agent.id}>
@@ -53,10 +40,7 @@ export function AgentSelector({ activeAgent, onAgentChange, isProcessing }: Agen
                       size="sm"
                       className={cn(
                         "flex items-center gap-2 px-4 py-2 rounded-md transition-all",
-                        isActive && `bg-${agent.color}-100 text-${agent.color}-700`,
-                        isActive && agent.color === "blue" && "bg-blue-100 text-blue-700",
-                        isActive && agent.color === "green" && "bg-green-100 text-green-700",
-                        isActive && agent.color === "purple" && "bg-purple-100 text-purple-700",
+                        isActive && agentConfig.bgColor && agentConfig.textColor,
                       )}
                       onClick={() => onAgentChange(agent.id as "socratico" | "clinico" | "academico")}
                       disabled={isProcessing}
@@ -65,9 +49,7 @@ export function AgentSelector({ activeAgent, onAgentChange, isProcessing }: Agen
                         <IconComponent
                           className={cn(
                             "h-5 w-5",
-                            isActive && agent.color === "blue" && "text-blue-600",
-                            isActive && agent.color === "green" && "text-green-600",
-                            isActive && agent.color === "purple" && "text-purple-600",
+                            isActive && agentConfig.textColor,
                           )}
                         />
                         {isActive && isProcessing && (

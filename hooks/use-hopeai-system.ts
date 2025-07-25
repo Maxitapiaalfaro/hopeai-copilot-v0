@@ -265,6 +265,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       setSystemState(prev => ({
         ...prev,
         history: updatedState.history,
+        activeAgent: updatedState.activeAgent, // Sincronizar el agente activo
         isLoading: false
       }))
 

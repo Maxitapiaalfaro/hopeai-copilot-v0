@@ -6,11 +6,12 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Paperclip, Mic, MicOff, Brain, Stethoscope, BookOpen, User, Zap, ChevronDown } from "lucide-react"
+import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { AgentType, ChatState } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
 import { MarkdownRenderer, StreamingMarkdownRenderer } from "@/components/markdown-renderer"
+import { getAgentVisualConfig, getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -21,32 +22,7 @@ interface ChatInterfaceProps {
   addStreamingResponseToHistory?: (responseContent: string, agent: AgentType) => Promise<void>
 }
 
-const agentConfig = {
-  socratico: {
-    name: "HopeAI Socrático",
-    icon: Brain,
-    color: "blue",
-    bgColor: "bg-blue-50",
-    textColor: "text-blue-700",
-    borderColor: "border-blue-200",
-  },
-  clinico: {
-    name: "HopeAI Clínico",
-    icon: Stethoscope,
-    color: "green",
-    bgColor: "bg-green-50",
-    textColor: "text-green-700",
-    borderColor: "border-green-200",
-  },
-  academico: {
-    name: "HopeAI Académico",
-    icon: BookOpen,
-    color: "purple",
-    bgColor: "bg-purple-50",
-    textColor: "text-purple-700",
-    borderColor: "border-purple-200",
-  },
-}
+// Configuración de agentes ahora centralizada en agent-visual-config.ts
 
 export function ChatInterface({ activeAgent, isProcessing, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
@@ -138,8 +114,11 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
           // Agregar la respuesta completa al historial
           if (fullResponse.trim() && addStreamingResponseToHistory) {
             try {
-              await addStreamingResponseToHistory(fullResponse, activeAgent)
-              console.log('✅ Frontend: Respuesta agregada al historial')
+              // Usar el agente de la información de enrutamiento si está disponible,
+              // de lo contrario usar el agente activo actual
+              const responseAgent = response?.routingInfo?.targetAgent || activeAgent
+              await addStreamingResponseToHistory(fullResponse, responseAgent)
+              console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
             } catch (historyError) {
               console.error('❌ Frontend: Error agregando al historial:', historyError)
             }
@@ -164,8 +143,11 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
         // Agregar la respuesta al historial
         if (response.text.trim() && addStreamingResponseToHistory) {
           try {
-            await addStreamingResponseToHistory(response.text, activeAgent)
-            console.log('✅ Frontend: Respuesta agregada al historial')
+            // Usar el agente de la información de enrutamiento si está disponible,
+            // de lo contrario usar el agente activo actual
+            const responseAgent = response?.routingInfo?.targetAgent || activeAgent
+            await addStreamingResponseToHistory(response.text, responseAgent)
+            console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
           } catch (historyError) {
             console.error('❌ Frontend: Error agregando al historial:', historyError)
           }
@@ -210,7 +192,7 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
     })
   }
 
-  const config = agentConfig[activeAgent]
+  const config = getAgentVisualConfig(activeAgent)
   const IconComponent = config.icon
 
   return (
@@ -293,7 +275,7 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
           {/* Chat History - Solo mensajes visibles */}
           {currentSession?.history?.slice(-visibleMessageCount).map((message) => {
             // Usar la configuración del agente que generó el mensaje, no el agente activo
-            const messageAgentConfig = message.agent ? agentConfig[message.agent] : config;
+            const messageAgentConfig = getAgentVisualConfigSafe(message.agent);
             const MessageIconComponent = messageAgentConfig.icon;
             
             return (
@@ -376,13 +358,13 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
               <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg", config.bgColor, `border ${config.borderColor}`)}>
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1">
-                    <div className={cn("w-2 h-2 rounded-full animate-bounce", `bg-${config.color}-400`)}></div>
+                    <div className={cn("w-2 h-2 rounded-full animate-bounce", config.typingDotColor)}></div>
                     <div
-                      className={cn("w-2 h-2 rounded-full animate-bounce", `bg-${config.color}-400`)}
+                      className={cn("w-2 h-2 rounded-full animate-bounce", config.typingDotColor)}
                       style={{ animationDelay: "0.1s" }}
                     ></div>
                     <div
-                      className={cn("w-2 h-2 rounded-full animate-bounce", `bg-${config.color}-400`)}
+                      className={cn("w-2 h-2 rounded-full animate-bounce", config.typingDotColor)}
                       style={{ animationDelay: "0.2s" }}
                     ></div>
                   </div>
@@ -452,9 +434,8 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
               disabled={!inputValue.trim() || isProcessing || isStreaming}
               className={cn(
                 "h-[60px] px-6",
-                activeAgent === "socratico" && "bg-blue-600 hover:bg-blue-700",
-                activeAgent === "clinico" && "bg-green-600 hover:bg-green-700",
-                activeAgent === "academico" && "bg-purple-600 hover:bg-purple-700",
+                config.buttonBgColor,
+                config.buttonHoverColor,
               )}
             >
               <Send className="h-4 w-4" />
