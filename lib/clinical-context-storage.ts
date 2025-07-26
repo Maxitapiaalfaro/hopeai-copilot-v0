@@ -79,23 +79,94 @@ export class ClinicalContextStorage {
     })
   }
 
+  // Obtener todas las sesiones de un usuario (método legacy - mantener compatibilidad)
   async getUserSessions(userId: string): Promise<ChatState[]> {
+    const result = await this.getUserSessionsPaginated(userId, { pageSize: 1000 })
+    return result.items
+  }
+
+  // Obtener sesiones paginadas de un usuario
+  async getUserSessionsPaginated(
+    userId: string, 
+    options: {
+      pageSize?: number
+      pageToken?: string
+      sortBy?: 'lastUpdated' | 'created'
+      sortOrder?: 'asc' | 'desc'
+    } = {}
+  ): Promise<{
+    items: ChatState[]
+    nextPageToken?: string
+    totalCount: number
+    hasNextPage: boolean
+  }> {
     if (!this.db) throw new Error("Database not initialized")
 
-    const transaction = this.db.transaction(["chat_sessions"], "readonly")
-    const store = transaction.objectStore("chat_sessions")
-    const index = store.index("userId")
+    try {
+      const {
+        pageSize = 20,
+        pageToken,
+        sortBy = 'lastUpdated',
+        sortOrder = 'desc'
+      } = options
 
-    return new Promise((resolve, reject) => {
-      const request = index.getAll(userId)
-      request.onsuccess = () => {
-        const sessions = request.result.sort(
-          (a, b) => new Date(b.metadata.lastUpdated).getTime() - new Date(a.metadata.lastUpdated).getTime(),
-        )
-        resolve(sessions)
+      const transaction = this.db.transaction(["chat_sessions"], "readonly")
+      const store = transaction.objectStore("chat_sessions")
+      const index = store.index("userId")
+      
+      return new Promise((resolve, reject) => {
+        const request = index.getAll(userId)
+        
+        request.onsuccess = () => {
+          let sessions = request.result || []
+          
+          // Ordenar sesiones
+          sessions.sort((a, b) => {
+            const aValue = sortBy === 'lastUpdated' ? new Date(a.metadata.lastUpdated).getTime() : new Date(a.metadata.created).getTime()
+            const bValue = sortBy === 'lastUpdated' ? new Date(b.metadata.lastUpdated).getTime() : new Date(b.metadata.created).getTime()
+            return sortOrder === 'desc' ? bValue - aValue : aValue - bValue
+          })
+
+          const totalCount = sessions.length
+          
+          // Implementar cursor-based pagination
+          let startIndex = 0
+          if (pageToken) {
+            try {
+              const decodedToken = JSON.parse(atob(pageToken))
+              startIndex = decodedToken.offset || 0
+            } catch (error) {
+              console.warn('Token de página inválido, comenzando desde el inicio')
+            }
+          }
+
+          const endIndex = startIndex + pageSize
+          const paginatedSessions = sessions.slice(startIndex, endIndex)
+          const hasNextPage = endIndex < totalCount
+          
+          let nextPageToken: string | undefined
+          if (hasNextPage) {
+            nextPageToken = btoa(JSON.stringify({ offset: endIndex }))
+          }
+
+          resolve({
+            items: paginatedSessions,
+            nextPageToken,
+            totalCount,
+            hasNextPage
+          })
+        }
+        
+        request.onerror = () => reject(request.error)
+      })
+    } catch (error) {
+      console.error('Error obteniendo sesiones paginadas del usuario:', error)
+      return {
+        items: [],
+        totalCount: 0,
+        hasNextPage: false
       }
-      request.onerror = () => reject(request.error)
-    })
+    }
   }
 
   async deleteChatSession(sessionId: string): Promise<void> {

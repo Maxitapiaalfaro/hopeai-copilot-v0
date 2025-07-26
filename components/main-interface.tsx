@@ -8,7 +8,7 @@ import { DocumentPanel } from "@/components/document-panel"
 
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { useHopeAI } from "@/hooks/use-hopeai"
+import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import type { AgentType } from "@/types/clinical-types"
 
 export function MainInterface() {
@@ -17,28 +17,50 @@ export function MainInterface() {
   const isMobile = useMediaQuery("(max-width: 768px)")
 
   // Use the HopeAI system
-  const { isInitialized, currentSession, isLoading, error, createSession, switchAgent, getAvailableAgents, sendMessage, uploadDocument } =
-    useHopeAI()
+  const { 
+    systemState,
+    createSession,
+    sendMessage,
+    switchAgent,
+    getHistory,
+    clearError,
+    resetSystem,
+    addStreamingResponseToHistory,
+    loadSession
+  } = useHopeAISystem()
+
+  // Extract state properties for easier access
+  const {
+    sessionId,
+    userId,
+    mode,
+    activeAgent,
+    isLoading,
+    error,
+    isInitialized,
+    history
+  } = systemState
 
   // Initialize with default session
   useEffect(() => {
     console.log('🔄 MainInterface: useEffect ejecutado', {
       isInitialized,
-      hasCurrentSession: !!currentSession,
-      sessionId: currentSession?.sessionId
+      hasSession: !!sessionId,
+      sessionId,
+      userId
     })
     
-    if (isInitialized && !currentSession) {
+    if (isInitialized && !sessionId) {
       console.log('📝 MainInterface: Creando sesión por defecto...')
       createSession("demo_user", "clinical_supervision", "socratico")
-        .then(session => {
-          console.log('✅ MainInterface: Sesión creada:', session?.sessionId)
+        .then(() => {
+          console.log('✅ MainInterface: Sesión creada')
         })
         .catch(err => {
           console.error('❌ MainInterface: Error creando sesión:', err)
         })
     }
-  }, [isInitialized, currentSession, createSession])
+  }, [isInitialized, sessionId, createSession])
 
   // Close sidebar on mobile by default
   useEffect(() => {
@@ -57,9 +79,45 @@ export function MainInterface() {
 
   // Handle agent change
   const handleAgentChange = async (agent: AgentType) => {
-    if (currentSession) {
+    if (sessionId) {
       await switchAgent(agent)
     }
+  }
+  
+  // Handle new conversation
+  const handleNewConversation = async () => {
+    if (userId) {
+      await createSession(userId, "clinical_supervision", "socratico")
+    }
+  }
+
+  // Handle conversation selection from history
+  const handleConversationSelect = async (sessionId: string) => {
+    try {
+      console.log('🔄 Cargando conversación desde historial:', sessionId)
+      const success = await loadSession(sessionId)
+      if (success) {
+        console.log('✅ Conversación cargada exitosamente')
+        // Close sidebar on mobile after selecting conversation
+        if (isMobile) {
+          setSidebarOpen(false)
+        }
+      } else {
+        console.error('❌ Error cargando la conversación')
+      }
+    } catch (err) {
+      console.error('❌ Error al cargar conversación:', err)
+    }
+  }
+
+  // Create uploadDocument wrapper function
+  const handleUploadDocument = async (file: File) => {
+    if (!sessionId) {
+      throw new Error('No active session for file upload')
+    }
+    // This would need to be implemented using the HopeAI system instance
+    // For now, we'll create a placeholder that throws an error
+    throw new Error('Upload document functionality needs to be implemented')
   }
 
   if (!isInitialized) {
@@ -92,12 +150,20 @@ export function MainInterface() {
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar - Conversation History */}
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        userId={userId || "demo_user"}
+        onNewConversation={handleNewConversation}
+        onConversationSelect={handleConversationSelect}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <Header
+          activeAgent={activeAgent || "socratico"}
+          onAgentChange={handleAgentChange}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onToggleDocuments={() => setDocumentPanelOpen(!documentPanelOpen)}
           documentPanelOpen={documentPanelOpen}
@@ -106,8 +172,7 @@ export function MainInterface() {
         {/* Mobile Navigation (only visible on small screens) */}
         {isMobile && (
           <MobileNav
-            activeAgent={currentSession?.activeAgent || "socratico"}
-            onAgentChange={handleAgentChange}
+            activeAgent={activeAgent || "socratico"}
             onToggleDocuments={() => setDocumentPanelOpen(!documentPanelOpen)}
             documentPanelOpen={documentPanelOpen}
           />
@@ -121,11 +186,12 @@ export function MainInterface() {
 
             {/* Chat Interface */}
             <ChatInterface
-              activeAgent={currentSession?.activeAgent || "socratico"}
+              activeAgent={activeAgent || "socratico"}
               isProcessing={isLoading}
-              currentSession={currentSession}
+              currentSession={sessionId ? { sessionId, history, activeAgent: activeAgent || "socratico" } : null}
               sendMessage={sendMessage}
-              uploadDocument={uploadDocument}
+              uploadDocument={handleUploadDocument}
+              addStreamingResponseToHistory={addStreamingResponseToHistory}
             />
           </div>
 
@@ -133,7 +199,7 @@ export function MainInterface() {
           <DocumentPanel
             isOpen={documentPanelOpen}
             onClose={() => setDocumentPanelOpen(false)}
-            currentSession={currentSession}
+            sessionId={sessionId}
           />
         </div>
       </div>

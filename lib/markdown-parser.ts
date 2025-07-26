@@ -1,4 +1,6 @@
 import MarkdownIt from 'markdown-it'
+import { AGENT_VISUAL_CONFIG } from '@/config/agent-visual-config'
+import type { AgentType } from '@/types/clinical-types'
 
 // Instancia singleton optimizada de markdown-it para mensajes clínicos
 let mdInstance: MarkdownIt | null = null
@@ -7,7 +9,7 @@ let mdInstance: MarkdownIt | null = null
 function getMarkdownInstance(): MarkdownIt {
   if (!mdInstance) {
     mdInstance = new MarkdownIt({
-      html: false, // Desactivar HTML por seguridad
+      html: true, // Permitir HTML para resaltado de menciones de agentes
       xhtmlOut: false,
       breaks: true, // Convertir saltos de línea en <br>
       linkify: true, // Autodetectar enlaces
@@ -123,8 +125,11 @@ export function parseMarkdown(content: string): string {
   }
   
   try {
+    // Aplicar resaltado de menciones de agentes antes del parsing
+    const contentWithHighlights = highlightAgentMentions(content)
+    
     const md = getMarkdownInstance()
-    const result = md.render(content)
+    const result = md.render(contentWithHighlights)
     
     // Agregar al cache (con límite de tamaño)
     if (parseCache.size >= MAX_CACHE_SIZE) {
@@ -166,12 +171,47 @@ export function parseMarkdownStreaming(content: string): string {
       safeContent = content + ' '
     }
     
-    return md.render(safeContent)
+    // Aplicar resaltado de menciones de agentes antes del parsing
+    const contentWithHighlights = highlightAgentMentions(safeContent)
+    
+    return md.render(contentWithHighlights)
   } catch (error) {
     console.error('Error parsing streaming markdown:', error)
     // Fallback más robusto para streaming
     return content.replace(/\n/g, '<br>')
   }
+}
+
+/**
+ * Detecta y resalta menciones de agentes en el contenido
+ * @param content - Contenido a procesar
+ * @returns Contenido con menciones de agentes resaltadas
+ */
+export function highlightAgentMentions(content: string): string {
+  if (!content || typeof content !== 'string') {
+    return ''
+  }
+
+  let processedContent = content
+
+  // Patrones para detectar menciones exactas de agentes
+  const agentPatterns = [
+    { pattern: /\bFilósofo Socrático\b/g, type: 'socratico' as AgentType },
+    { pattern: /\bArchivista Clínico\b/g, type: 'clinico' as AgentType },
+    { pattern: /\bInvestigador Académico\b/g, type: 'academico' as AgentType }
+  ]
+
+  // Procesar cada tipo de agente
+  agentPatterns.forEach(({ pattern, type }) => {
+    const config = AGENT_VISUAL_CONFIG[type]
+    if (!config) return
+
+    processedContent = processedContent.replace(pattern, (match) => {
+      return `<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${config.bgColor} ${config.textColor} ${config.borderColor} border">${match}</span>`
+    })
+  })
+
+  return processedContent
 }
 
 /**

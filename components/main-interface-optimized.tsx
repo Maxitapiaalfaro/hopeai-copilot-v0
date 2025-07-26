@@ -41,7 +41,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     switchAgent,
     getHistory,
     clearError,
-    addStreamingResponseToHistory
+    addStreamingResponseToHistory,
+    loadSession
   } = useHopeAISystem()
 
   // Crear sesión por defecto si no existe
@@ -120,6 +121,32 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     }
   }
 
+  // Handle new conversation
+  const handleNewConversation = async () => {
+    if (systemState.userId) {
+      await createSession(systemState.userId, "clinical_supervision", "socratico")
+    }
+  }
+
+  // Handle conversation selection from history
+  const handleConversationSelect = async (sessionId: string) => {
+    try {
+      console.log('🔄 Cargando conversación desde historial:', sessionId)
+      const success = await loadSession(sessionId)
+      if (success) {
+        console.log('✅ Conversación cargada exitosamente')
+        // Close sidebar on mobile after selecting conversation
+        if (isMobile) {
+          setSidebarOpen(false)
+        }
+      } else {
+        console.error('❌ Error cargando la conversación')
+      }
+    } catch (err) {
+      console.error('❌ Error al cargar conversación:', err)
+    }
+  }
+
   // Crear objeto de sesión compatible con ChatInterface
   const compatibleSession = systemState.sessionId ? {
     sessionId: systemState.sessionId,
@@ -179,7 +206,13 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar - Conversation History */}
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        userId={systemState.userId || "demo_user"}
+        onNewConversation={handleNewConversation}
+        onConversationSelect={handleConversationSelect}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -194,7 +227,6 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         {isMobile && (
           <MobileNav
             activeAgent={systemState.activeAgent}
-            onAgentChange={handleAgentChange}
             onToggleDocuments={() => setDocumentPanelOpen(!documentPanelOpen)}
             documentPanelOpen={documentPanelOpen}
           />

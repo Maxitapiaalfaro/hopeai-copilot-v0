@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystem } from "@/lib/hopeai-system"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState } from "@/types/clinical-types"
+import { ClientContextPersistence } from '@/lib/client-context-persistence'
 
 // Interfaz para el estado del sistema HopeAI
 interface HopeAISystemState {
@@ -28,6 +29,7 @@ interface UseHopeAISystemReturn {
   
   // Gestión de sesiones
   createSession: (userId: string, mode: ClinicalMode, agent: AgentType) => Promise<string | null>
+  loadSession: (sessionId: string) => Promise<boolean>
   
   // Comunicación con enrutamiento inteligente
   sendMessage: (message: string, useStreaming?: boolean) => Promise<any>
@@ -56,6 +58,80 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
 
+  // Cargar sesión existente
+  const loadSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    if (!hopeAISystem.current || !systemState.isInitialized) {
+      console.error('Sistema HopeAI no inicializado')
+      return false
+    }
+
+    try {
+      setSystemState(prev => ({ ...prev, isLoading: true, error: null }))
+
+      // Cargar el estado de la sesión desde el almacenamiento
+      const chatState = await hopeAISystem.current.getChatState(sessionId)
+      
+      if (!chatState) {
+        throw new Error(`Sesión no encontrada: ${sessionId}`)
+      }
+
+      // Actualizar el estado del sistema con los datos de la sesión cargada
+      setSystemState(prev => ({
+        ...prev,
+        sessionId: chatState.sessionId,
+        userId: chatState.userId,
+        mode: chatState.mode,
+        activeAgent: chatState.activeAgent,
+        history: chatState.history,
+        isLoading: false
+      }))
+
+      console.log('✅ Sesión HopeAI cargada:', sessionId)
+      console.log('📊 Historial cargado con', chatState.history.length, 'mensajes')
+      return true
+    } catch (error) {
+      console.error('❌ Error cargando sesión:', error)
+      setSystemState(prev => ({
+        ...prev,
+        error: 'Error al cargar la sesión',
+        isLoading: false
+      }))
+      return false
+    }
+  }, [systemState.isInitialized])
+
+  // Función para intentar restaurar la sesión más reciente
+  const attemptSessionRestoration = useCallback(async () => {
+    try {
+      const persistence = ClientContextPersistence.getInstance()
+      const recentSession = await persistence.getMostRecentSession()
+      
+      if (recentSession) {
+        console.log('🔄 Intentando restaurar sesión más reciente:', recentSession.sessionId)
+        
+        // Verificar que la sesión sea válida y no muy antigua (ej: menos de 24 horas)
+         const sessionAge = Date.now() - new Date(recentSession.metadata.lastUpdated).getTime()
+        const maxAge = 24 * 60 * 60 * 1000 // 24 horas en milisegundos
+        
+        if (sessionAge < maxAge) {
+          const success = await loadSession(recentSession.sessionId)
+          if (success) {
+            console.log('✅ Sesión más reciente restaurada exitosamente')
+          } else {
+            console.log('⚠️ No se pudo restaurar la sesión más reciente')
+          }
+        } else {
+          console.log('⚠️ Sesión más reciente demasiado antigua, no se restaurará')
+        }
+      } else {
+        console.log('ℹ️ No hay sesiones recientes para restaurar')
+      }
+    } catch (error) {
+      console.error('❌ Error intentando restaurar sesión:', error)
+      // No lanzamos el error para no interrumpir la inicialización
+    }
+  }, [loadSession])
+
   // Inicialización del sistema HopeAI
   useEffect(() => {
     const initializeSystem = async () => {
@@ -69,6 +145,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         await hopeAISystem.current.initialize()
         
         console.log('✅ HopeAI System inicializado con Intelligent Intent Router')
+        
+        // Intentar restaurar la sesión más reciente automáticamente
+        await attemptSessionRestoration()
         
         setSystemState(prev => ({
           ...prev,
@@ -88,7 +167,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     }
 
     initializeSystem()
-  }, [])
+  }, [attemptSessionRestoration])
 
   // Crear nueva sesión
   const createSession = useCallback(async (
@@ -132,6 +211,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       return null
     }
   }, [systemState.isInitialized])
+
+
 
   // Enviar mensaje con enrutamiento inteligente
   const sendMessage = useCallback(async (
@@ -280,6 +361,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   return {
     systemState,
     createSession,
+    loadSession,
     sendMessage,
     switchAgent,
     getHistory,

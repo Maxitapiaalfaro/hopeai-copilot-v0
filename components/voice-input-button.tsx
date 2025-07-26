@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Mic, MicOff, Volume2, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSpeechToText } from '@/hooks/use-speech-to-text'
+import { useMobileSpeechConfig, useMobileDetection } from '@/hooks/use-mobile'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import { VoiceStatusIndicator } from '@/components/voice-status-indicator'
@@ -46,6 +47,10 @@ export function VoiceInputButton({
   className
 }: VoiceInputButtonProps) {
   
+  // Configuración optimizada para móviles
+  const mobileConfig = useMobileSpeechConfig()
+  const mobileDetection = useMobileDetection()
+  
   const {
     isListening,
     isSupported,
@@ -59,7 +64,14 @@ export function VoiceInputButton({
     startListening,
     stopListening,
     resetTranscript
-  } = useSpeechToText({ language })
+  } = useSpeechToText({ 
+    language: mobileConfig.language,
+    continuous: mobileConfig.continuous,
+    interimResults: mobileConfig.interimResults,
+    maxAlternatives: 1,
+    silenceTimeout: mobileConfig.silenceTimeout,
+    maxRecordingTime: mobileConfig.maxRecordingTime
+  })
 
   // Efecto para actualizar el input cuando hay transcripción final
   useEffect(() => {
@@ -69,38 +81,52 @@ export function VoiceInputButton({
     }
   }, [finalTranscript, onTranscriptUpdate, resetTranscript])
 
-  // Manejar click del botón
-  const handleVoiceToggle = () => {
+  // Manejar click del botón con feedback háptico en móviles
+  const handleVoiceToggle = async () => {
+    // Feedback háptico para dispositivos táctiles
+    if (mobileConfig.hapticFeedback && navigator.vibrate) {
+      navigator.vibrate(50) // Vibración corta de 50ms
+    }
+    
     if (isListening) {
       stopListening()
     } else {
-      startListening()
+      try {
+        await startListening()
+      } catch (error) {
+        console.error('Error al iniciar grabación:', error)
+      }
     }
   }
 
-  // Determinar el estado visual del botón
+  // Determinar el estado visual del botón con lógica optimizada para móviles
   const getButtonState = () => {
+    // Solo bloquear en casos de error real, no en advertencias preventivas
     if (!isSupported) return 'unsupported'
-    if (!isMicrophoneAvailable) return 'no-mic'
     if (error) return 'error'
     if (isListening) return 'listening'
     if (isProcessing) return 'processing'
+    
+    // Mostrar advertencias solo como información, no como bloqueo
+    if (mobileConfig.showPlatformWarnings.safari && !isListening && !isProcessing) return 'safari-warning'
+    if (mobileConfig.showPlatformWarnings.ios && !isListening && !isProcessing) return 'ios-warning'
+    
     return 'ready'
   }
 
   const buttonState = getButtonState()
 
-  // Configuración visual por estado
+  // Configuración visual por estado con optimizaciones móviles
   const stateConfig = {
     ready: {
       icon: Mic,
       className: 'text-gray-600 hover:text-blue-600 hover:bg-blue-50',
-      tooltip: 'Hacer clic para comenzar a grabar'
+      tooltip: mobileDetection.isTouch ? 'Tocar para hablar' : 'Hacer clic para comenzar a grabar'
     },
     listening: {
       icon: Volume2,
       className: 'text-red-600 bg-red-50 hover:bg-red-100 animate-pulse',
-      tooltip: 'Grabando... Hacer clic para detener'
+      tooltip: mobileDetection.isTouch ? 'Grabando... Tocar para detener' : 'Grabando... Hacer clic para detener'
     },
     processing: {
       icon: MicOff,
@@ -121,16 +147,25 @@ export function VoiceInputButton({
       icon: MicOff,
       className: 'text-gray-400 cursor-not-allowed',
       tooltip: 'Micrófono no disponible'
+    },
+    'safari-warning': {
+      icon: AlertCircle,
+      className: 'text-orange-500 hover:bg-orange-50',
+      tooltip: 'Safari puede tener limitaciones con el reconocimiento de voz. Considera usar Chrome o Firefox.'
+    },
+    'ios-warning': {
+      icon: AlertCircle,
+      className: 'text-orange-500 hover:bg-orange-50',
+      tooltip: 'iOS puede requerir permisos adicionales para el micrófono. Verifica la configuración de Safari.'
     }
   }
 
   const config = stateConfig[buttonState]
   const IconComponent = config.icon
 
-  // Determinar si el botón debe estar deshabilitado
+  // Determinar si el botón debe estar deshabilitado (solo en casos críticos)
   const isButtonDisabled = disabled || 
     buttonState === 'unsupported' || 
-    buttonState === 'no-mic' || 
     buttonState === 'processing'
 
   // Tamaños del botón
@@ -140,12 +175,15 @@ export function VoiceInputButton({
     lg: 'h-10 w-10 p-0'
   }
 
-  // Tamaños del icono
+  // Tamaños de iconos optimizados para móviles
   const iconSizes = {
     sm: 'h-3 w-3',
     md: 'h-4 w-4',
     lg: 'h-5 w-5'
   }
+  
+  // Usar tamaño optimizado para móviles
+  const effectiveSize = mobileConfig.buttonSize as 'sm' | 'md' | 'lg'
 
   return (
     <TooltipProvider>
@@ -155,19 +193,22 @@ export function VoiceInputButton({
             <Button
               type="button"
               variant={variant}
-              size={size === 'md' ? 'default' : size}
+              size={effectiveSize === 'md' ? 'default' : effectiveSize}
               onClick={handleVoiceToggle}
               disabled={isButtonDisabled}
               className={cn(
-                sizeClasses[size],
+                sizeClasses[effectiveSize],
                 config.className,
-                'transition-all duration-200'
+                'transition-all duration-200',
+                // Estilos adicionales para móviles
+                mobileDetection.isTouch && 'active:scale-95 touch-manipulation',
+                mobileDetection.isMobile && 'min-h-[44px] min-w-[44px]' // Tamaño mínimo táctil
               )}
             >
               {isProcessing ? (
-                <Loader2 className={cn(iconSizes[size], "animate-spin")} />
+                <Loader2 className={cn(iconSizes[effectiveSize], "animate-spin")} />
               ) : (
-                <IconComponent className={iconSizes[size]} />
+                <IconComponent className={iconSizes[effectiveSize]} />
               )}
             </Button>
           </TooltipTrigger>
@@ -202,8 +243,8 @@ export function VoiceInputButton({
           </div>
         )}
         
-        {/* Indicador de confianza alta */}
-        {confidence > 0.8 && finalTranscript && (
+        {/* Indicador de confianza alta (solo si está habilitado en móviles) */}
+        {confidence > 0.8 && finalTranscript && mobileConfig.showConfidence && (
           <div className="absolute -top-1 -right-1">
             <CheckCircle className="w-3 h-3 text-green-500" />
           </div>
@@ -225,10 +266,16 @@ export function VoiceStatus({
   confidence: number
   error: string | null
 }) {
+  const mobileDetection = useMobileDetection()
+  const mobileConfig = useMobileSpeechConfig()
+  
   if (!isListening && !error) return null
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+    <div className={cn(
+      "flex items-center gap-2 text-xs text-gray-600 mt-1",
+      mobileDetection.isMobile && "text-xs flex-col text-center"
+    )}>
       {isListening && (
         <>
           <div className="flex items-center gap-1">
@@ -237,12 +284,15 @@ export function VoiceStatus({
           </div>
           
           {interimTranscript && (
-            <div className="flex-1 truncate">
+            <div className={cn(
+              "flex-1 truncate",
+              mobileDetection.isMobile && "max-w-[180px]"
+            )}>
               <span className="italic">"{ interimTranscript}"</span>
             </div>
           )}
           
-          {confidence > 0 && (
+          {confidence > 0 && mobileConfig.showConfidence && (
             <div className="text-xs">
               {Math.round(confidence * 100)}%
             </div>

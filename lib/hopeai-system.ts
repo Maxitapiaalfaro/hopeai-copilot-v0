@@ -455,6 +455,18 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       throw new Error(`Session not found: ${sessionId}`)
     }
 
+    // Verificar si existe sesión activa en el router, si no, recrearla
+    // Esto es crítico para mantener la sincronización entre persistencia y sesiones activas
+    const hasActiveSession = clinicalAgentRouter.getActiveChatSessions().has(sessionId)
+    if (!hasActiveSession) {
+      console.log(`[HopeAI] Recreando sesión activa para: ${sessionId}`)
+      await clinicalAgentRouter.createChatSession(
+        sessionId, 
+        currentState.activeAgent, 
+        currentState.history
+      )
+    }
+
     return currentState
   }
 

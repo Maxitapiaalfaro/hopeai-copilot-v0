@@ -36,16 +36,87 @@ export class ServerStorageAdapter {
     return this.chatSessions.get(sessionId) || null
   }
 
+  // Obtener todas las sesiones de un usuario (método legacy - mantener compatibilidad)
   async getUserSessions(userId: string): Promise<ChatState[]> {
+    const result = await this.getUserSessionsPaginated(userId, { pageSize: 1000 })
+    return result.items
+  }
+
+  // Obtener sesiones paginadas de un usuario
+  async getUserSessionsPaginated(
+    userId: string, 
+    options: {
+      pageSize?: number
+      pageToken?: string
+      sortBy?: 'lastUpdated' | 'created'
+      sortOrder?: 'asc' | 'desc'
+    } = {}
+  ): Promise<{
+    items: ChatState[]
+    nextPageToken?: string
+    totalCount: number
+    hasNextPage: boolean
+  }> {
     if (!this.initialized) throw new Error("Storage not initialized")
     
-    const sessions = Array.from(this.chatSessions.values())
-      .filter(session => session.userId === userId)
-      .sort((a, b) => 
-        new Date(b.metadata.lastUpdated).getTime() - new Date(a.metadata.lastUpdated).getTime()
-      )
-    
-    return sessions
+    try {
+      const {
+        pageSize = 20,
+        pageToken,
+        sortBy = 'lastUpdated',
+        sortOrder = 'desc'
+      } = options
+
+      let sessions = Array.from(this.chatSessions.values())
+        .filter(session => session.userId === userId)
+      
+      // Ordenar sesiones
+      sessions.sort((a, b) => {
+        const aValue = sortBy === 'lastUpdated' 
+          ? new Date(a.metadata.lastUpdated).getTime() 
+          : new Date(a.metadata.created).getTime()
+        const bValue = sortBy === 'lastUpdated' 
+          ? new Date(b.metadata.lastUpdated).getTime() 
+          : new Date(b.metadata.created).getTime()
+        return sortOrder === 'desc' ? bValue - aValue : aValue - bValue
+      })
+
+      const totalCount = sessions.length
+      
+      // Implementar cursor-based pagination
+      let startIndex = 0
+      if (pageToken) {
+        try {
+          const decodedToken = JSON.parse(atob(pageToken))
+          startIndex = decodedToken.offset || 0
+        } catch (error) {
+          console.warn('Token de página inválido, comenzando desde el inicio')
+        }
+      }
+
+      const endIndex = startIndex + pageSize
+      const paginatedSessions = sessions.slice(startIndex, endIndex)
+      const hasNextPage = endIndex < totalCount
+      
+      let nextPageToken: string | undefined
+      if (hasNextPage) {
+        nextPageToken = btoa(JSON.stringify({ offset: endIndex }))
+      }
+
+      return {
+        items: paginatedSessions,
+        nextPageToken,
+        totalCount,
+        hasNextPage
+      }
+    } catch (error) {
+      console.error('Error obteniendo sesiones paginadas del usuario:', error)
+      return {
+        items: [],
+        totalCount: 0,
+        hasNextPage: false
+      }
+    }
   }
 
   async deleteChatSession(sessionId: string): Promise<void> {

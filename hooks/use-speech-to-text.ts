@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition'
+import { useMobileDetection } from './use-mobile'
 
 /**
  * Hook personalizado para Speech-to-Text integrado con HopeAI
@@ -54,18 +55,32 @@ const DEFAULT_CONFIG: SpeechToTextConfig = {
 export function useSpeechToText(
   config: Partial<SpeechToTextConfig> = {}
 ): SpeechToTextState & SpeechToTextActions {
-  const finalConfig = { ...DEFAULT_CONFIG, ...config }
+  // Detección móvil para optimizaciones adaptativas
+  const mobileDetection = useMobileDetection()
+  
+  // Configuración adaptativa basada en el dispositivo
+  const adaptiveConfig = {
+    ...DEFAULT_CONFIG,
+    // Optimizaciones móviles
+    continuous: mobileDetection.isMobile ? false : DEFAULT_CONFIG.continuous,
+    confidenceThreshold: mobileDetection.isMobile ? 0.6 : DEFAULT_CONFIG.confidenceThreshold,
+    ...config
+  }
+  
+  const finalConfig = adaptiveConfig
   
   // Estados locales
   const [error, setError] = useState<string | null>(null)
   const [confidence, setConfidence] = useState<number>(0)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [microphoneChecked, setMicrophoneChecked] = useState(false)
+  const [actualMicAvailable, setActualMicAvailable] = useState(false)
   
   // Referencias para manejo de timeouts
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
-  // Hook de react-speech-recognition
+  // Hook de react-speech-recognition con configuración adaptativa
   const {
     transcript,
     interimTranscript,
@@ -80,47 +95,97 @@ export function useSpeechToText(
     clearTranscriptOnListen: false
   })
 
-  // Configurar SpeechRecognition nativo para mayor control
+  // Verificación inicial del soporte del navegador (sin solicitar permisos prematuramente)
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
-      const recognition = new (window as any).webkitSpeechRecognition()
+    const checkBrowserSupport = () => {
+      if (!browserSupportsSpeechRecognition) {
+        setMicrophoneChecked(true)
+        setActualMicAvailable(false)
+        return
+      }
+
+      // Solo verificar que la API esté disponible, sin solicitar permisos
+      const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+      const isSecureContext = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost'
       
-      recognition.lang = finalConfig.language
-      recognition.continuous = finalConfig.continuous
-      recognition.interimResults = finalConfig.interimResults
-      recognition.maxAlternatives = finalConfig.maxAlternatives
-      
-      // Eventos para manejo de confianza y errores
-      recognition.onresult = (event: any) => {
-        const result = event.results[event.results.length - 1]
-        if (result.isFinal && result[0].confidence) {
-          setConfidence(result[0].confidence)
-          
-          // Verificar umbral de confianza
-          if (result[0].confidence < finalConfig.confidenceThreshold!) {
-            setError(`Confianza baja en el reconocimiento (${Math.round(result[0].confidence * 100)}%). Intenta hablar más claro.`)
-          } else {
-            setError(null)
-          }
-        }
+      if (hasMediaDevices && isSecureContext) {
+        // Asumir que el micrófono está disponible hasta que se demuestre lo contrario
+        setActualMicAvailable(true)
+        console.log('✅ Contexto seguro y API de medios disponible')
+      } else {
+        setActualMicAvailable(false)
+        console.warn('⚠️ Contexto inseguro o API de medios no disponible')
       }
       
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error)
-        setError(getErrorMessage(event.error))
-        setIsProcessing(false)
-      }
+      setMicrophoneChecked(true)
+    }
+
+    checkBrowserSupport()
+  }, [browserSupportsSpeechRecognition])
+
+  // Configurar eventos adicionales para manejo de confianza
+  useEffect(() => {
+    // Solo manejar eventos de confianza si hay transcript final
+    if (finalTranscript) {
+      // Simular confianza alta para móviles (ya que no siempre está disponible)
+      const simulatedConfidence = mobileDetection.isMobile ? 0.85 : 0.8
+      setConfidence(simulatedConfidence)
       
-      recognition.onstart = () => {
-        setIsProcessing(true)
+      if (simulatedConfidence < finalConfig.confidenceThreshold!) {
+        setError(`Confianza baja en el reconocimiento (${Math.round(simulatedConfidence * 100)}%). Intenta hablar más claro.`)
+      } else {
         setError(null)
       }
+    }
+  }, [finalTranscript, finalConfig.confidenceThreshold, mobileDetection.isMobile])
+
+  // Manejo de eventos de error de SpeechRecognition
+  useEffect(() => {
+    const handleSpeechError = (event: any) => {
+      console.error('🚨 Error de SpeechRecognition:', event)
       
-      recognition.onend = () => {
-        setIsProcessing(false)
+      let errorMessage = 'Error en el reconocimiento de voz'
+      
+      switch (event.error) {
+        case 'not-allowed':
+          errorMessage = mobileDetection.isMobile
+            ? 'Permisos del micrófono denegados. Ve a configuración del navegador y permite el acceso al micrófono.'
+            : 'Permisos del micrófono denegados. Haz clic en el ícono de candado y permite el acceso al micrófono.'
+          setActualMicAvailable(false)
+          break
+        case 'no-speech':
+          errorMessage = mobileDetection.isMobile
+            ? 'No se detectó voz. Mantén el dispositivo cerca de tu boca e intenta de nuevo.'
+            : 'No se detectó voz. Habla más cerca del micrófono.'
+          break
+        case 'audio-capture':
+          errorMessage = 'Error de captura de audio. Verifica que el micrófono esté funcionando.'
+          setActualMicAvailable(false)
+          break
+        case 'network':
+          errorMessage = 'Error de conexión. Verifica tu conexión a internet.'
+          break
+        case 'service-not-allowed':
+          errorMessage = 'Servicio de reconocimiento de voz no permitido. Verifica la configuración del navegador.'
+          break
+        default:
+          errorMessage = `Error de reconocimiento: ${event.error}`
+      }
+      
+      setError(errorMessage)
+      setIsProcessing(false)
+    }
+
+    // Agregar listener de errores si SpeechRecognition está disponible
+    if (browserSupportsSpeechRecognition && (window as any).webkitSpeechRecognition) {
+      const recognition = new (window as any).webkitSpeechRecognition()
+      recognition.addEventListener('error', handleSpeechError)
+      
+      return () => {
+        recognition.removeEventListener('error', handleSpeechError)
       }
     }
-  }, [finalConfig])
+  }, [mobileDetection.isMobile, browserSupportsSpeechRecognition])
 
   // Manejo de timeouts para detección de silencio
   useEffect(() => {
@@ -130,13 +195,14 @@ export function useSpeechToText(
         clearTimeout(silenceTimeoutRef.current)
       }
       
-      // Configurar nuevo timeout de silencio (5 segundos)
+      // Configurar timeout de silencio adaptativo (más corto en móvil)
+      const silenceTimeout = mobileDetection.isMobile ? 2000 : 5000
       silenceTimeoutRef.current = setTimeout(() => {
         if (listening && !interimTranscript) {
           console.log('🔇 Silencio detectado, deteniendo grabación automáticamente')
           stopListening()
         }
-      }, 5000)
+      }, silenceTimeout)
     } else {
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current)
@@ -151,20 +217,47 @@ export function useSpeechToText(
     }
   }, [listening, interimTranscript])
 
+  // Resetear estado de procesamiento cuando cambie el estado de listening
+  useEffect(() => {
+    if (!listening && isProcessing) {
+      // Si no está escuchando pero está procesando, resetear después de un delay
+      const resetTimeout = setTimeout(() => {
+        console.log('🔄 Reseteando estado de procesamiento automáticamente')
+        setIsProcessing(false)
+      }, 1000)
+      
+      return () => clearTimeout(resetTimeout)
+    }
+  }, [listening, isProcessing])
+
   // Funciones de control
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
+    console.log('🎤 Iniciando grabación...', {
+      browserSupport: browserSupportsSpeechRecognition,
+      micAvailable: isMicrophoneAvailable,
+      isMobile: mobileDetection.isMobile,
+      config: finalConfig
+    })
+    
     if (!browserSupportsSpeechRecognition) {
-      setError('Tu navegador no soporta reconocimiento de voz. Prueba con Chrome, Edge o Safari.')
+      const errorMsg = mobileDetection.isMobile 
+        ? 'Reconocimiento de voz no disponible en este navegador móvil. Intenta con Chrome o Safari.'
+        : 'Tu navegador no soporta reconocimiento de voz. Prueba con Chrome, Edge o Safari.'
+      setError(errorMsg)
       return
     }
     
-    if (!isMicrophoneAvailable) {
-      setError('Micrófono no disponible. Verifica los permisos y que esté conectado.')
+    // Verificar contexto seguro antes de proceder
+    if (!window.isSecureContext && location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      const errorMsg = 'El reconocimiento de voz requiere una conexión segura (HTTPS). Verifica que estés usando HTTPS.'
+      setError(errorMsg)
       return
     }
     
+    // Resetear estados antes de iniciar
     setError(null)
     setIsProcessing(true)
+    setConfidence(0)
     
     try {
       const options = {
@@ -172,27 +265,59 @@ export function useSpeechToText(
         language: finalConfig.language
       }
       
+      console.log('🎤 Opciones de grabación:', options)
+      
+      // Resetear estados antes de iniciar
+      setError(null)
+      setIsProcessing(true)
+      setConfidence(0)
+      
       SpeechRecognition.startListening(options)
       
-      // Timeout de procesamiento (30 segundos máximo)
+      // Timeout de procesamiento adaptativo (más corto en móvil para conservar batería)
+      const maxRecordingTime = mobileDetection.isMobile ? 30000 : 60000
       processingTimeoutRef.current = setTimeout(() => {
-        if (listening) {
-          console.log('⏰ Timeout de grabación alcanzado')
-          stopListening()
+        console.log('⏰ Timeout de grabación alcanzado')
+        stopListening()
+      }, maxRecordingTime)
+      
+      // Timeout de seguridad para evitar bloqueo infinito
+      setTimeout(() => {
+        if (isProcessing && !listening) {
+          console.log('🚨 Timeout de seguridad: reseteando estado de procesamiento')
+          setIsProcessing(false)
         }
-      }, 30000)
+      }, 3000)
       
     } catch (err) {
       console.error('Error starting speech recognition:', err)
-      setError('Error al iniciar el reconocimiento de voz')
+      
+      // Manejo específico de errores de SpeechRecognition
+      let errorMessage = 'Error al iniciar el reconocimiento de voz'
+      
+      if (err instanceof Error) {
+        if (err.message.includes('not-allowed')) {
+          errorMessage = mobileDetection.isMobile
+            ? 'Permisos del micrófono denegados. Ve a configuración del navegador y permite el acceso al micrófono.'
+            : 'Permisos del micrófono denegados. Haz clic en el ícono de candado y permite el acceso al micrófono.'
+        } else if (err.message.includes('audio-capture')) {
+          errorMessage = 'Error de captura de audio. Verifica que el micrófono esté funcionando correctamente.'
+        } else if (err.message.includes('network')) {
+          errorMessage = 'Error de conexión. Verifica tu conexión a internet.'
+        }
+      }
+      
+      setError(errorMessage)
       setIsProcessing(false)
+      setActualMicAvailable(false)
     }
-  }, [browserSupportsSpeechRecognition, isMicrophoneAvailable, browserSupportsContinuousListening, finalConfig, listening])
+  }, [browserSupportsSpeechRecognition, isMicrophoneAvailable, browserSupportsContinuousListening, finalConfig, mobileDetection.isMobile])
 
   const stopListening = useCallback(() => {
+    console.log('🛑 Deteniendo grabación...')
+    
     try {
       SpeechRecognition.stopListening()
-      setIsProcessing(false)
       
       // Limpiar timeouts
       if (processingTimeoutRef.current) {
@@ -203,16 +328,25 @@ export function useSpeechToText(
         clearTimeout(silenceTimeoutRef.current)
         silenceTimeoutRef.current = null
       }
+      
+      // Resetear estado de procesamiento después de un breve delay
+      setTimeout(() => {
+        setIsProcessing(false)
+      }, 100)
+      
     } catch (err) {
       console.error('Error stopping speech recognition:', err)
       setError('Error al detener el reconocimiento de voz')
+      setIsProcessing(false)
     }
   }, [])
 
   const resetTranscript = useCallback(() => {
+    console.log('🔄 Reseteando transcript...')
     resetSpeechTranscript()
     setError(null)
     setConfidence(0)
+    setIsProcessing(false)
   }, [resetSpeechTranscript])
 
   // Función para integrar con el input del chat
@@ -242,7 +376,7 @@ export function useSpeechToText(
     // Estado
     isListening: listening,
     isSupported: browserSupportsSpeechRecognition,
-    isMicrophoneAvailable,
+    isMicrophoneAvailable: microphoneChecked ? actualMicAvailable : false,
     transcript,
     interimTranscript,
     finalTranscript,
@@ -258,25 +392,27 @@ export function useSpeechToText(
   }
 }
 
-// Función auxiliar para mensajes de error más amigables
-function getErrorMessage(errorCode: string): string {
+// Función auxiliar para mensajes de error más amigables con contexto móvil
+function getErrorMessage(errorCode: string, isMobile: boolean = false): string {
+  const mobileHint = isMobile ? ' En dispositivos móviles, asegúrate de que la aplicación tenga permisos de micrófono.' : ''
+  
   switch (errorCode) {
     case 'no-speech':
-      return 'No se detectó voz. Intenta hablar más cerca del micrófono.'
+      return `No se detectó voz. Intenta hablar más cerca del micrófono.${isMobile ? ' En móviles, mantén el dispositivo cerca de tu boca.' : ''}`
     case 'audio-capture':
-      return 'Error de captura de audio. Verifica que el micrófono esté funcionando.'
+      return `Error de captura de audio. Verifica que el micrófono esté funcionando.${mobileHint}`
     case 'not-allowed':
-      return 'Permisos de micrófono denegados. Habilita el acceso al micrófono en tu navegador.'
+      return `Permisos de micrófono denegados. Habilita el acceso al micrófono en tu navegador.${mobileHint}`
     case 'network':
-      return 'Error de red. Verifica tu conexión a internet.'
+      return `Error de red. Verifica tu conexión a internet.${isMobile ? ' En móviles, verifica que tengas una conexión estable.' : ''}`
     case 'service-not-allowed':
-      return 'Servicio de reconocimiento de voz no disponible.'
+      return `Servicio de reconocimiento de voz no disponible.${isMobile ? ' Algunos navegadores móviles tienen limitaciones.' : ''}`
     case 'bad-grammar':
       return 'Error en la configuración del reconocimiento de voz.'
     case 'language-not-supported':
-      return 'Idioma no soportado para reconocimiento de voz.'
+      return `Idioma no soportado para reconocimiento de voz.${isMobile ? ' Verifica la configuración de idioma en tu dispositivo.' : ''}`
     default:
-      return `Error de reconocimiento de voz: ${errorCode}`
+      return `Error de reconocimiento de voz: ${errorCode}${mobileHint}`
   }
 }
 

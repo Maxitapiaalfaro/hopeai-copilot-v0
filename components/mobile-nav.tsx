@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 
 interface MobileNavProps {
   activeAgent: "socratico" | "clinico" | "academico"
-  onAgentChange: (agent: "socratico" | "clinico" | "academico") => void
   onToggleDocuments: () => void
   documentPanelOpen: boolean
 }
@@ -29,40 +28,37 @@ const agents = [
   },
 ]
 
-export function MobileNav({ activeAgent, onAgentChange, onToggleDocuments, documentPanelOpen }: MobileNavProps) {
+export function MobileNav({ activeAgent, onToggleDocuments, documentPanelOpen }: MobileNavProps) {
+  // Encontrar el agente activo para mostrar solo su indicador
+  const currentAgent = agents.find(agent => agent.id === activeAgent)
+  const IconComponent = currentAgent?.icon || Brain
+  const agentColor = currentAgent?.color || "blue"
+
   return (
     <div className="bg-white border-b border-gray-200 p-2 md:hidden">
       <div className="flex justify-between items-center">
-        <div className="flex items-center gap-1">
-          {agents.map((agent) => {
-            const IconComponent = agent.icon
-            const isActive = activeAgent === agent.id
-
-            return (
-              <Button
-                key={agent.id}
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "rounded-md transition-all p-2",
-                  isActive && `bg-${agent.color}-100 text-${agent.color}-700`,
-                  isActive && agent.color === "blue" && "bg-blue-100 text-blue-700",
-                  isActive && agent.color === "green" && "bg-green-100 text-green-700",
-                  isActive && agent.color === "purple" && "bg-purple-100 text-purple-700",
-                )}
-                onClick={() => onAgentChange(agent.id as "socratico" | "clinico" | "academico")}
-              >
-                <IconComponent
-                  className={cn(
-                    "h-5 w-5",
-                    isActive && agent.color === "blue" && "text-blue-600",
-                    isActive && agent.color === "green" && "text-green-600",
-                    isActive && agent.color === "purple" && "text-purple-600",
-                  )}
-                />
-              </Button>
-            )
-          })}
+        <div className="flex items-center gap-2">
+          {/* Indicador del agente activo (solo lectura) */}
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-md",
+            agentColor === "blue" && "bg-blue-100 text-blue-700",
+            agentColor === "green" && "bg-green-100 text-green-700",
+            agentColor === "purple" && "bg-purple-100 text-purple-700",
+          )}>
+            <IconComponent
+              className={cn(
+                "h-4 w-4",
+                agentColor === "blue" && "text-blue-600",
+                agentColor === "green" && "text-green-600",
+                agentColor === "purple" && "text-purple-600",
+              )}
+            />
+            <span className="text-xs font-medium capitalize">
+              {activeAgent === "socratico" && "Socrático"}
+              {activeAgent === "clinico" && "Clínico"}
+              {activeAgent === "academico" && "Académico"}
+            </span>
+          </div>
         </div>
 
         <Button
