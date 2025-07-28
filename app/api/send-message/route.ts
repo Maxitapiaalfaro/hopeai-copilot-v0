@@ -76,21 +76,29 @@ export async function POST(request: NextRequest) {
     await hopeAI.storageAdapter.saveChatSession(updatedState)
     
     // Manejar respuesta según el tipo
-    if (useStreaming && orchestrationResult.orchestrationType === 'legacy') {
-      // Para streaming legacy, manejar como antes
-      console.log('✅ API: Mensaje enviado (streaming legacy)')
+    if (useStreaming && (orchestrationResult.orchestrationType === 'legacy' || orchestrationResult.orchestrationType === 'dynamic')) {
+      // Para streaming (tanto legacy como dynamic), manejar de la misma forma
+      console.log(`✅ API: Mensaje enviado (streaming ${orchestrationResult.orchestrationType})`)
       
       let fullResponse = ""
+      let accumulatedGroundingUrls = []
       for await (const chunk of response) {
         const chunkText = chunk.text || ""
         fullResponse += chunkText
+        
+        // Acumular groundingUrls de los chunks
+        if (chunk.groundingUrls && chunk.groundingUrls.length > 0) {
+          accumulatedGroundingUrls = [...accumulatedGroundingUrls, ...chunk.groundingUrls]
+        }
       }
       
       return NextResponse.json({
         success: true,
         response: {
           type: 'streaming',
-          text: fullResponse
+          text: fullResponse,
+          groundingUrls: accumulatedGroundingUrls,
+          routingInfo: response.routingInfo
         },
         updatedState,
         orchestration: {
@@ -110,7 +118,9 @@ export async function POST(request: NextRequest) {
         success: true,
         response: {
           type: useStreaming ? 'streaming' : 'text',
-          text: typeof response === 'string' ? response : response.text
+          text: typeof response === 'string' ? response : response.text,
+          groundingUrls: response.groundingUrls || [],
+          routingInfo: response.routingInfo
         },
         updatedState,
         orchestration: {
@@ -141,7 +151,9 @@ export async function POST(request: NextRequest) {
         success: true,
         response: {
           type: useStreaming ? 'streaming' : 'text',
-          text: typeof response === 'string' ? response : response.text
+          text: typeof response === 'string' ? response : response.text,
+          groundingUrls: response.groundingUrls || [],
+          routingInfo: response.routingInfo
         },
         updatedState,
         orchestration: {

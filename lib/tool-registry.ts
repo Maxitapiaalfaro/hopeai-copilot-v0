@@ -284,25 +284,25 @@ const proposeBehavioralExperiment: ClinicalTool = {
 // HERRAMIENTA ESPECIALIZADA - INVESTIGACIÓN ACADÉMICA
 // ============================================================================
 
-const searchPubMed: ClinicalTool = {
+const searchAcademicWeb: ClinicalTool = {
   metadata: {
-    id: 'search_pubmed',
+    id: 'search_academic_web',
     category: ToolCategory.RESEARCH_ACADEMIC,
     priority: 5,
     contextKeywords: ['research', 'study', 'evidence', 'investigación', 'estudios'],
     clinicalDomain: [ClinicalDomain.GENERAL],
-    version: '1.0.0',
+    version: '2.0.0',
     lastUpdated: new Date('2024-01-15')
   },
   declaration: {
-    name: 'search_pubmed',
-    description: 'Busca literatura académica relevante en PubMed para proporcionar evidencia científica sobre técnicas o condiciones clínicas.',
+    name: 'google_search',
+    description: 'Busca literatura académica relevante en la web para proporcionar evidencia científica sobre técnicas o condiciones clínicas.',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        searchQuery: {
+        query: {
           type: Type.STRING,
-          description: 'Términos de búsqueda específicos para PubMed'
+          description: 'Términos de búsqueda académicos específicos'
         },
         clinicalCondition: {
           type: Type.STRING,
@@ -311,14 +311,9 @@ const searchPubMed: ClinicalTool = {
         interventionType: {
           type: Type.STRING,
           description: 'Tipo de intervención o técnica terapéutica'
-        },
-        maxResults: {
-          type: Type.NUMBER,
-          description: 'Número máximo de resultados a retornar',
-          default: 5
         }
       },
-      required: ['searchQuery']
+      required: ['query']
     }
   }
 };
@@ -350,7 +345,7 @@ export class ToolRegistry {
       detectPattern,
       reframePerspective,
       proposeBehavioralExperiment,
-      searchPubMed
+      searchAcademicWeb
     ];
 
     coreTools.forEach(tool => {
@@ -508,5 +503,5 @@ export {
   detectPattern,
   reframePerspective,
   proposeBehavioralExperiment,
-  searchPubMed
+  searchAcademicWeb
 };

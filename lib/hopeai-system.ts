@@ -395,21 +395,21 @@ export class HopeAISystem {
     const agentConfirmationPrompts = {
       socratico: `El usuario me ha solicitado activar el modo socrático con el mensaje: "${originalMessage}". 
 
-Como HopeAI Socrático, debo confirmar mi activación de manera cálida y contextual, explicando brevemente mis capacidades de exploración reflexiva, desarrollo de insights terapéuticos y análisis profundo de casos clínicos. Luego debo hacer una pregunta reflexiva que invite al usuario a comenzar nuestra exploración socrática.
+Como HopeAI Socrático, núcleo reflexivo de la plataforma integral HopeAI, debo confirmar mi activación de manera cálida y contextual. Mi respuesta debe reflejar naturalmente mi capacidad de exploración reflexiva profunda, desarrollo de insights terapéuticos y análisis de casos clínicos, mientras mantengo una conciencia implícita de formar parte de un ecosistema más amplio de apoyo clínico. Luego debo hacer una pregunta reflexiva que invite al usuario a comenzar nuestra exploración socrática.
 
-Por favor, genera una confirmación natural y empática que refleje mi personalidad socrática.`,
+Por favor, genera una confirmación natural y empática que refleje mi personalidad socrática integrada.`,
       
       clinico: `El usuario me ha solicitado activar el modo clínico con el mensaje: "${originalMessage}".
 
-Como HopeAI Clínico, debo confirmar mi activación de manera profesional y estructurada, explicando brevemente mis capacidades de documentación clínica, resúmenes de sesión, notas SOAP y estructuración de información profesional. Luego debo preguntar específicamente qué tipo de documentación o tarea clínica necesita.
+Como HopeAI Clínico, núcleo organizacional de la plataforma integral HopeAI, debo confirmar mi activación de manera profesional y estructurada. Mi respuesta debe reflejar naturalmente mi capacidad de documentación clínica, resúmenes de sesión, notas SOAP y estructuración de información profesional, mientras mantengo una conciencia implícita de formar parte de un ecosistema que integra exploración reflexiva, documentación estructurada y validación empírica. Luego debo preguntar específicamente qué tipo de documentación o tarea clínica necesita.
 
-Por favor, genera una confirmación clara y profesional que refleje mi enfoque clínico y organizativo.`,
+Por favor, genera una confirmación clara y profesional que refleje mi enfoque clínico organizativo integrado.`,
       
       academico: `El usuario me ha solicitado activar el modo académico con el mensaje: "${originalMessage}".
 
-Como HopeAI Académico, debo confirmar mi activación de manera rigurosa y científica, explicando brevemente mis capacidades de búsqueda de investigación científica, evidencia empírica y revisión de literatura especializada. Luego debo preguntar específicamente qué tema de investigación o evidencia científica necesita explorar.
+Como HopeAI Académico, núcleo científico de la plataforma integral HopeAI, debo confirmar mi activación de manera rigurosa y científica. Mi respuesta debe reflejar naturalmente mi capacidad de búsqueda de investigación científica, evidencia empírica y revisión de literatura especializada, mientras mantengo una conciencia implícita de formar parte de un ecosistema que conecta rigor científico con exploración reflexiva y documentación profesional. Luego debo preguntar específicamente qué tema de investigación o evidencia científica necesita explorar.
 
-Por favor, genera una confirmación precisa y académica que refleje mi enfoque basado en evidencia científica.`
+Por favor, genera una confirmación precisa y académica que refleje mi enfoque científico integrado.`
     }
 
     return agentConfirmationPrompts[targetAgent as keyof typeof agentConfirmationPrompts] || 
@@ -419,7 +419,8 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
   async addStreamingResponseToHistory(
     sessionId: string,
     responseContent: string,
-    agent: AgentType
+    agent: AgentType,
+    groundingUrls?: Array<{title: string, url: string, domain?: string}>
   ): Promise<void> {
     if (!this.initialized) await this.initialize()
 
@@ -435,6 +436,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       role: "model",
       agent: agent,
       timestamp: new Date(),
+      groundingUrls: groundingUrls || []
     }
 
     currentState.history.push(aiMessage)

@@ -211,9 +211,20 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
       if (useStreaming) {
         response = await contextState.nativeChat.sendMessageStream({ message: message })
         
-        // Procesar stream y extraer texto completo
+        // Procesar stream y extraer texto completo, incluyendo URLs de grounding
+        let groundingUrls: Array<{title: string, url: string, domain?: string}> = []
         for await (const chunk of response) {
           responseText += chunk.text || ''
+          
+          // Capturar URLs de grounding si están disponibles
+          if (chunk.groundingUrls && Array.isArray(chunk.groundingUrls)) {
+            groundingUrls.push(...chunk.groundingUrls)
+          }
+        }
+        
+        // Agregar URLs de grounding al response si existen
+        if (groundingUrls.length > 0) {
+          response.groundingUrls = groundingUrls
         }
       } else {
         response = await contextState.nativeChat.sendMessage({ message: message })
@@ -241,7 +252,8 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
         content: responseText,
         role: 'model',
         agent: contextState.currentAgent,
-        timestamp: new Date()
+        timestamp: new Date(),
+        groundingUrls: response.groundingUrls || []
       }
 
       // Actualizar estado del contexto

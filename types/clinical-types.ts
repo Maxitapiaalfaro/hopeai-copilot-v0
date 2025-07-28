@@ -9,6 +9,7 @@ export interface ChatMessage {
   agent?: AgentType
   timestamp: Date
   attachments?: ClinicalFile[]
+  groundingUrls?: Array<{title: string, url: string, domain?: string}>
 }
 
 export interface ClinicalFile {

@@ -19,7 +19,7 @@ interface ChatInterfaceProps {
   currentSession: ChatState | null
   sendMessage: (message: string, useStreaming?: boolean) => Promise<any>
   uploadDocument: (file: File) => Promise<any>
-  addStreamingResponseToHistory?: (responseContent: string, agent: AgentType) => Promise<void>
+  addStreamingResponseToHistory?: (responseContent: string, agent: AgentType, groundingUrls?: Array<{title: string, url: string, domain?: string}>) => Promise<void>
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
@@ -31,6 +31,7 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
   const [forceUpdate, setForceUpdate] = useState(0)
   const [autoScroll, setAutoScroll] = useState(true)
   const [visibleMessageCount, setVisibleMessageCount] = useState(20)
+  const [streamingGroundingUrls, setStreamingGroundingUrls] = useState<Array<{title: string, url: string, domain?: string}>>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
@@ -100,12 +101,18 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
         }
         
         let fullResponse = ""
+        let accumulatedGroundingUrls: Array<{title: string, url: string, domain?: string}> = []
         
         try {
           for await (const chunk of response) {
             if (chunk.text) {
               fullResponse += chunk.text
               setStreamingResponse(fullResponse)
+            }
+            // Capturar groundingUrls de los chunks
+            if (chunk.groundingUrls && chunk.groundingUrls.length > 0) {
+              accumulatedGroundingUrls = [...accumulatedGroundingUrls, ...chunk.groundingUrls]
+              setStreamingGroundingUrls(accumulatedGroundingUrls)
             }
           }
           
@@ -117,7 +124,7 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
               // Usar el agente de la información de enrutamiento si está disponible,
               // de lo contrario usar el agente activo actual
               const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-              await addStreamingResponseToHistory(fullResponse, responseAgent)
+              await addStreamingResponseToHistory(fullResponse, responseAgent, accumulatedGroundingUrls)
               console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
             } catch (historyError) {
               console.error('❌ Frontend: Error agregando al historial:', historyError)
@@ -125,6 +132,7 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
           }
           
           setStreamingResponse("")
+          setStreamingGroundingUrls([])
           setIsStreaming(false)
         } catch (streamError) {
           console.error('❌ Frontend: Error en streaming:', streamError)
@@ -146,7 +154,7 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
             // Usar el agente de la información de enrutamiento si está disponible,
             // de lo contrario usar el agente activo actual
             const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-            await addStreamingResponseToHistory(response.text, responseAgent)
+            await addStreamingResponseToHistory(response.text, responseAgent, response.groundingUrls || [])
             console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
           } catch (historyError) {
             console.error('❌ Frontend: Error agregando al historial:', historyError)
@@ -303,6 +311,29 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
                     className="text-sm"
                     trusted={message.role === "model"}
                   />
+                  {/* Mostrar referencias de grounding si existen */}
+                  {message.groundingUrls && message.groundingUrls.length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-gray-200">
+                      <div className="text-xs font-medium text-gray-600 mb-2">Referencias:</div>
+                      <div className="space-y-1">
+                        {message.groundingUrls.map((ref, index) => (
+                          <div key={index} className="text-xs">
+                            <a 
+                              href={ref.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 underline"
+                            >
+                              {ref.title}
+                            </a>
+                            {ref.domain && (
+                              <span className="text-gray-500 ml-1">({ref.domain})</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {message.attachments && message.attachments.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {message.attachments.map((file, index) => (
@@ -339,7 +370,29 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
               >
                 <IconComponent className={cn("h-4 w-4", config.textColor)} />
               </div>
-              <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg", config.bgColor, `border ${config.borderColor}`)}>                <StreamingMarkdownRenderer                   content={streamingResponse}                  className="text-sm"                  showTypingIndicator={true}                />              </div>
+              <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg", config.bgColor, `border ${config.borderColor}`)}>                <StreamingMarkdownRenderer                   content={streamingResponse}                  className="text-sm"                  showTypingIndicator={true}                />                {/* Mostrar referencias de grounding durante streaming si existen */}
+                {streamingGroundingUrls && streamingGroundingUrls.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-gray-200">
+                    <div className="text-xs font-medium text-gray-600 mb-2">Referencias:</div>
+                    <div className="space-y-1">
+                      {streamingGroundingUrls.map((ref, index) => (
+                        <div key={index} className="text-xs">
+                          <a 
+                            href={ref.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 underline"
+                          >
+                            {ref.title}
+                          </a>
+                          {ref.domain && (
+                            <span className="text-gray-500 ml-1">({ref.domain})</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}              </div>
             </div>
           )}
 

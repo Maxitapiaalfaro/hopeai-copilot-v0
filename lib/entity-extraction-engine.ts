@@ -300,96 +300,177 @@ export class EntityExtractionEngine {
   }
 
   private initializeKnownEntities() {
-    // Técnicas terapéuticas conocidas
+    // Técnicas terapéuticas conocidas - Alineadas con HopeAI Socrático
     this.knownEntities.set('therapeutic_technique', new Set([
       'EMDR', 'TCC', 'Terapia Cognitivo-Conductual', 'DBT', 'ACT',
       'Mindfulness', 'Exposición', 'Reestructuración Cognitiva',
       'Terapia Gestalt', 'Psicoanálisis', 'Terapia Sistémica',
-      'Terapia Narrativa', 'Hipnoterapia', 'Biofeedback'
+      'Terapia Narrativa', 'Hipnoterapia', 'Biofeedback',
+      'Terapia de Esquemas', 'TFCB', 'Terapia Interpersonal',
+      'Terapia Familiar', 'Terapia de Pareja', 'Arteterapia',
+      'Musicoterapia', 'Terapia Ocupacional', 'Psicoterapia Integrativa'
     ]))
 
-    // Poblaciones objetivo conocidas
+    // Poblaciones objetivo conocidas - Expandidas para mayor precisión
     this.knownEntities.set('target_population', new Set([
       'veteranos', 'adolescentes', 'niños', 'adultos mayores',
       'mujeres víctimas de violencia', 'personas con discapacidad',
-      'refugiados', 'personal de salud', 'estudiantes universitarios'
+      'refugiados', 'personal de salud', 'estudiantes universitarios',
+      'sobrevivientes de trauma', 'cuidadores', 'familias disfuncionales',
+      'pacientes oncológicos', 'personas con dolor crónico', 'migrantes',
+      'víctimas de abuso', 'personas LGBTI+', 'trabajadores esenciales'
     ]))
 
-    // Trastornos y condiciones conocidas
+    // Trastornos y condiciones conocidas - Ampliadas según DSM-5
     this.knownEntities.set('disorder_condition', new Set([
       'TEPT', 'Depresión Mayor', 'Trastorno de Ansiedad Generalizada',
       'Trastorno Bipolar', 'Esquizofrenia', 'Trastorno Límite de Personalidad',
-      'Trastorno Obsesivo-Compulsivo', 'Fobia Social', 'Agorafobia'
+      'Trastorno Obsesivo-Compulsivo', 'Fobia Social', 'Agorafobia',
+      'Trastorno de Pánico', 'Trastorno de Estrés Agudo', 'Distimia',
+      'Trastorno Narcisista', 'Trastorno Antisocial', 'Trastorno Histriónico',
+      'Trastorno de la Alimentación', 'Anorexia', 'Bulimia', 'Trastorno por Atracón',
+      'Trastorno del Espectro Autista', 'TDAH', 'Trastorno de Conducta'
     ]))
 
-    // Procesos de documentación conocidos
+    // Procesos de documentación conocidos - Alineados con HopeAI Clínico
     this.knownEntities.set('documentation_process', new Set([
       'redacción de notas', 'notas clínicas', 'documentación SOAP',
       'resúmenes de sesión', 'planes de tratamiento', 'evaluación de progreso',
       'notas de progreso', 'documentación clínica', 'formatos de documentación',
-      'estructuración de información', 'ejemplos clínicos', 'redacción profesional'
+      'estructuración de información', 'ejemplos clínicos', 'redacción profesional',
+      'síntesis documental', 'archivado clínico', 'nota de evolución',
+      'documentación de crisis', 'registro de intervenciones', 'historial clínico',
+      'formato narrativo', 'estructura PIRP', 'documentación DAP',
+      'expediente clínico', 'registro terapéutico', 'bitácora de sesión'
     ]))
 
-    // Consultas de validación académica conocidas
+    // Consultas de validación académica conocidas - Alineadas con HopeAI Académico
     this.knownEntities.set('academic_validation', new Set([
       'estudios avalan', 'qué estudios', 'investigación respalda', 'evidencia científica',
       'respaldo empírico', 'validación científica', 'metaanálisis', 'ensayos clínicos',
       'revisión sistemática', 'literatura científica', 'papers académicos', 'investigación valida',
-      'evidencia empírica', 'estudios que respaldan', 'investigaciones que avalan', 'base científica'
+      'evidencia empírica', 'estudios que respaldan', 'investigaciones que avalan', 'base científica',
+      'validación empírica', 'respaldo científico', 'fundamento empírico', 'soporte académico',
+      'investigación actual', 'estudios recientes', 'literatura actualizada', 'evidencia robusta',
+      'consenso científico', 'práctica basada en evidencia', 'guidelines clínicas', 'protocolos validados'
     ]))
 
-    // Consultas de exploración socrática conocidas
+    // Consultas de exploración socrática conocidas - Alineadas con HopeAI Socrático
     this.knownEntities.set('socratic_exploration', new Set([
       'reflexionar', 'explorar', 'analizar', 'cuestionar', 'insight', 'autoconocimiento',
       'desarrollo de conciencia', 'exploración profunda', 'cuestionamiento socrático', 'facilitación de insight',
       'análisis introspectivo', 'exploración de creencias', 'reflexión crítica', 'desarrollo de awareness',
       'facilitación de autodescubrimiento', 'exploración existencial', 'análisis fenomenológico',
       'ayúdame a reflexionar', 'necesito explorar', 'quiero analizar', 'desarrollar insight',
-      'explorar más profundo', 'reflexionar sobre', 'cuestionar esto', 'desarrollar conciencia'
+      'explorar más profundo', 'reflexionar sobre', 'cuestionar esto', 'desarrollar conciencia',
+      'pensamiento crítico', 'autorreflexión', 'introspección guiada', 'diálogo socrático',
+      'facilitación reflexiva', 'exploración cognitiva', 'análisis de supuestos', 'deconstrucción de creencias',
+      'desarrollo de perspectiva', 'ampliación de conciencia', 'exploración de significado', 'búsqueda de comprensión'
     ]))
   }
 
   private initializeSynonymMaps() {
-    this.synonymMaps.set('EMDR', ['Desensibilización y Reprocesamiento por Movimientos Oculares'])
-    this.synonymMaps.set('TCC', ['Terapia Cognitivo-Conductual', 'CBT'])
-    this.synonymMaps.set('DBT', ['Terapia Dialéctica Conductual'])
-    this.synonymMaps.set('ACT', ['Terapia de Aceptación y Compromiso'])
-    this.synonymMaps.set('TEPT', ['Trastorno de Estrés Postraumático', 'PTSD'])
+    // Técnicas terapéuticas - Optimizadas para detección semántica
+    this.synonymMaps.set('EMDR', ['Desensibilización y Reprocesamiento por Movimientos Oculares', 'movimientos oculares', 'desensibilización', 'reprocesamiento'])
+    this.synonymMaps.set('TCC', ['Terapia Cognitivo-Conductual', 'CBT', 'terapia cognitiva', 'terapia conductual', 'cognitivo conductual', 'cognitiva conductual'])
+    this.synonymMaps.set('DBT', ['Terapia Dialéctica Conductual', 'dialectica', 'dialéctica conductual'])
+    this.synonymMaps.set('ACT', ['Terapia de Aceptación y Compromiso', 'aceptación y compromiso', 'terapia de aceptación'])
+    this.synonymMaps.set('Mindfulness', ['atención plena', 'mindful', 'conciencia plena', 'meditación consciente'])
+    this.synonymMaps.set('Terapia Gestalt', ['gestalt', 'terapia gestáltica'])
+    this.synonymMaps.set('Psicoanálisis', ['psicoanalítica', 'psicodinámico', 'analítico'])
+    this.synonymMaps.set('Terapia Sistémica', ['sistémica', 'familiar sistémica', 'enfoque sistémico'])
+    this.synonymMaps.set('Terapia Narrativa', ['narrativa', 'enfoque narrativo'])
+    this.synonymMaps.set('Hipnoterapia', ['hipnosis', 'hipnótica', 'trance'])
+    this.synonymMaps.set('Terapia de Esquemas', ['esquemas', 'terapia esquemática'])
+    this.synonymMaps.set('Terapia Interpersonal', ['interpersonal', 'relacional'])
+    this.synonymMaps.set('Arteterapia', ['arte terapia', 'terapia artística'])
+    this.synonymMaps.set('Musicoterapia', ['música terapia', 'terapia musical'])
     
-    // Sinónimos específicos para documentación clínica
-    this.synonymMaps.set('notas clínicas', ['notas', 'documentar', 'redactar'])
-    this.synonymMaps.set('documentación SOAP', ['soap', 'formato SOAP', 'estructura SOAP'])
-    this.synonymMaps.set('resúmenes de sesión', ['resumen', 'resúmenes', 'síntesis de sesión'])
-    this.synonymMaps.set('planes de tratamiento', ['plan', 'planificación', 'plan terapéutico'])
-    this.synonymMaps.set('notas de progreso', ['progreso', 'evolución', 'seguimiento'])
-    this.synonymMaps.set('formatos de documentación', ['formato', 'formatos', 'plantillas'])
+    // Trastornos y condiciones - Alineados con terminología DSM-5
+    this.synonymMaps.set('TEPT', ['Trastorno de Estrés Postraumático', 'PTSD', 'estrés postraumático', 'trauma', 'estrés post traumático'])
+    this.synonymMaps.set('Depresión Mayor', ['depresión', 'episodio depresivo', 'trastorno depresivo mayor'])
+    this.synonymMaps.set('Trastorno de Ansiedad Generalizada', ['ansiedad', 'TAG', 'ansiedad generalizada'])
+    this.synonymMaps.set('Trastorno Bipolar', ['trastorno afectivo bipolar', 'bipolaridad', 'maníaco depresivo'])
+    this.synonymMaps.set('Trastorno Obsesivo-Compulsivo', ['TOC', 'obsesivo compulsivo', 'obsesiones', 'compulsiones'])
+    this.synonymMaps.set('Trastorno de Pánico', ['pánico', 'ataques de pánico', 'crisis de pánico'])
+    this.synonymMaps.set('Fobia Social', ['fobia social', 'ansiedad social'])
+    this.synonymMaps.set('Trastorno Límite de Personalidad', ['borderline', 'TLP', 'límite de personalidad'])
+    this.synonymMaps.set('Esquizofrenia', ['psicosis', 'trastorno psicótico'])
+    this.synonymMaps.set('Trastorno del Espectro Autista', ['autismo', 'TEA', 'asperger'])
+    this.synonymMaps.set('TDAH', ['hiperactividad', 'déficit atencional', 'déficit de atención'])
+    this.synonymMaps.set('Anorexia', ['anorexia nerviosa'])
+    this.synonymMaps.set('Bulimia', ['bulimia nerviosa'])
+    this.synonymMaps.set('Trastorno por Atracón', ['atracones', 'trastorno alimentario por atracón'])
+    
+    // Poblaciones objetivo - Expandidas para mayor cobertura
+    this.synonymMaps.set('veteranos', ['ex combatientes', 'militares', 'soldados', 'fuerzas armadas'])
+    this.synonymMaps.set('adolescentes', ['jóvenes', 'teens', 'juventud'])
+    this.synonymMaps.set('niños', ['menores', 'infantes', 'pediátricos', 'infantil'])
+    this.synonymMaps.set('adultos mayores', ['tercera edad', 'ancianos', 'geriátricos', 'senescentes'])
+    this.synonymMaps.set('mujeres víctimas de violencia', ['violencia doméstica', 'violencia de género', 'maltrato de género'])
+    this.synonymMaps.set('víctimas de abuso', ['maltrato', 'abuso sexual', 'abuso físico'])
+    this.synonymMaps.set('sobrevivientes de trauma', ['supervivientes', 'víctimas de trauma'])
+    this.synonymMaps.set('pacientes oncológicos', ['cáncer', 'oncología', 'pacientes con cáncer'])
+    this.synonymMaps.set('personas con dolor crónico', ['dolor persistente', 'fibromialgia', 'dolor neuropático'])
+    this.synonymMaps.set('personas LGBTI+', ['LGBTI', 'diversidad sexual', 'comunidad LGBT'])
+    this.synonymMaps.set('migrantes', ['inmigrantes', 'emigrantes'])
+    this.synonymMaps.set('refugiados', ['desplazados', 'solicitantes de asilo'])
+    
+    // Documentación clínica - Alineados con HopeAI Clínico
+    this.synonymMaps.set('notas clínicas', ['notas', 'documentar', 'redactar', 'anotar'])
+    this.synonymMaps.set('documentación SOAP', ['soap', 'formato SOAP', 'estructura SOAP', 'nota SOAP'])
+    this.synonymMaps.set('resúmenes de sesión', ['resumen', 'resúmenes', 'síntesis de sesión', 'síntesis'])
+    this.synonymMaps.set('planes de tratamiento', ['plan', 'planificación', 'plan terapéutico', 'planificar'])
+    this.synonymMaps.set('notas de progreso', ['progreso', 'evolución', 'seguimiento', 'avance'])
+    this.synonymMaps.set('formatos de documentación', ['formato', 'formatos', 'plantillas', 'estructura'])
     this.synonymMaps.set('estructuración de información', ['estructurar', 'organizar', 'sistematizar'])
-    this.synonymMaps.set('ejemplos clínicos', ['ejemplos', 'casos', 'modelos'])
+    this.synonymMaps.set('ejemplos clínicos', ['ejemplos', 'casos', 'modelos', 'muestras'])
     this.synonymMaps.set('redacción profesional', ['redacción', 'escritura', 'comunicación escrita'])
+    this.synonymMaps.set('expediente clínico', ['expediente', 'historial', 'archivo clínico'])
+    this.synonymMaps.set('bitácora de sesión', ['bitácora', 'registro de sesión'])
+    this.synonymMaps.set('estructura PIRP', ['PIRP', 'formato PIRP'])
+    this.synonymMaps.set('documentación DAP', ['DAP', 'formato DAP'])
+    this.synonymMaps.set('nota de evolución', ['evolución', 'nota evolutiva'])
+    this.synonymMaps.set('documentación de crisis', ['crisis', 'emergencia', 'situación crítica'])
     
-    // Sinónimos específicos para validación académica
-    this.synonymMaps.set('estudios avalan', ['avalan', 'respaldan', 'validan', 'confirman'])
+    // Validación académica - Alineados con HopeAI Académico
+    this.synonymMaps.set('estudios avalan', ['avalan', 'respaldan', 'validan', 'confirman', 'hay estudios', 'estudios que avalan'])
     this.synonymMaps.set('evidencia científica', ['evidencia', 'pruebas', 'datos científicos', 'respaldo científico'])
-    this.synonymMaps.set('investigación respalda', ['investigación', 'estudios', 'research', 'investigaciones'])
-    this.synonymMaps.set('metaanálisis', ['meta-análisis', 'revisión cuantitativa', 'análisis conjunto'])
+    this.synonymMaps.set('investigación respalda', ['investigación', 'estudios', 'research', 'investigaciones', 'existe investigación'])
+    this.synonymMaps.set('metaanálisis', ['meta-análisis', 'revisión cuantitativa', 'análisis conjunto', 'metanálisis', 'meta análisis'])
     this.synonymMaps.set('ensayos clínicos', ['ensayos', 'trials', 'estudios controlados', 'RCT'])
-    this.synonymMaps.set('revisión sistemática', ['revisión', 'systematic review', 'literatura'])
+    this.synonymMaps.set('revisión sistemática', ['revisión', 'systematic review', 'literatura', 'revisión de literatura'])
     this.synonymMaps.set('validación científica', ['validación', 'verificación', 'confirmación científica'])
+    this.synonymMaps.set('práctica basada en evidencia', ['práctica basada evidencia', 'EBP', 'evidencia basada'])
+    this.synonymMaps.set('guidelines clínicas', ['guidelines', 'guías clínicas', 'guías de práctica'])
+    this.synonymMaps.set('protocolos validados', ['protocolos', 'procedimientos validados'])
+    this.synonymMaps.set('consenso científico', ['consenso', 'acuerdo científico'])
+    this.synonymMaps.set('literatura científica', ['papers', 'artículos', 'publicaciones', 'papers académicos'])
+    this.synonymMaps.set('evidencia empírica', ['empírico', 'datos empíricos', 'respaldo empírico'])
+    this.synonymMaps.set('fundamento empírico', ['fundamento', 'base empírica'])
     
-    // Sinónimos específicos para exploración socrática
+    // Exploración socrática - Alineados con HopeAI Socrático
     this.synonymMaps.set('reflexionar', ['reflexión', 'pensar', 'meditar', 'contemplar'])
     this.synonymMaps.set('explorar', ['exploración', 'investigar', 'indagar', 'examinar'])
-    this.synonymMaps.set('analizar', ['análisis', 'examinar', 'estudiar', 'evaluar'])
+    this.synonymMaps.set('analizar', ['análisis', 'examinar', 'estudiar', 'evaluar', 'revisar'])
     this.synonymMaps.set('cuestionar', ['cuestionamiento', 'preguntar', 'interrogar', 'dudar'])
     this.synonymMaps.set('insight', ['comprensión', 'entendimiento', 'revelación', 'darse cuenta'])
-    this.synonymMaps.set('autoconocimiento', ['conocimiento personal', 'autoconciencia', 'introspección'])
-    this.synonymMaps.set('desarrollo de conciencia', ['awareness', 'consciencia', 'darse cuenta', 'percatarse'])
+    this.synonymMaps.set('autoconocimiento', ['conocimiento personal', 'autoconciencia', 'introspección', 'conocerse'])
+    this.synonymMaps.set('desarrollo de conciencia', ['awareness', 'consciencia', 'darse cuenta', 'percatarse', 'conciencia'])
     this.synonymMaps.set('exploración profunda', ['profundizar', 'ahondar', 'ir más allá', 'explorar a fondo'])
-    this.synonymMaps.set('cuestionamiento socrático', ['preguntas socráticas', 'método socrático', 'diálogo socrático'])
-    this.synonymMaps.set('facilitación de insight', ['facilitar comprensión', 'generar insight', 'promover entendimiento'])
+    this.synonymMaps.set('cuestionamiento socrático', ['preguntas socráticas', 'método socrático', 'diálogo socrático', 'mayéutica'])
+    this.synonymMaps.set('facilitación de insight', ['facilitar comprensión', 'generar insight', 'promover entendimiento', 'facilitación'])
     this.synonymMaps.set('análisis introspectivo', ['introspección', 'autoexamen', 'autoanálisis', 'reflexión interna'])
-    this.synonymMaps.set('exploración de creencias', ['examinar creencias', 'cuestionar creencias', 'revisar supuestos'])
+    this.synonymMaps.set('exploración de creencias', ['examinar creencias', 'cuestionar creencias', 'revisar supuestos', 'creencias'])
     this.synonymMaps.set('reflexión crítica', ['pensamiento crítico', 'análisis crítico', 'evaluación crítica'])
+    this.synonymMaps.set('autorreflexión', ['auto reflexión', 'reflexión personal'])
+    this.synonymMaps.set('facilitación reflexiva', ['facilitación', 'guía reflexiva'])
+    this.synonymMaps.set('exploración cognitiva', ['cognición', 'procesos cognitivos'])
+    this.synonymMaps.set('análisis de supuestos', ['supuestos', 'creencias subyacentes'])
+    this.synonymMaps.set('deconstrucción de creencias', ['deconstruir', 'desmontar creencias'])
+    this.synonymMaps.set('desarrollo de perspectiva', ['perspectiva', 'nueva perspectiva'])
+    this.synonymMaps.set('exploración de significado', ['significado', 'sentido', 'propósito'])
+    this.synonymMaps.set('búsqueda de comprensión', ['comprensión profunda', 'entendimiento', 'búsqueda de sentido'])
   }
 
   async extractEntities(text: string, sessionContext?: any): Promise<EntityExtractionResult> {

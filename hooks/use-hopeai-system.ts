@@ -328,7 +328,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Agregar respuesta de streaming al historial
   const addStreamingResponseToHistory = useCallback(async (
     responseContent: string,
-    agent: AgentType
+    agent: AgentType,
+    groundingUrls?: Array<{title: string, url: string, domain?: string}>
   ): Promise<void> => {
     if (!hopeAISystem.current || !systemState.sessionId) {
       throw new Error('Sistema no inicializado o sesión no encontrada')
@@ -338,7 +339,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       await hopeAISystem.current.addStreamingResponseToHistory(
         systemState.sessionId,
         responseContent,
-        agent
+        agent,
+        groundingUrls
       )
 
       // Actualizar el historial local inmediatamente
