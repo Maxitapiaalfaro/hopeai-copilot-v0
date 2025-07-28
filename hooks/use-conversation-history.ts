@@ -117,7 +117,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
       const summaries = result.items.map(createConversationSummary)
       
       // Actualizar cache
-      summaries.forEach(summary => {
+      summaries.forEach((summary: ConversationSummary) => {
         conversationCache.current.set(summary.sessionId, summary)
       })
       
@@ -165,7 +165,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
       const newSummaries = result.items.map(createConversationSummary)
       
       // Actualizar cache
-      newSummaries.forEach(summary => {
+      newSummaries.forEach((summary: ConversationSummary) => {
         conversationCache.current.set(summary.sessionId, summary)
       })
       
@@ -271,12 +271,39 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     return allConversations.filter(conv => conv.mode === mode)
   }, [allConversations])
 
-  // Refrescar conversaciones
+  // Estado para debouncing de refresh
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // Refrescar conversaciones con debouncing
   const refreshConversations = useCallback(async () => {
-    if (currentUserId) {
-      await loadConversations(currentUserId, true) // Resetear cache
+    // Prevenir múltiples refreshes simultáneos
+    if (isRefreshing) {
+      console.log('⚠️ Refresh ya en progreso, ignorando solicitud duplicada')
+      return
     }
-  }, [currentUserId, loadConversations])
+
+    // Limpiar timeout anterior si existe
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current)
+    }
+
+    // Implementar debouncing de 200ms
+    refreshTimeoutRef.current = setTimeout(async () => {
+      if (currentUserId) {
+        try {
+          setIsRefreshing(true)
+          console.log('🔄 Iniciando refresh debounced de conversaciones')
+          await loadConversations(currentUserId, true) // Resetear cache
+          console.log('✅ Refresh de conversaciones completado')
+        } catch (error) {
+          console.error('❌ Error en refresh de conversaciones:', error)
+        } finally {
+          setIsRefreshing(false)
+        }
+      }
+    }, 200)
+  }, [currentUserId, loadConversations, isRefreshing])
 
   // Limpiar error
   const clearError = useCallback(() => {

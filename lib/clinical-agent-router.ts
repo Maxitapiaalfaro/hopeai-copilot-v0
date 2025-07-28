@@ -586,7 +586,7 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
           maxOutputTokens: agentConfig.config.maxOutputTokens,
           safetySettings: agentConfig.config.safetySettings,
           systemInstruction: agentConfig.systemInstruction,
-          tools: agentConfig.tools.length > 0 ? agentConfig.tools : undefined,
+          tools: agentConfig.tools && agentConfig.tools.length > 0 ? agentConfig.tools : undefined,
         },
         history: geminiHistory,
       })

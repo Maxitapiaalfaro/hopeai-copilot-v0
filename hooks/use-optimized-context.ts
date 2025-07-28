@@ -132,7 +132,7 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
           }
         },
         systemInstruction: agentConfig.systemInstruction,
-        tools: agentConfig.tools.length > 0 ? [{ functionDeclarations: agentConfig.tools }] : undefined,
+        tools: agentConfig.tools && agentConfig.tools.length > 0 ? [{ functionDeclarations: agentConfig.tools }] : undefined,
         history: geminiHistory
       }
 

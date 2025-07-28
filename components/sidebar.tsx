@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   MessageSquare,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from "lucide-react"
 import { 
   AlertDialog,
@@ -39,7 +40,7 @@ interface SidebarProps {
   isOpen: boolean
   onToggle: () => void
   userId?: string
-  onNewConversation?: () => void
+  createSession?: (userId: string, mode: any, agent: any) => Promise<string | null>
   onConversationSelect?: (sessionId: string) => void
 }
 
@@ -48,21 +49,24 @@ const agentIcons = {
   'socratico': Brain,
   'clinico': Stethoscope,
   'academico': BookOpen,
+  'orquestador': Zap,
 }
 
 const agentColors = {
   'socratico': "text-blue-600",
   'clinico': "text-green-600",
   'academico': "text-purple-600",
+  'orquestador': "text-orange-600",
 }
 
 const agentLabels = {
   'socratico': 'Socrático',
   'clinico': 'Clínico',
   'academico': 'Académico',
+  'orquestador': 'Orquestador',
 }
 
-export function Sidebar({ isOpen, onToggle, userId, onNewConversation, onConversationSelect }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, userId, createSession: createSessionProp, onConversationSelect }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
   
@@ -127,7 +131,6 @@ export function Sidebar({ isOpen, onToggle, userId, onNewConversation, onConvers
         
         if (success) {
           console.log('✅ Conversación cargada exitosamente:', sessionId)
-          onNewConversation?.() // Notificar al componente padre
         } else {
           console.error('❌ Error cargando la conversación')
           setSelectedConversation(null)
@@ -139,19 +142,45 @@ export function Sidebar({ isOpen, onToggle, userId, onNewConversation, onConvers
     }
   }
   
-  // Manejar nueva conversación
+  // Estado para prevenir creación múltiple simultánea
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
+
+  // Manejar nueva conversación con patrón de transacción atómica
   const handleNewConversation = async () => {
+    // Prevenir múltiples ejecuciones simultáneas
+    if (isCreatingSession) {
+      console.log('⚠️ Sidebar: Creación de sesión ya en progreso, ignorando solicitud duplicada')
+      return
+    }
+
     try {
+      setIsCreatingSession(true)
       const effectiveUserId = userId || systemState.userId
-      if (createSession && effectiveUserId) {
-        await createSession(effectiveUserId, 'clinical_supervision', 'socratico')
-        setSelectedConversation(null)
-        onNewConversation?.()
-        // Refrescar la lista de conversaciones
-        await refreshConversations()
+      
+      if (createSessionProp && effectiveUserId) {
+        console.log('📝 Sidebar: Iniciando transacción de nueva conversación...')
+        
+        // Transacción atómica: crear sesión y actualizar estado
+        const newSessionId = await createSessionProp(effectiveUserId, 'clinical_supervision', 'socratico')
+        
+        if (newSessionId) {
+          // Solo proceder si la sesión se creó exitosamente
+          setSelectedConversation(null)
+          
+          // Debounced refresh para evitar múltiples llamadas
+          setTimeout(async () => {
+            await refreshConversations()
+          }, 300)
+          
+          console.log('✅ Sidebar: Transacción de nueva conversación completada:', newSessionId)
+        } else {
+          throw new Error('No se pudo crear la sesión')
+        }
       }
     } catch (err) {
-      console.error('Error al crear nueva conversación:', err)
+      console.error('❌ Sidebar: Error en transacción de nueva conversación:', err)
+    } finally {
+      setIsCreatingSession(false)
     }
   }
   

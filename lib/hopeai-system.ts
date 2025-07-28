@@ -2,12 +2,43 @@ import { clinicalAgentRouter } from "./clinical-agent-router"
 import { getStorageAdapter } from "./server-storage-adapter"
 import { clinicalFileManager } from "./clinical-file-manager"
 import { createIntelligentIntentRouter, type EnrichedContext } from "./intelligent-intent-router"
+import { trackAgentSwitch } from "./sentry-metrics-tracker"
+// Removed singleton-monitor import to avoid circular dependency
+import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile } from "@/types/clinical-types"
 
 export class HopeAISystem {
-  private initialized = false
+  private _initialized = false
   private storage: any = null
   private intentRouter: any = null
+  
+  // Public getter for initialization status
+  public get initialized(): boolean {
+    return this._initialized
+  }
+  
+  // Método privado para guardar en el sistema de almacenamiento del servidor con verificación de existencia
+  private async saveChatSessionBoth(chatState: ChatState): Promise<void> {
+    try {
+      // Verificar si la sesión ya existe para prevenir duplicaciones
+      const existingSession = await this.storage.loadChatSession(chatState.sessionId)
+      
+      if (existingSession) {
+        console.log(`⚠️ Sesión ya existe, actualizando: ${chatState.sessionId}`)
+        // Actualizar metadata de la sesión existente
+        chatState.metadata.lastUpdated = new Date()
+      } else {
+        console.log(`📝 Creando nueva sesión: ${chatState.sessionId}`)
+      }
+      
+      // Guardar en el storage adapter principal (servidor)
+      await this.storage.saveChatSession(chatState)
+      console.log(`💾 Chat session saved: ${chatState.sessionId}`)
+    } catch (error) {
+      console.error(`❌ Error saving chat session ${chatState.sessionId}:`, error)
+      throw error
+    }
+  }
   
   // Getter público para acceder al storage desde la API
   get storageAdapter() {
@@ -15,7 +46,7 @@ export class HopeAISystem {
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized) return
+    if (this._initialized) return
 
     try {
       // Inicializar el storage adapter
@@ -34,7 +65,7 @@ export class HopeAISystem {
         maxRetries: 2
       })
       
-      this.initialized = true
+      this._initialized = true
       console.log("HopeAI System initialized successfully with Intelligent Intent Router")
     } catch (error) {
       console.error("Failed to initialize HopeAI System:", error)
@@ -48,19 +79,45 @@ export class HopeAISystem {
     agent: AgentType,
     sessionId?: string,
   ): Promise<{ sessionId: string; chatState: ChatState }> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
 
     const finalSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
     let chatHistory: ChatMessage[] = []
+    let isExistingSession = false
 
-    // Try to restore existing session
+    // Verificación robusta de sesión existente
     if (sessionId) {
-      const existingState = await this.storage.loadChatSession(sessionId)
-      if (existingState) {
-        chatHistory = existingState.history
+      try {
+        const existingState = await this.storage.loadChatSession(sessionId)
+        if (existingState) {
+          console.log(`♻️ Restaurando sesión existente: ${sessionId}`)
+          chatHistory = existingState.history
+          isExistingSession = true
+          // Retornar la sesión existente sin crear duplicado
+          return { sessionId: finalSessionId, chatState: existingState }
+        }
+      } catch (error) {
+        console.log(`⚠️ Error verificando sesión existente ${sessionId}, creando nueva:`, error)
       }
     }
+
+    // Verificación adicional para prevenir duplicación por ID generado
+    if (!sessionId) {
+      try {
+        const potentialExisting = await this.storage.loadChatSession(finalSessionId)
+        if (potentialExisting) {
+          console.log(`⚠️ ID de sesión generado ya existe, regenerando...`)
+          // Regenerar ID único
+          const newId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          return this.createClinicalSession(userId, mode, agent, newId)
+        }
+      } catch (error) {
+        // Error esperado si la sesión no existe, continuar con la creación
+      }
+    }
+
+    console.log(`🆕 Creando nueva sesión clínica: ${finalSessionId}`)
 
     // Create chat session with agent router
     await clinicalAgentRouter.createChatSession(finalSessionId, agent, chatHistory)
@@ -84,8 +141,8 @@ export class HopeAISystem {
       },
     }
 
-    // Save initial state
-    await this.storage.saveChatSession(chatState)
+    // Save initial state with verification
+    await this.saveChatSessionBoth(chatState)
 
     return { sessionId: finalSessionId, chatState }
   }
@@ -99,7 +156,7 @@ export class HopeAISystem {
     response: any
     updatedState: ChatState
   }> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
 
     // Load current session state or create a new one if it doesn't exist
     let currentState = await this.storage.loadChatSession(sessionId)
@@ -118,7 +175,7 @@ export class HopeAISystem {
         }
       }
       // Save the new session
-      await this.storage.saveChatSession(currentState)
+      await this.saveChatSessionBoth(currentState)
     }
 
     try {
@@ -159,11 +216,29 @@ export class HopeAISystem {
         if (routingResult.targetAgent !== currentState.activeAgent) {
           console.log(`[HopeAI] Explicit agent switch request: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
           
-          // Close current chat session
-          clinicalAgentRouter.closeChatSession(sessionId)
+          // Instrumentar cambio de agente con Sentry
+          const agentSwitchSpan = Sentry.startSpan(
+            { name: 'agent.switch.explicit', op: 'orchestration' },
+            () => {
+              // Registrar métricas del cambio de agente
+              trackAgentSwitch({
+                userId: currentState.userId || 'demo_user',
+                sessionId,
+                fromAgent: currentState.activeAgent,
+                toAgent: routingResult.targetAgent,
+                switchType: 'explicit',
+                confidence: routingResult.enrichedContext?.confidence || 1.0
+              })
+              
+              // Close current chat session
+              clinicalAgentRouter.closeChatSession(sessionId)
+              
+              // Create new chat session with new agent
+              return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history)
+            }
+          )
           
-          // Create new chat session with new agent
-          await clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history)
+          await agentSwitchSpan
           
           // Update state
           currentState.activeAgent = routingResult.targetAgent
@@ -213,7 +288,7 @@ export class HopeAISystem {
 
           currentState.history.push(confirmationMessage)
           currentState.metadata.lastUpdated = new Date()
-          await this.storage.saveChatSession(currentState)
+          await this.saveChatSessionBoth(currentState)
 
           return {
             response: {
@@ -245,11 +320,29 @@ export class HopeAISystem {
       if (routingResult.targetAgent !== currentState.activeAgent) {
         console.log(`[HopeAI] Intelligent routing: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
         
-        // Close current chat session
-        clinicalAgentRouter.closeChatSession(sessionId)
+        // Instrumentar cambio de agente automático con Sentry
+        const agentSwitchSpan = Sentry.startSpan(
+          { name: 'agent.switch.automatic', op: 'orchestration' },
+          () => {
+            // Registrar métricas del cambio de agente
+            trackAgentSwitch({
+              userId: currentState.userId || 'demo_user',
+              sessionId,
+              fromAgent: currentState.activeAgent,
+              toAgent: routingResult.targetAgent,
+              switchType: 'automatic',
+              confidence: routingResult.enrichedContext?.confidence || 0.8
+            })
+            
+            // Close current chat session
+            clinicalAgentRouter.closeChatSession(sessionId)
+            
+            // Create new chat session with new agent
+            return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history)
+          }
+        )
         
-        // Create new chat session with new agent
-        await clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history)
+        await agentSwitchSpan
         
         // Update state
         currentState.activeAgent = routingResult.targetAgent
@@ -266,7 +359,7 @@ export class HopeAISystem {
 
       // Save state with user message immediately (for both streaming and non-streaming)
       currentState.metadata.lastUpdated = new Date()
-      await this.storage.saveChatSession(currentState)
+      await this.saveChatSessionBoth(currentState)
 
       // Handle response based on streaming or not
       let responseContent = ""
@@ -309,7 +402,7 @@ export class HopeAISystem {
       currentState.metadata.totalTokens += this.estimateTokens(message + responseContent)
 
       // Save updated state
-      await this.storage.saveChatSession(currentState)
+      await this.saveChatSessionBoth(currentState)
 
       return { 
         response: {
@@ -330,31 +423,47 @@ export class HopeAISystem {
   }
 
   async switchAgent(sessionId: string, newAgent: AgentType): Promise<ChatState> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
 
     const currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
       throw new Error(`Session not found: ${sessionId}`)
     }
 
-    // Close current chat session
-    clinicalAgentRouter.closeChatSession(sessionId)
+    // Instrumentar cambio manual de agente con Sentry
+    return await Sentry.startSpan(
+      { name: 'agent.switch.manual', op: 'orchestration' },
+      async () => {
+        // Registrar métricas del cambio de agente
+        trackAgentSwitch({
+          userId: currentState.userId || 'demo_user',
+          sessionId,
+          fromAgent: currentState.activeAgent,
+          toAgent: newAgent,
+          switchType: 'manual',
+          confidence: 1.0
+        })
+        
+        // Close current chat session
+        clinicalAgentRouter.closeChatSession(sessionId)
 
-    // Create new chat session with new agent
-    await clinicalAgentRouter.createChatSession(sessionId, newAgent, currentState.history)
+        // Create new chat session with new agent
+        await clinicalAgentRouter.createChatSession(sessionId, newAgent, currentState.history)
 
-    // Update state
-    currentState.activeAgent = newAgent
-    currentState.metadata.lastUpdated = new Date()
+        // Update state
+        currentState.activeAgent = newAgent
+        currentState.metadata.lastUpdated = new Date()
 
-    // Save updated state
-    await this.storage.saveChatSession(currentState)
+        // Save updated state
+        await this.saveChatSessionBoth(currentState)
 
-    return currentState
+        return currentState
+      }
+    )
   }
 
   async uploadDocument(sessionId: string, file: File, userId: string): Promise<ClinicalFile> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
 
     if (!clinicalFileManager.isValidClinicalFile(file)) {
       throw new Error("Invalid file type or size. Please upload PDF, Word, or image files under 10MB.")
@@ -367,19 +476,19 @@ export class HopeAISystem {
     if (currentState) {
       currentState.metadata.fileReferences.push(uploadedFile.id)
       currentState.metadata.lastUpdated = new Date()
-      await this.storage.saveChatSession(currentState)
+      await this.saveChatSessionBoth(currentState)
     }
 
     return uploadedFile
   }
 
   async getUserSessions(userId: string): Promise<ChatState[]> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
     return await this.storage.getUserSessions(userId)
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
 
     // Close active chat session
     clinicalAgentRouter.closeChatSession(sessionId)
@@ -422,7 +531,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>
   ): Promise<void> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
 
     const currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
@@ -446,11 +555,11 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     currentState.metadata.totalTokens += this.estimateTokens(responseContent)
 
     // Save updated state
-    await this.storage.saveChatSession(currentState)
+    await this.saveChatSessionBoth(currentState)
   }
 
   async getChatState(sessionId: string): Promise<ChatState> {
-    if (!this.initialized) await this.initialize()
+    if (!this._initialized) await this.initialize()
 
     const currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
@@ -485,7 +594,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     const allSessions = await this.storage.getUserSessions("all") // This would need to be implemented
 
     return {
-      initialized: this.initialized,
+      initialized: this._initialized,
       activeAgents: Array.from(clinicalAgentRouter.getAllAgents().keys()),
       totalSessions: allSessions.length,
     }
@@ -495,13 +604,136 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
 // Global singleton instance for server-side usage
 let globalHopeAI: HopeAISystem | null = null
 
-// Function to get or create singleton instance
-export function getHopeAIInstance(): HopeAISystem {
-  if (!globalHopeAI) {
-    globalHopeAI = new HopeAISystem()
+/**
+ * Singleton implementation for HopeAISystem
+ * Ensures only one instance exists across the entire application
+ * Prevents multiple reinitializations and state conflicts
+ */
+export class HopeAISystemSingleton {
+  private static instance: HopeAISystem | null = null
+  private static initializationPromise: Promise<HopeAISystem> | null = null
+  private static isInitializing = false
+
+  /**
+   * Gets the singleton instance of HopeAISystem
+   * Implements lazy initialization with thread safety
+   */
+  public static getInstance(): HopeAISystem {
+    if (!HopeAISystemSingleton.instance) {
+      console.log('🔧 Creating new HopeAISystem singleton instance')
+      HopeAISystemSingleton.instance = new HopeAISystem()
+    }
+    return HopeAISystemSingleton.instance
   }
-  return globalHopeAI
+
+  /**
+   * Gets the singleton instance with guaranteed initialization
+   * Returns a promise that resolves when the system is fully initialized
+   */
+  public static async getInitializedInstance(): Promise<HopeAISystem> {
+    // If already initialized, return immediately
+    if (HopeAISystemSingleton.instance?.initialized) {
+      return HopeAISystemSingleton.instance
+    }
+
+    // If initialization is in progress, wait for it
+    if (HopeAISystemSingleton.initializationPromise) {
+      return HopeAISystemSingleton.initializationPromise
+    }
+
+    // Start initialization
+    HopeAISystemSingleton.initializationPromise = HopeAISystemSingleton.initializeInstance()
+    return HopeAISystemSingleton.initializationPromise
+  }
+
+  /**
+   * Private method to handle the initialization process
+   */
+  private static async initializeInstance(): Promise<HopeAISystem> {
+    if (HopeAISystemSingleton.isInitializing) {
+      // Wait for current initialization to complete
+      while (HopeAISystemSingleton.isInitializing) {
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+      return HopeAISystemSingleton.instance!
+    }
+
+    HopeAISystemSingleton.isInitializing = true
+    console.log('🔄 Starting HopeAI System initialization...')
+    const startTime = Date.now()
+
+    try {
+      const instance = HopeAISystemSingleton.getInstance()
+      await instance.initialize()
+      
+      const initTime = Date.now() - startTime
+      console.log(`🚀 HopeAI Singleton System initialized successfully in ${initTime}ms`)
+      return instance
+    } catch (error) {
+      console.error('❌ Failed to initialize HopeAI Singleton System:', error)
+      Sentry.captureException(error, {
+        tags: {
+          context: 'hopeai-system-initialization'
+        }
+      })
+      throw error
+    } finally {
+      HopeAISystemSingleton.isInitializing = false
+    }
+  }
+
+  /**
+   * Resets the singleton instance (for testing purposes only)
+   * @internal
+   */
+  public static resetInstance(): void {
+    if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
+      console.warn('⚠️ resetInstance should only be used in test/development environments')
+    }
+    HopeAISystemSingleton.instance = null
+    HopeAISystemSingleton.initializationPromise = null
+    HopeAISystemSingleton.isInitializing = false
+  }
+
+  /**
+   * Gets the current initialization status
+   */
+  public static getStatus(): {
+    hasInstance: boolean
+    isInitialized: boolean
+    isInitializing: boolean
+  } {
+    return {
+      hasInstance: HopeAISystemSingleton.instance !== null,
+      isInitialized: HopeAISystemSingleton.instance?.initialized || false,
+      isInitializing: HopeAISystemSingleton.isInitializing
+    }
+  }
 }
 
-// Export singleton instance
-export const hopeAI = getHopeAIInstance()
+// Legacy function for backward compatibility
+export function getHopeAIInstance(): HopeAISystem {
+  console.warn('⚠️ getHopeAIInstance() is deprecated. Use HopeAISystemSingleton.getInstance() instead.')
+  return HopeAISystemSingleton.getInstance()
+}
+
+// Export singleton instance using the new pattern
+export const hopeAI = HopeAISystemSingleton.getInstance()
+
+/**
+ * Global orchestration system for server-side usage
+ * Ensures consistent singleton access across API routes
+ * Replaces the previous getGlobalOrchestrationSystem function
+ */
+export async function getGlobalOrchestrationSystem(): Promise<HopeAISystem> {
+  return await HopeAISystemSingleton.getInitializedInstance()
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use getGlobalOrchestrationSystem() instead
+ */
+export function getOrchestrationSystem(): HopeAISystem {
+  console.warn('⚠️ getOrchestrationSystem() is deprecated. Use getGlobalOrchestrationSystem() instead.')
+  return HopeAISystemSingleton.getInstance()
+}

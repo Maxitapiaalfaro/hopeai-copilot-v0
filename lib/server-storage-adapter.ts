@@ -74,10 +74,10 @@ export class ServerStorageAdapter {
       sessions.sort((a, b) => {
         const aValue = sortBy === 'lastUpdated' 
           ? new Date(a.metadata.lastUpdated).getTime() 
-          : new Date(a.metadata.created).getTime()
+          : new Date(a.metadata.createdAt).getTime()
         const bValue = sortBy === 'lastUpdated' 
           ? new Date(b.metadata.lastUpdated).getTime() 
-          : new Date(b.metadata.created).getTime()
+          : new Date(b.metadata.createdAt).getTime()
         return sortOrder === 'desc' ? bValue - aValue : aValue - bValue
       })
 

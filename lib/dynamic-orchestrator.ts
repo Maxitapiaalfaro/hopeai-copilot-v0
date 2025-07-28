@@ -19,6 +19,7 @@ import { IntelligentIntentRouter, OrchestrationResult } from './intelligent-inte
 import { ClinicalAgentRouter } from './clinical-agent-router';
 import { ToolRegistry, ClinicalTool } from './tool-registry';
 import { EntityExtractionEngine, ExtractedEntity } from './entity-extraction-engine';
+import { SentryMetricsTracker } from './sentry-metrics-tracker';
 import { ai } from './google-genai-config';
 
 /**
@@ -91,7 +92,8 @@ export class DynamicOrchestrator {
   private agentRouter: ClinicalAgentRouter;
   private toolRegistry: ToolRegistry;
   private entityExtractor: EntityExtractionEngine;
-  private activeSessions: Map<string, SessionContext>;
+  private metricsTracker: SentryMetricsTracker;
+  private activeSessions: Map<string, SessionContext> = new Map();
   private config: DynamicOrchestratorConfig;
 
   constructor(
@@ -103,6 +105,7 @@ export class DynamicOrchestrator {
     this.intentRouter = new IntelligentIntentRouter(agentRouter);
     this.toolRegistry = ToolRegistry.getInstance();
     this.entityExtractor = new EntityExtractionEngine();
+    this.metricsTracker = SentryMetricsTracker.getInstance();
     this.activeSessions = new Map();
     
     this.config = {
@@ -127,8 +130,13 @@ export class DynamicOrchestrator {
     sessionId: string,
     userId: string
   ): Promise<DynamicOrchestrationResult> {
+    const startTime = Date.now();
+    
     try {
       this.log('info', `Iniciando orquestación para sesión ${sessionId}`);
+      
+      // El tracking de mensajes se maneja en el API layer para evitar duplicados
+      // Solo registramos la actividad del orquestador internamente
       
       // 1. Obtener o crear contexto de sesión
       const sessionContext = await this.getOrCreateSession(sessionId, userId);
@@ -160,6 +168,21 @@ export class DynamicOrchestrator {
       const recommendations = this.config.enableRecommendations
         ? await this.generateRecommendations(orchestrationResult, sessionContext)
         : undefined;
+      
+      // Registrar cambio de agente si es diferente al anterior
+      if (sessionContext.currentAgent && sessionContext.currentAgent !== orchestrationResult.selectedAgent) {
+        this.metricsTracker.trackAgentSwitch({
+          userId,
+          sessionId,
+          fromAgent: sessionContext.currentAgent as any,
+          toAgent: orchestrationResult.selectedAgent as any,
+          switchType: 'automatic',
+          confidence: orchestrationResult.confidence
+        });
+      }
+      
+      // El tiempo de respuesta del orquestador se registra en el API layer
+      // para mantener consistencia en las métricas
       
       const result: DynamicOrchestrationResult = {
         success: true,

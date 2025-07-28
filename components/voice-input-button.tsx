@@ -68,9 +68,7 @@ export function VoiceInputButton({
     language: mobileConfig.language,
     continuous: mobileConfig.continuous,
     interimResults: mobileConfig.interimResults,
-    maxAlternatives: 1,
-    silenceTimeout: mobileConfig.silenceTimeout,
-    maxRecordingTime: mobileConfig.maxRecordingTime
+    maxAlternatives: 1
   })
 
   // Efecto para actualizar el input cuando hay transcripción final

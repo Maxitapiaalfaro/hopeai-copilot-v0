@@ -10,7 +10,8 @@
     "test:orchestration": "node test-orchestration-migration.js",
     "monitor:orchestration": "curl -s http://localhost:3000/api/orchestration/health | jq",
     "metrics:orchestration": "curl -s http://localhost:3000/api/orchestration/metrics | jq",
-    "reset:metrics": "curl -X POST -H 'Content-Type: application/json' -d '{\"action\":\"reset\"}' http://localhost:3000/api/orchestration/metrics"
+    "reset:metrics": "curl -X POST -H 'Content-Type: application/json' -d '{\"action\":\"reset\"}' http://localhost:3000/api/orchestration/metrics",
+    "setup:sentry-mcp": "node scripts/setup-sentry-mcp.js"
   },
   "dependencies": {
     "@google/genai": "latest",
@@ -77,6 +78,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-speech-recognition": "^3.9.6",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.4",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"

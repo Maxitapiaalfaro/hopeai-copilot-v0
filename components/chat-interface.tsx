@@ -12,6 +12,8 @@ import type { AgentType, ChatState } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
 import { MarkdownRenderer, StreamingMarkdownRenderer } from "@/components/markdown-renderer"
 import { getAgentVisualConfig, getAgentVisualConfigSafe } from "@/config/agent-visual-config"
+import { trackMessage } from "@/lib/sentry-metrics-tracker"
+import * as Sentry from "@sentry/nextjs"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -86,91 +88,169 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
 
     console.log('📤 Frontend: Enviando mensaje:', message.substring(0, 50) + '...')
 
-    try {
-      const response = await sendMessage(message, true)
-      console.log('✅ Frontend: Respuesta recibida:', response)
-      console.log('📊 Frontend: Estado de sesión actual:', currentSession?.history?.length, 'mensajes')
-
-      // Verificar si la respuesta tiene un AsyncGenerator (streaming)
-      if (response && typeof response[Symbol.asyncIterator] === 'function') {
-        console.log('🔄 Frontend: Procesando respuesta streaming...')
-        
-        // Extraer routingInfo si está disponible
-        if (response.routingInfo) {
-          console.log('🧠 Frontend: Información de enrutamiento extraída:', response.routingInfo)
-        }
-        
-        let fullResponse = ""
-        let accumulatedGroundingUrls: Array<{title: string, url: string, domain?: string}> = []
+    // Instrumentación Sentry para envío de mensaje desde UI
+    return Sentry.startSpan(
+      {
+        op: "message.ui.send",
+        name: "Send Message from Chat Interface",
+      },
+      async (span) => {
+        const startTime = Date.now()
         
         try {
-          for await (const chunk of response) {
-            if (chunk.text) {
-              fullResponse += chunk.text
-              setStreamingResponse(fullResponse)
-            }
-            // Capturar groundingUrls de los chunks
-            if (chunk.groundingUrls && chunk.groundingUrls.length > 0) {
-              accumulatedGroundingUrls = [...accumulatedGroundingUrls, ...chunk.groundingUrls]
-              setStreamingGroundingUrls(accumulatedGroundingUrls)
-            }
-          }
+          span.setAttribute("message.length", message.length)
+          span.setAttribute("message.agent", activeAgent)
+          span.setAttribute("session.id", currentSession?.sessionId)
+          span.setAttribute("session.message_count", currentSession?.history?.length || 0)
+          span.setAttribute("ui.streaming_enabled", true)
           
-          console.log('✅ Frontend: Streaming completado')
+          // Tracking de mensaje enviado
+          trackMessage({
+            agentType: activeAgent,
+            messageLength: message.length,
+            responseTime: 0, // Se actualizará cuando llegue la respuesta
+            isStreaming: true
+          })
           
-          // Agregar la respuesta completa al historial
-          if (fullResponse.trim() && addStreamingResponseToHistory) {
+          const response = await sendMessage(message, true)
+          const responseTime = Date.now() - startTime
+          
+          span.setAttribute("message.response_time", responseTime)
+          span.setAttribute("response.received", true)
+          
+          console.log('✅ Frontend: Respuesta recibida:', response)
+          console.log('📊 Frontend: Estado de sesión actual:', currentSession?.history?.length, 'mensajes')
+
+          // Verificar si la respuesta tiene un AsyncGenerator (streaming)
+          if (response && typeof response[Symbol.asyncIterator] === 'function') {
+            console.log('🔄 Frontend: Procesando respuesta streaming...')
+            
+            // Extraer routingInfo si está disponible
+            if (response.routingInfo) {
+              console.log('🧠 Frontend: Información de enrutamiento extraída:', response.routingInfo)
+              span.setAttribute("routing.target_agent", response.routingInfo.targetAgent)
+              span.setAttribute("routing.confidence", response.routingInfo.confidence || 0)
+            }
+            
+            let fullResponse = ""
+            let accumulatedGroundingUrls: Array<{title: string, url: string, domain?: string}> = []
+            let chunkCount = 0
+            const streamingStartTime = Date.now()
+            
             try {
-              // Usar el agente de la información de enrutamiento si está disponible,
-              // de lo contrario usar el agente activo actual
-              const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-              await addStreamingResponseToHistory(fullResponse, responseAgent, accumulatedGroundingUrls)
-              console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
-            } catch (historyError) {
-              console.error('❌ Frontend: Error agregando al historial:', historyError)
+              for await (const chunk of response) {
+                chunkCount++
+                if (chunk.text) {
+                  fullResponse += chunk.text
+                  setStreamingResponse(fullResponse)
+                }
+                // Capturar groundingUrls de los chunks
+                if (chunk.groundingUrls && chunk.groundingUrls.length > 0) {
+                  accumulatedGroundingUrls = [...accumulatedGroundingUrls, ...chunk.groundingUrls]
+                  setStreamingGroundingUrls(accumulatedGroundingUrls)
+                }
+              }
+              
+              const streamingDuration = Date.now() - streamingStartTime
+              
+              // Métricas de streaming
+              span.setAttribute("streaming.chunk_count", chunkCount)
+              span.setAttribute("streaming.duration", streamingDuration)
+              span.setAttribute("streaming.response_length", fullResponse.length)
+              span.setAttribute("streaming.grounding_urls_count", accumulatedGroundingUrls.length)
+              
+              // Tracking adicional de mensaje con métricas de streaming
+              trackMessage({
+                agentType: response?.routingInfo?.targetAgent || activeAgent,
+                messageLength: fullResponse.length,
+                responseTime: responseTime,
+                isStreaming: true,
+                chunkCount,
+                groundingUrlsCount: accumulatedGroundingUrls.length
+              })
+              
+              console.log('✅ Frontend: Streaming completado')
+              
+              // Agregar la respuesta completa al historial
+              if (fullResponse.trim() && addStreamingResponseToHistory) {
+                try {
+                  // Usar el agente de la información de enrutamiento si está disponible,
+                  // de lo contrario usar el agente activo actual
+                  const responseAgent = response?.routingInfo?.targetAgent || activeAgent
+                  await addStreamingResponseToHistory(fullResponse, responseAgent, accumulatedGroundingUrls)
+                  console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
+                } catch (historyError) {
+                  console.error('❌ Frontend: Error agregando al historial:', historyError)
+                  Sentry.captureException(historyError)
+                }
+              }
+              
+              setStreamingResponse("")
+              setStreamingGroundingUrls([])
+              setIsStreaming(false)
+              span.setStatus({ code: 1, message: "Streaming completed successfully" })
+            } catch (streamError) {
+              console.error('❌ Frontend: Error en streaming:', streamError)
+              span.setStatus({ code: 2, message: "Streaming failed" })
+              Sentry.captureException(streamError)
+              setIsStreaming(false)
+              setStreamingResponse("")
             }
+          } else if (response && response.text) {
+            // Respuesta no streaming o respuesta con function calls procesadas
+            console.log('✅ Frontend: Respuesta con texto recibida:', response.text.substring(0, 100) + '...')
+            
+            span.setAttribute("response.type", "non_streaming")
+            span.setAttribute("response.length", response.text.length)
+            span.setAttribute("response.grounding_urls_count", response.groundingUrls?.length || 0)
+            
+            // Si hay function calls, mostrar información adicional
+            if (response.functionCalls) {
+              console.log('🔧 Frontend: Function calls detectadas:', response.functionCalls.length)
+              span.setAttribute("response.function_calls_count", response.functionCalls.length)
+            }
+            
+            // Tracking de mensaje no streaming
+            trackMessage({
+              agentType: response?.routingInfo?.targetAgent || activeAgent,
+              messageLength: response.text.length,
+              responseTime: responseTime,
+              isStreaming: false,
+              groundingUrlsCount: response.groundingUrls?.length || 0,
+              functionCallsCount: response.functionCalls?.length || 0
+            })
+            
+            // Agregar la respuesta al historial
+            if (response.text.trim() && addStreamingResponseToHistory) {
+              try {
+                // Usar el agente de la información de enrutamiento si está disponible,
+                // de lo contrario usar el agente activo actual
+                const responseAgent = response?.routingInfo?.targetAgent || activeAgent
+                await addStreamingResponseToHistory(response.text, responseAgent, response.groundingUrls || [])
+                console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
+              } catch (historyError) {
+                console.error('❌ Frontend: Error agregando al historial:', historyError)
+                Sentry.captureException(historyError)
+              }
+            }
+            
+            setIsStreaming(false)
+            span.setStatus({ code: 1, message: "Non-streaming response processed successfully" })
+          } else {
+            console.log('⚠️ Frontend: Respuesta inesperada o nula:', response)
+            span.setAttribute("response.type", "unexpected")
+            span.setStatus({ code: 2, message: "Unexpected or null response" })
+            setIsStreaming(false)
           }
-          
-          setStreamingResponse("")
-          setStreamingGroundingUrls([])
-          setIsStreaming(false)
-        } catch (streamError) {
-          console.error('❌ Frontend: Error en streaming:', streamError)
+        } catch (error) {
+          console.error("❌ Frontend: Error sending message:", error)
+          span.setStatus({ code: 2, message: "Message send failed" })
+          Sentry.captureException(error)
           setIsStreaming(false)
           setStreamingResponse("")
         }
-      } else if (response && response.text) {
-        // Respuesta no streaming o respuesta con function calls procesadas
-        console.log('✅ Frontend: Respuesta con texto recibida:', response.text.substring(0, 100) + '...')
-        
-        // Si hay function calls, mostrar información adicional
-        if (response.functionCalls) {
-          console.log('🔧 Frontend: Function calls detectadas:', response.functionCalls.length)
-        }
-        
-        // Agregar la respuesta al historial
-        if (response.text.trim() && addStreamingResponseToHistory) {
-          try {
-            // Usar el agente de la información de enrutamiento si está disponible,
-            // de lo contrario usar el agente activo actual
-            const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-            await addStreamingResponseToHistory(response.text, responseAgent, response.groundingUrls || [])
-            console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
-          } catch (historyError) {
-            console.error('❌ Frontend: Error agregando al historial:', historyError)
-          }
-        }
-        
-        setIsStreaming(false)
-      } else {
-        console.log('⚠️ Frontend: Respuesta inesperada o nula:', response)
-        setIsStreaming(false)
       }
-    } catch (error) {
-      console.error("❌ Frontend: Error sending message:", error)
-      setIsStreaming(false)
-      setStreamingResponse("")
-    }
+    )
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

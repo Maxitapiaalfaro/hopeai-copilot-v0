@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
     console.log('✅ API: Documento procesado exitosamente')
     
     return NextResponse.json({
-      success: true,
-      ...result
+      ...result,
+      success: true
     })
   } catch (error) {
     console.error('❌ API Error (Upload Document):', error)

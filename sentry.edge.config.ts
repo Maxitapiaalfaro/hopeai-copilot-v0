@@ -14,6 +14,8 @@ Sentry.init({
   // Enable experimental features
   _experiments: {
     enableLogs: true,
+    // Habilitar agregador de métricas para métricas personalizadas en edge
+    metricsAggregator: true,
   },
 
   // Integrations for edge runtime functionality

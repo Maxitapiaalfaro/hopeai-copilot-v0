@@ -1,4 +1,4 @@
-import { Brain, Stethoscope, BookOpen } from "lucide-react"
+import { Brain, Stethoscope, BookOpen, Zap } from "lucide-react"
 import type { AgentType } from "@/types/clinical-types"
 
 export interface AgentVisualConfig {
@@ -49,7 +49,19 @@ export const AGENT_VISUAL_CONFIG: Record<AgentType, AgentVisualConfig> = {
     borderColor: "border-purple-200",
     buttonBgColor: "bg-purple-600",
     buttonHoverColor: "hover:bg-purple-700",
-    typingDotColor: "bg-purple-400",
+    typingDotColor: "bg-orange-400",
+  },
+  orquestador: {
+    name: "HopeAI Orquestador",
+    description: "Coordinación inteligente de especialistas",
+    icon: Zap,
+    color: "orange",
+    bgColor: "bg-orange-50",
+    textColor: "text-orange-700",
+    borderColor: "border-orange-200",
+    buttonBgColor: "bg-orange-600",
+    buttonHoverColor: "hover:bg-orange-700",
+    typingDotColor: "bg-orange-400",
   },
 }
 

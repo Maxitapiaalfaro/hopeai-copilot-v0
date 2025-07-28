@@ -1,10 +1,9 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { Brain, BookOpen, Stethoscope, User, FileText, ImageIcon } from "lucide-react"
+import { Brain, BookOpen, Stethoscope, User, FileText, ImageIcon, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-type AgentType = "socratico" | "clinico" | "academico"
+import type { AgentType } from "@/types/clinical-types"
 
 interface Message {
   id: string
@@ -44,6 +43,13 @@ const agentConfig = {
     color: "text-purple-600",
     bgColor: "bg-purple-50",
     borderColor: "border-purple-200",
+  },
+  orquestador: {
+    name: "HopeAI Orquestador",
+    icon: Zap,
+    color: "text-orange-600",
+    bgColor: "bg-orange-50",
+    borderColor: "border-orange-200",
   },
 }
 

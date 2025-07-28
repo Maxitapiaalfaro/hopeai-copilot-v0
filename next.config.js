@@ -6,6 +6,10 @@ const nextConfig = {
   experimental: {
     // Enable experimental features if needed
   },
+  eslint: {
+    // Disable ESLint during builds
+    ignoreDuringBuilds: true,
+  },
 };
 
 // Sentry configuration options

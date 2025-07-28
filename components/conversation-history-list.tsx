@@ -35,7 +35,8 @@ import {
   User,
   Brain,
   FileText,
-  Microscope
+  Microscope,
+  Zap
 } from "lucide-react"
 import { useConversationHistory } from "@/hooks/use-conversation-history"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
@@ -65,6 +66,11 @@ const agentConfig = {
     icon: Microscope,
     label: 'Investigador Académico',
     color: 'bg-purple-100 text-purple-800 border-purple-200'
+  },
+  'orquestador': {
+    icon: Zap,
+    label: 'Orquestador',
+    color: 'bg-orange-100 text-orange-800 border-orange-200'
   }
 } as const
 

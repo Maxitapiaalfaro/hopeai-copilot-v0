@@ -13,6 +13,8 @@ Sentry.init({
   // Enable experimental features
   _experiments: {
     enableLogs: true,
+    // Habilitar agregador de métricas para métricas personalizadas del servidor
+    metricsAggregator: true,
   },
 
   // Integrations for server-side functionality

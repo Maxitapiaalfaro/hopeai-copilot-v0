@@ -9,7 +9,9 @@ import { DocumentPanel } from "@/components/document-panel"
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
+import { useSessionMetrics } from "@/hooks/use-session-metrics"
 import type { AgentType } from "@/types/clinical-types"
+import * as Sentry from "@sentry/nextjs"
 
 // Componente de métricas de rendimiento (opcional, para desarrollo)
 function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
@@ -45,26 +47,66 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     loadSession
   } = useHopeAISystem()
 
-  // Crear sesión por defecto si no existe
+  // Integración de métricas Sentry - Fase 1
+  const {
+    startSession: startMetricsSession,
+    endSession: endMetricsSession,
+    updateActivity,
+    trackAgentChange,
+    getSessionStats
+  } = useSessionMetrics({
+    userId: systemState.userId || "demo_user",
+    sessionId: systemState.sessionId || "temp_session",
+    currentAgent: systemState.activeAgent
+  })
+
+  // Estado para controlar la creación de sesión por defecto
+  const [sessionCreationAttempted, setSessionCreationAttempted] = useState(false)
+  
+  // Crear sesión por defecto si no existe (optimizado para evitar condiciones de carrera)
   useEffect(() => {
-    console.log('🔄 MainInterfaceOptimized: useEffect ejecutado', {
-      isInitialized: systemState.isInitialized,
-      hasSession: !!systemState.sessionId,
-      sessionId: systemState.sessionId,
-      activeAgent: systemState.activeAgent
-    })
-    
-    if (systemState.isInitialized && !systemState.sessionId && !systemState.isLoading) {
+    // Solo intentar crear sesión una vez cuando el sistema esté completamente inicializado
+    if (systemState.isInitialized && !systemState.sessionId && !systemState.isLoading && !sessionCreationAttempted) {
       console.log('📝 MainInterfaceOptimized: Creando sesión HopeAI por defecto...')
-      createSession("demo_user", "clinical_supervision", "socratico")
-        .then(sessionId => {
-          console.log('✅ MainInterfaceOptimized: Sesión HopeAI creada:', sessionId)
-        })
-        .catch(err => {
-          console.error('❌ MainInterfaceOptimized: Error creando sesión:', err)
-        })
+      setSessionCreationAttempted(true)
+      
+      // Instrumentación Sentry para creación de sesión
+      Sentry.startSpan(
+        {
+          op: "session.create",
+          name: "Create Default HopeAI Session",
+        },
+        async (span) => {
+          try {
+            span.setAttribute("user.id", "demo_user")
+            span.setAttribute("session.type", "clinical_supervision")
+            span.setAttribute("agent.initial", "socratico")
+            span.setAttribute("session.trigger", "no_session_found")
+            
+            const sessionId = await createSession("demo_user", "clinical_supervision", "socratico")
+            
+            if (sessionId) {
+              // Iniciar tracking de métricas de sesión
+              startMetricsSession("socratico")
+              
+              span.setAttribute("session.id", sessionId)
+              span.setStatus({ code: 1, message: "Session created successfully" })
+              console.log('✅ MainInterfaceOptimized: Nueva sesión HopeAI creada:', sessionId)
+            } else {
+              span.setStatus({ code: 2, message: "Session creation returned null" })
+              console.error('❌ MainInterfaceOptimized: Error - createSession retornó null')
+            }
+          } catch (err) {
+            span.setStatus({ code: 2, message: "Session creation failed" })
+            Sentry.captureException(err)
+            console.error('❌ MainInterfaceOptimized: Error creando sesión:', err)
+            // Resetear flag para permitir reintento
+            setSessionCreationAttempted(false)
+          }
+        }
+      )
     }
-  }, [systemState.isInitialized, systemState.sessionId, systemState.isLoading, createSession])
+  }, [systemState.isInitialized, systemState.sessionId, systemState.isLoading, sessionCreationAttempted, createSession, startMetricsSession])
 
   // Responsive sidebar management
   useEffect(() => {
@@ -81,30 +123,89 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  // Manejar cambio de agente
+  // Manejar cambio de agente con métricas Sentry
   const handleAgentChange = async (agent: AgentType) => {
     if (systemState.sessionId) {
       console.log('🔄 Cambiando a agente:', agent)
-      const success = await switchAgent(agent)
-      if (success) {
-        console.log('✅ Agente cambiado exitosamente a:', agent)
-      } else {
-        console.error('❌ Error cambiando agente')
-      }
+      
+      // Instrumentación Sentry para cambio de agente
+      return Sentry.startSpan(
+        {
+          op: "agent.switch",
+          name: `Switch Agent: ${systemState.activeAgent} -> ${agent}`,
+        },
+        async (span) => {
+          try {
+            span.setAttribute("agent.from", systemState.activeAgent)
+            span.setAttribute("agent.to", agent)
+            span.setAttribute("session.id", systemState.sessionId || "unknown_session")
+            
+            const success = await switchAgent(agent)
+            
+            if (success) {
+              // Tracking de cambio de agente en métricas
+              trackAgentChange(systemState.activeAgent, agent)
+              
+              span.setAttribute("switch.success", true)
+              span.setStatus({ code: 1, message: "Agent switch successful" })
+              console.log('✅ Agente cambiado exitosamente a:', agent)
+            } else {
+              span.setAttribute("switch.success", false)
+              span.setStatus({ code: 2, message: "Agent switch failed" })
+              console.error('❌ Error cambiando agente')
+            }
+            
+            return success
+          } catch (err) {
+            span.setStatus({ code: 2, message: "Agent switch error" })
+            Sentry.captureException(err)
+            console.error('❌ Error en cambio de agente:', err)
+            return false
+          }
+        }
+      )
     }
+    return false
   }
 
-  // Función de envío de mensaje adaptada
+  // Función de envío de mensaje adaptada con métricas
   const handleSendMessage = async (message: string, useStreaming = true) => {
-    try {
-      console.log('📤 Enviando mensaje HopeAI:', message.substring(0, 50) + '...')
-      const response = await sendMessage(message, useStreaming)
-      console.log('✅ Mensaje enviado exitosamente')
-      return response
-    } catch (error) {
-      console.error('❌ Error enviando mensaje:', error)
-      throw error
-    }
+    return Sentry.startSpan(
+      {
+        op: "message.send",
+        name: "Send Message to HopeAI",
+      },
+      async (span) => {
+        try {
+          span.setAttribute("message.length", message.length)
+          span.setAttribute("message.streaming", useStreaming)
+          span.setAttribute("agent.current", systemState.activeAgent)
+          span.setAttribute("session.id", systemState.sessionId || "unknown_session")
+          
+          const startTime = Date.now()
+          console.log('📤 Enviando mensaje HopeAI:', message.substring(0, 50) + '...')
+          
+          // Actualizar actividad del usuario
+          updateActivity()
+          
+          const response = await sendMessage(message, useStreaming)
+          
+          const responseTime = Date.now() - startTime
+          span.setAttribute("message.response_time", responseTime)
+          span.setAttribute("message.success", true)
+          span.setStatus({ code: 1, message: "Message sent successfully" })
+          
+          console.log('✅ Mensaje enviado exitosamente')
+          return response
+        } catch (error) {
+          span.setAttribute("message.success", false)
+          span.setStatus({ code: 2, message: "Message send failed" })
+          Sentry.captureException(error)
+          console.error('❌ Error enviando mensaje:', error)
+          throw error
+        }
+      }
+    )
   }
 
   // Función de subida de documentos (placeholder - mantener compatibilidad)
@@ -121,11 +222,11 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     }
   }
 
-  // Handle new conversation
+  // Handle new conversation - Delegado completamente al Sidebar para evitar duplicación
   const handleNewConversation = async () => {
-    if (systemState.userId) {
-      await createSession(systemState.userId, "clinical_supervision", "socratico")
-    }
+    // La lógica de creación de sesión se maneja completamente en el Sidebar
+    // para evitar la creación duplicada de sesiones
+    console.log('🔄 Main: Delegando creación de nueva conversación al Sidebar')
   }
 
   // Handle conversation selection from history
@@ -210,7 +311,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         isOpen={sidebarOpen} 
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         userId={systemState.userId || "demo_user"}
-        onNewConversation={handleNewConversation}
+        createSession={createSession}
         onConversationSelect={handleConversationSelect}
       />
 

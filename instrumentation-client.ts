@@ -10,6 +10,10 @@ Sentry.init({
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: 1,
 
+  // Session replay sample rates (moved to top-level as of SDK v7.24.0+)
+  replaysSessionSampleRate: 0.1, // captures 10% of all sessions
+  replaysOnErrorSampleRate: 1.0,  // captures 100% of sessions with errors
+
   // Enable experimental features
   _experiments: {
     enableLogs: true,
@@ -21,11 +25,11 @@ Sentry.init({
     Sentry.consoleLoggingIntegration({ levels: ["log", "error", "warn"] }),
     // Enable session replay for debugging
     Sentry.replayIntegration({
-      // Session sample rate: captures 10% of all sessions
-      sessionSampleRate: 0.1,
-      // Error sample rate: captures 100% of sessions with errors
-      errorSampleRate: 1.0,
+      // Additional replay configuration goes here
+      // Sample rates are now configured at the top level
     }),
+    // Nota: Las métricas personalizadas se manejan principalmente en el servidor
+    // El cliente enviará métricas a través de las llamadas API
   ],
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.

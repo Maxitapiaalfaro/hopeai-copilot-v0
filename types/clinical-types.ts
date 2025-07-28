@@ -1,4 +1,4 @@
-export type AgentType = "socratico" | "clinico" | "academico"
+export type AgentType = "socratico" | "clinico" | "academico" | "orquestador"
 
 export type ClinicalMode = "therapeutic_assistance" | "clinical_supervision" | "research_support"
 

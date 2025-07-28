@@ -3,8 +3,7 @@
 import { Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getAgentVisualConfig } from "@/config/agent-visual-config"
-
-type AgentType = "socratico" | "clinico" | "academico"
+import type { AgentType } from "@/types/clinical-types"
 
 interface AgentIndicatorProps {
   activeAgent: AgentType

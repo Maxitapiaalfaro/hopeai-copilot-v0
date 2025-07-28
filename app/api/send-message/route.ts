@@ -1,176 +1,109 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hopeAI } from '@/lib/hopeai-system'
-import { getGlobalOrchestrationSystem } from '@/lib/orchestration-singleton'
+import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
+import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
+import * as Sentry from '@sentry/nextjs'
+import type { AgentType } from '@/types/clinical-types'
 
 export async function POST(request: NextRequest) {
   let requestBody: any
+  const startTime = Date.now();
   
   try {
     requestBody = await request.json()
-    const { sessionId, message, useStreaming = true, userId = 'default-user' } = requestBody
+    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent } = requestBody
     
-    console.log('🔄 API: Enviando mensaje...', {
+    console.log('🔄 API: Enviando mensaje con sistema optimizado...', {
       sessionId,
       message: message.substring(0, 50) + '...',
       useStreaming,
-      userId
+      userId,
+      suggestedAgent
     })
     
-    // Obtener el sistema de orquestación singleton
+    // Obtener el sistema de orquestación optimizado (singleton)
     const orchestrationSystem = await getGlobalOrchestrationSystem()
     
-    // Cargar el estado de la sesión para obtener el historial (o crear uno nuevo si no existe)
-    let sessionState
-    try {
-      sessionState = await hopeAI.storageAdapter.loadChatSession(sessionId)
-    } catch (error) {
-      // Si la sesión no existe, crear una nueva
-      console.log('📝 Creando nueva sesión:', sessionId)
-      sessionState = null
-    }
-    
-    // Usar el sistema de orquestación avanzado
-    const orchestrationResult = await orchestrationSystem.orchestrate(
-      message,
+    // Usar el método sendMessage optimizado del sistema de orquestación
+    const result = await orchestrationSystem.sendMessage(
       sessionId,
+      message,
       userId,
-      {
-        sessionHistory: sessionState?.history?.map((msg: any) => ({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }]
-        })) || [],
-        previousAgent: sessionState?.activeAgent,
-        enableMonitoring: true,
-        forceMode: 'dynamic' // Forzar modo dinámico
-      }
+      suggestedAgent
     )
     
-    console.log('🎯 Orquestación completada:', {
-      selectedAgent: orchestrationResult.selectedAgent,
-      orchestrationType: orchestrationResult.orchestrationType,
-      confidence: orchestrationResult.confidence,
-      toolsUsed: orchestrationResult.availableTools?.length || 0
+    console.log('🎯 Orquestación optimizada completada:', {
+      sessionId: result.updatedState.sessionId,
+      agentType: result.updatedState.activeAgent,
+      responseLength: result.response?.text?.length || 0
     })
     
-    // Procesar la respuesta según el tipo de orquestación
-    let response: any
-    let updatedState: any
+    // Usar los resultados del sistema optimizado
+    const response = result.response
+    const updatedState = result.updatedState
     
-    if (orchestrationResult.orchestrationType === 'dynamic') {
-      // Para orquestación dinámica, necesitamos generar la respuesta usando el agente seleccionado
-      const legacyResult = await hopeAI.sendMessage(sessionId, message, useStreaming, orchestrationResult.selectedAgent)
-      response = legacyResult.response
-      
-      // Actualizar el estado con información de orquestación
-       updatedState = legacyResult.updatedState
-       updatedState.activeAgent = orchestrationResult.selectedAgent
-      
-    } else {
-      // Para orquestación legacy, usar el flujo tradicional
-      const legacyResult = await hopeAI.sendMessage(sessionId, message, useStreaming, orchestrationResult.selectedAgent)
-      response = legacyResult.response
-      updatedState = legacyResult.updatedState
-    }
+    // El estado ya se guarda automáticamente en hopeAI.sendMessage() usando saveChatSessionBoth
+    // await hopeAI.storageAdapter.saveChatSession(updatedState)
     
-    // Guardar el estado actualizado
-    await hopeAI.storageAdapter.saveChatSession(updatedState)
+    // Calcular tiempo de respuesta y registrar métricas
+    const responseTime = Date.now() - startTime;
+    const activeAgent: AgentType = result.updatedState.activeAgent as AgentType || 'socratico';
     
-    // Manejar respuesta según el tipo
-    if (useStreaming && (orchestrationResult.orchestrationType === 'legacy' || orchestrationResult.orchestrationType === 'dynamic')) {
-      // Para streaming (tanto legacy como dynamic), manejar de la misma forma
-      console.log(`✅ API: Mensaje enviado (streaming ${orchestrationResult.orchestrationType})`)
-      
-      let fullResponse = ""
-      let accumulatedGroundingUrls = []
-      for await (const chunk of response) {
-        const chunkText = chunk.text || ""
-        fullResponse += chunkText
+    // Actualizar actividad de sesión con el agente correcto
+    sentryMetricsTracker.updateSessionActivity(userId, sessionId, activeAgent);
+    
+    // Registrar métricas del mensaje del usuario con sistema optimizado
+    sentryMetricsTracker.trackMessageSent({
+      userId,
+      sessionId,
+      agentType: activeAgent,
+      timestamp: new Date(),
+      messageLength: message.length,
+      responseTime
+    });
+    
+    // Retornar respuesta optimizada usando ReadableStream
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder()
         
-        // Acumular groundingUrls de los chunks
-        if (chunk.groundingUrls && chunk.groundingUrls.length > 0) {
-          accumulatedGroundingUrls = [...accumulatedGroundingUrls, ...chunk.groundingUrls]
-        }
+        // Enviar el resultado como JSON
+        const jsonResponse = JSON.stringify({
+          success: true,
+          sessionId: result.updatedState.sessionId,
+          response: result.response,
+          updatedState: result.updatedState,
+          optimized: true // Flag para indicar uso del singleton optimizado
+        })
+        
+        controller.enqueue(encoder.encode(jsonResponse))
+        controller.close()
       }
-      
-      return NextResponse.json({
-        success: true,
-        response: {
-          type: 'streaming',
-          text: fullResponse,
-          groundingUrls: accumulatedGroundingUrls,
-          routingInfo: response.routingInfo
-        },
-        updatedState,
-        orchestration: {
-          type: orchestrationResult.orchestrationType,
-          agent: orchestrationResult.selectedAgent,
-          confidence: orchestrationResult.confidence
-        }
-      })
-    } else {
-      // Para respuestas dinámicas o no-streaming
-      console.log('✅ API: Mensaje enviado', {
-        type: orchestrationResult.orchestrationType,
-        agent: orchestrationResult.selectedAgent
-      })
-      
-      return NextResponse.json({
-        success: true,
-        response: {
-          type: useStreaming ? 'streaming' : 'text',
-          text: typeof response === 'string' ? response : response.text,
-          groundingUrls: response.groundingUrls || [],
-          routingInfo: response.routingInfo
-        },
-        updatedState,
-        orchestration: {
-          type: orchestrationResult.orchestrationType,
-          agent: orchestrationResult.selectedAgent,
-          confidence: orchestrationResult.confidence,
-          toolsUsed: orchestrationResult.availableTools?.length || 0,
-          responseTime: orchestrationResult.performanceMetrics?.totalProcessingTime
-        }
-      })
-    }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+    })
   } catch (error) {
-    console.error('❌ API Error (Send Message):', error)
+    console.error('❌ Error en API optimizada de send-message:', error)
     
-    // Intentar fallback al sistema legacy en caso de error
-    try {
-      if (!requestBody) {
-        throw new Error('No se pudo obtener el cuerpo de la petición')
+    // Seguimiento mejorado de errores
+    Sentry.captureException(error, {
+      tags: {
+        context: 'send-message-api-optimized',
+        sessionId: requestBody?.sessionId,
+        userId: requestBody?.userId
       }
-      
-      const { sessionId, message, useStreaming = true } = requestBody
-      console.log('🔄 Intentando fallback al sistema legacy...')
-      
-      await hopeAI.initialize()
-      const { response, updatedState } = await hopeAI.sendMessage(sessionId, message, useStreaming)
-      
-      return NextResponse.json({
-        success: true,
-        response: {
-          type: useStreaming ? 'streaming' : 'text',
-          text: typeof response === 'string' ? response : response.text,
-          groundingUrls: response.groundingUrls || [],
-          routingInfo: response.routingInfo
-        },
-        updatedState,
-        orchestration: {
-          type: 'legacy-fallback',
-          agent: updatedState.activeAgent,
-          confidence: 0.5
-        },
-        warning: 'Se utilizó el sistema legacy debido a un error en la orquestación avanzada'
-      })
-    } catch (fallbackError) {
-      console.error('❌ Error en fallback legacy:', fallbackError)
-    }
+    })
     
     return NextResponse.json(
       { 
-        error: 'Error al enviar mensaje',
-        details: error instanceof Error ? error.message : 'Error desconocido'
+        error: 'Error al procesar mensaje con sistema optimizado',
+        details: error instanceof Error ? error.message : 'Error desconocido',
+        timestamp: new Date().toISOString()
       },
       { status: 500 }
     )
