@@ -178,6 +178,9 @@ export class HopeAISystem {
       await this.saveChatSessionBoth(currentState)
     }
 
+    // Get session files automatically - no longer passed as parameter
+    const sessionFiles = await this.getPendingFilesForSession(sessionId)
+
     try {
       // Convertir historial al formato Content[] esperado por el router
       const sessionContext = currentState.history.map((msg: ChatMessage) => ({
@@ -312,6 +315,8 @@ export class HopeAISystem {
         content: message,
         role: "user",
         timestamp: new Date(),
+        fileReferences: sessionFiles || [],
+        attachments: sessionFiles || []
       }
 
       currentState.history.push(userMessage)
@@ -350,6 +355,7 @@ export class HopeAISystem {
       }
 
       // Send message through agent router with enriched context
+      // Session files are handled through conversation history, not as attachments
       const response = await clinicalAgentRouter.sendMessage(
         sessionId, 
         message, 
@@ -462,25 +468,7 @@ export class HopeAISystem {
     )
   }
 
-  async uploadDocument(sessionId: string, file: File, userId: string): Promise<ClinicalFile> {
-    if (!this._initialized) await this.initialize()
-
-    if (!clinicalFileManager.isValidClinicalFile(file)) {
-      throw new Error("Invalid file type or size. Please upload PDF, Word, or image files under 10MB.")
-    }
-
-    const uploadedFile = await clinicalFileManager.uploadFile(file, sessionId, userId)
-
-    // Update session metadata
-    const currentState = await this.storage.loadChatSession(sessionId)
-    if (currentState) {
-      currentState.metadata.fileReferences.push(uploadedFile.id)
-      currentState.metadata.lastUpdated = new Date()
-      await this.saveChatSessionBoth(currentState)
-    }
-
-    return uploadedFile
-  }
+  // Método uploadDocument implementado más abajo con mejor manejo de errores
 
   async getUserSessions(userId: string): Promise<ChatState[]> {
     if (!this._initialized) await this.initialize()
@@ -584,6 +572,97 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
   private estimateTokens(text: string): number {
     // Rough estimation: ~4 characters per token
     return Math.ceil(text.length / 4)
+  }
+
+  async uploadDocument(sessionId: string, file: File, userId: string): Promise<ClinicalFile> {
+    if (!this._initialized) await this.initialize()
+    
+    try {
+      console.log(`📁 Uploading document: ${file.name} for session: ${sessionId}`)
+      
+      // Validate file before upload
+      if (!clinicalFileManager.isValidClinicalFile(file)) {
+        throw new Error("Invalid file type or size. Please upload PDF, Word, or image files under 10MB.")
+      }
+      
+      // Check for duplicate files in the session (file deduplication)
+      const existingFiles = await this.getPendingFilesForSession(sessionId)
+      const duplicateFile = existingFiles.find(existingFile => 
+        existingFile.name === file.name && 
+        existingFile.size === file.size &&
+        existingFile.status !== 'failed'
+      )
+      
+      if (duplicateFile) {
+        console.log(`📋 Document already exists in session: ${file.name} (${duplicateFile.id})`)
+        return duplicateFile
+      }
+      
+      const uploadedFile = await clinicalFileManager.uploadFile(file, sessionId, userId)
+      
+      // Update session metadata
+      const currentState = await this.storage.loadChatSession(sessionId)
+      if (currentState) {
+        currentState.metadata.fileReferences.push(uploadedFile.id)
+        currentState.metadata.lastUpdated = new Date()
+        await this.saveChatSessionBoth(currentState)
+      }
+      
+      console.log(`✅ Document uploaded successfully: ${uploadedFile.id}`)
+      return uploadedFile
+    } catch (error) {
+      console.error(`❌ Error uploading document ${file.name}:`, error)
+      throw error
+    }
+  }
+
+  async getPendingFilesForSession(sessionId: string): Promise<ClinicalFile[]> {
+    if (!this._initialized) await this.initialize()
+    
+    try {
+      console.log(`📋 Getting pending files for session: ${sessionId}`)
+      
+      // Obtener archivos clínicos de la sesión desde el almacenamiento
+      const clinicalFiles = await this.storage.getClinicalFiles(sessionId)
+      
+      // Filtrar archivos que pertenecen a esta sesión y están en estado procesado
+      const sessionFiles = clinicalFiles.filter(file => 
+        file.sessionId === sessionId && 
+        file.status === 'processed'
+      )
+      
+      console.log(`📋 Found ${sessionFiles.length} files for session ${sessionId}`)
+      return sessionFiles
+    } catch (error) {
+      console.error(`❌ Error getting pending files for session ${sessionId}:`, error)
+      return []
+    }
+  }
+
+  async removeDocumentFromSession(sessionId: string, fileId: string): Promise<void> {
+    if (!this._initialized) await this.initialize()
+    
+    try {
+      console.log(`🗑️ Removing document ${fileId} from session: ${sessionId}`)
+      
+      // Remove file from clinical storage
+      await this.storage.deleteClinicalFile(fileId)
+      
+      // Update session metadata to remove file reference
+      const currentState = await this.storage.loadChatSession(sessionId)
+      if (currentState) {
+        currentState.metadata.fileReferences = currentState.metadata.fileReferences.filter(
+          ref => ref !== fileId
+        )
+        currentState.metadata.lastUpdated = new Date()
+        await this.saveChatSessionBoth(currentState)
+      }
+      
+      console.log(`✅ Document ${fileId} removed successfully from session ${sessionId}`)
+    } catch (error) {
+      console.error(`❌ Error removing document ${fileId} from session ${sessionId}:`, error)
+      throw error
+    }
   }
 
   async getSystemStatus(): Promise<{
@@ -708,6 +787,30 @@ export class HopeAISystemSingleton {
       isInitialized: HopeAISystemSingleton.instance?.initialized || false,
       isInitializing: HopeAISystemSingleton.isInitializing
     }
+  }
+
+  /**
+   * Upload a document through the singleton instance
+   */
+  public static async uploadDocument(sessionId: string, file: File, userId: string): Promise<ClinicalFile> {
+    const instance = await HopeAISystemSingleton.getInitializedInstance()
+    return instance.uploadDocument(sessionId, file, userId)
+  }
+
+  /**
+   * Get pending files for a session through the singleton instance
+   */
+  public static async getPendingFilesForSession(sessionId: string): Promise<ClinicalFile[]> {
+    const instance = await HopeAISystemSingleton.getInitializedInstance()
+    return instance.getPendingFilesForSession(sessionId)
+  }
+
+  /**
+   * Remove a document from a session through the singleton instance
+   */
+  public static async removeDocumentFromSession(sessionId: string, fileId: string): Promise<void> {
+    const instance = await HopeAISystemSingleton.getInitializedInstance()
+    return instance.removeDocumentFromSession(sessionId, fileId)
   }
 }
 

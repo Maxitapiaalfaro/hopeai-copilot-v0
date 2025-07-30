@@ -272,7 +272,7 @@ export class IntelligentIntentRouter {
         selectedAgent,
         contextualTools: selectedTools.map(tool => tool.declaration),
         toolMetadata: selectedTools,
-        confidence: this.calculateCombinedConfidence(intentResult.confidence, entityResult.confidence),
+        confidence: this.calculateCombinedConfidence(intentResult.confidence, entityResult.confidence, intentResult.functionName),
         reasoning: this.generateOrchestrationReasoning(intentResult, entityResult, selectedTools)
       };
 
@@ -371,7 +371,8 @@ export class IntelligentIntentRouter {
       // Paso 4: Validación optimizada de confianza combinada con umbral dinámico
       let combinedConfidence = this.calculateCombinedConfidence(
         classificationResult.confidence,
-        entityExtractionResult.confidence
+        entityExtractionResult.confidence,
+        classificationResult.functionName
       );
       
       // Boost de confianza si hay referencias contextuales relevantes
@@ -394,10 +395,20 @@ export class IntelligentIntentRouter {
       
       // Logging mejorado para análisis de decisiones
       if (this.config.enableLogging) {
+        // Determinar los pesos utilizados para este agente
+        let intentWeight = 0.7, entityWeight = 0.3; // Default
+        if (classificationResult.functionName === 'activar_modo_academico') {
+          intentWeight = 0.8; entityWeight = 0.2;
+        } else if (classificationResult.functionName === 'activar_modo_clinico') {
+          intentWeight = 0.65; entityWeight = 0.35;
+        } else if (classificationResult.functionName === 'activar_modo_socratico') {
+          intentWeight = 0.75; entityWeight = 0.25;
+        }
+        
         console.log(`🎯 Análisis de Confianza Optimizado:`);
         console.log(`   - Intención: ${classificationResult.confidence.toFixed(3)} (${classificationResult.functionName})`);
         console.log(`   - Entidades: ${entityExtractionResult.confidence.toFixed(3)} (${entityExtractionResult.entities.length} detectadas)`);
-        console.log(`   - Combinada: ${combinedConfidence.toFixed(3)} (70% intención + 30% entidades)`);
+        console.log(`   - Combinada: ${combinedConfidence.toFixed(3)} (${(intentWeight*100)}% intención + ${(entityWeight*100)}% entidades)`);
         console.log(`   - Umbral Dinámico: ${dynamicThreshold.toFixed(3)}`);
       }
       
@@ -782,17 +793,7 @@ ${optimizedContext}
       /quiero (el )?modo acad[ée]mico/,
       /necesito (el )?modo acad[ée]mico/,
       /switch to academic/,
-      /activate academic/,
-      // Patrones para referencias directas al investigador académico
-      /(el )?investigador\s+acad[ée]mico\??/,
-      /investigador\s+acad[ée]mico\??/,
-      /academic\s+researcher\??/,
-      /(el )?investigador\??$/,
-      // Patrones para referencias a investigación académica
-      /(y )?el de investigaci[óo]n acad[ée]mica\??/,
-      /investigaci[óo]n acad[ée]mica\??/,
-      /(el )?de investigaci[óo]n\??/,
-      /academic research\??/
+      /activate academic/
     ];
     
     // Patrones contextuales implícitos
@@ -819,6 +820,9 @@ ${optimizedContext}
       return { isExplicit: true, requestType: 'academico' };
     }
     
+    // DESHABILITADO: Patrones contextuales que usurpaban al orquestador
+    // La lógica contextual debe ser manejada por el análisis semántico del orquestador
+    /*
     // Verificar patrones contextuales implícitos
     if (contextualActivationPatterns.some(pattern => pattern.test(input))) {
       // Buscar referencias contextuales a agentes en el historial
@@ -837,6 +841,7 @@ ${optimizedContext}
         }
       }
     }
+    */
     
     return { isExplicit: false, requestType: '' };
   }
@@ -893,14 +898,32 @@ ${optimizedContext}
 
   /**
    * Calcula confianza combinada optimizada entre clasificación de intención y extracción de entidades
+   * Ahora con configuraciones específicas por agente
    */
   private calculateCombinedConfidence(
     intentConfidence: number,
-    entityConfidence: number
+    entityConfidence: number,
+    functionName?: string
   ): number {
-    // Pesos optimizados: 70% intención (más importante), 30% entidades (contexto de apoyo)
-    const intentWeight = 0.7;
-    const entityWeight = 0.3;
+    // Configuraciones específicas por agente
+    let intentWeight = 0.7;  // Default: 70% intención
+    let entityWeight = 0.3;  // Default: 30% entidades
+    
+    // Configuración específica para modo académico: 80% intención / 20% extracción
+    if (functionName === 'activar_modo_academico') {
+      intentWeight = 0.8;
+      entityWeight = 0.2;
+    }
+    // Configuración para modo clínico: 65% intención / 35% entidades (más peso a entidades clínicas)
+    else if (functionName === 'activar_modo_clinico') {
+      intentWeight = 0.65;
+      entityWeight = 0.35;
+    }
+    // Configuración para modo socrático: 75% intención / 25% entidades (balance reflexivo)
+    else if (functionName === 'activar_modo_socratico') {
+      intentWeight = 0.75;
+      entityWeight = 0.25;
+    }
     
     return (intentConfidence * intentWeight) + (entityConfidence * entityWeight);
   }

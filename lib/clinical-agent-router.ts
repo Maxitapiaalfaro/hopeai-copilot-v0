@@ -1,4 +1,6 @@
 import { ai, clinicalModelConfig } from "./google-genai-config"
+import { createPartFromUri, createUserContent } from "@google/genai"
+import { clinicalFileManager } from "./clinical-file-manager"
 // Removed manual PubMed tool - now using native GoogleSearch
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
 
@@ -574,7 +576,7 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
 
     try {
       // Convert history to Gemini format if provided
-      const geminiHistory = history ? this.convertHistoryToGeminiFormat(history) : []
+      const geminiHistory = history ? await this.convertHistoryToGeminiFormat(history) : []
 
       // Create chat session using the correct SDK API
       const chat = ai.chats.create({
@@ -599,10 +601,62 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
     }
   }
 
-  private convertHistoryToGeminiFormat(history: ChatMessage[]) {
-    return history.map((msg) => ({
-      role: msg.role,
-      parts: [{ text: msg.content }],
+  private async convertHistoryToGeminiFormat(history: ChatMessage[]) {
+    return Promise.all(history.map(async (msg) => {
+      const parts: any[] = [{ text: msg.content }]
+      
+      // OPTIMIZATION: Only process files for the LAST message to avoid repetitive processing
+      // Files from previous messages are already available in the conversation context
+      const isLastMessage = history.indexOf(msg) === history.length - 1
+      
+      if (isLastMessage && msg.fileReferences && msg.fileReferences.length > 0) {
+        console.log(`[ClinicalRouter] Processing files for latest message only: ${msg.fileReferences.length} files`)
+        
+        for (const fileRef of msg.fileReferences) {
+          if (fileRef.geminiFileId) {
+            try {
+              // Usar geminiFileUri si está disponible, sino usar geminiFileId como fallback
+              const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/') 
+                ? fileRef.geminiFileId 
+                : `files/${fileRef.geminiFileId}`)
+              
+              if (!fileUri) {
+                console.error(`[ClinicalRouter] No valid URI found for file reference: ${fileRef.name}`)
+                continue
+              }
+              
+              console.log(`[ClinicalRouter] Adding file to context: ${fileRef.name}, URI: ${fileUri}`)
+              
+              // Verificar que el archivo existe y está en estado ACTIVE en Google AI antes de usarlo
+              try {
+                // Usar geminiFileId para la verificación de estado
+                const fileIdForCheck = fileRef.geminiFileId || fileUri
+                const fileInfo = await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
+                console.log(`[ClinicalRouter] File verified as ACTIVE: ${fileIdForCheck}`)
+              } catch (fileError) {
+                console.error(`[ClinicalRouter] File not ready or not found: ${fileUri}`, fileError)
+                // El archivo no está listo o no existe, omitirlo del mensaje
+                continue
+              }
+              
+              // Usar createPartFromUri para crear la parte del archivo correctamente
+              const filePart = createPartFromUri(fileUri, fileRef.type)
+              
+              parts.push(filePart)
+              console.log(`[ClinicalRouter] Successfully added file part for: ${fileRef.name}`)
+            } catch (error) {
+              console.error(`[ClinicalRouter] Error processing file reference ${fileRef.name}:`, error)
+              // Continuar con el siguiente archivo en lugar de fallar completamente
+              continue
+            }
+          }
+        }
+      }
+      
+      return {
+        role: msg.role,
+        parts: parts,
+      }
     }))
   }
 
@@ -621,9 +675,15 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
         enhancedMessage = this.buildEnhancedMessage(message, enrichedContext)
       }
 
+      // Construir las partes del mensaje (texto + archivos adjuntos)
+      const messageParts: any[] = [{ text: enhancedMessage }]
+      
+      // Files are now handled through conversation history, not as message attachments
+      // This eliminates the repetitive file processing issue
+
       // Convert message to correct SDK format
       const messageParams = {
-        message: enhancedMessage
+        message: messageParts
       }
 
       if (useStreaming) {

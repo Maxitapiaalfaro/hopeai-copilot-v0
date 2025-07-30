@@ -9,6 +9,7 @@ export interface ChatMessage {
   agent?: AgentType
   timestamp: Date
   attachments?: ClinicalFile[]
+  fileReferences?: ClinicalFile[]
   groundingUrls?: Array<{title: string, url: string, domain?: string}>
 }
 
@@ -20,7 +21,9 @@ export interface ClinicalFile {
   uploadDate: Date
   status: "uploading" | "processing" | "processed" | "error"
   geminiFileId?: string
+  geminiFileUri?: string  // URI real para createPartFromUri
   sessionId?: string
+  processingStatus?: "processing" | "active" | "error" | "timeout"
 }
 
 export interface ChatState {

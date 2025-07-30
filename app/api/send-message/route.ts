@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
       message: message.substring(0, 50) + '...',
       useStreaming,
       userId,
-      suggestedAgent
+      suggestedAgent,
+      sessionId
     })
     
     // Obtener el sistema de orquestación optimizado (singleton)
@@ -28,8 +29,9 @@ export async function POST(request: NextRequest) {
     const result = await orchestrationSystem.sendMessage(
       sessionId,
       message,
-      userId,
-      suggestedAgent
+      useStreaming,
+      suggestedAgent,
+      // Files are now loaded from session automatically
     )
     
     console.log('🎯 Orquestación optimizada completada:', {

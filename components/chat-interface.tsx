@@ -13,20 +13,25 @@ import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
 import { MarkdownRenderer, StreamingMarkdownRenderer } from "@/components/markdown-renderer"
 import { getAgentVisualConfig, getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 import { trackMessage } from "@/lib/sentry-metrics-tracker"
+import { FileUploadButton } from "@/components/file-upload-button"
 import * as Sentry from "@sentry/nextjs"
+
+import type { ClinicalFile } from "@/types/clinical-types"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
   isProcessing: boolean
   currentSession: ChatState | null
-  sendMessage: (message: string, useStreaming?: boolean) => Promise<any>
+  sendMessage: (message: string, useStreaming?: boolean, attachedFiles?: ClinicalFile[]) => Promise<any>
   uploadDocument: (file: File) => Promise<any>
   addStreamingResponseToHistory?: (responseContent: string, agent: AgentType, groundingUrls?: Array<{title: string, url: string, domain?: string}>) => Promise<void>
+  pendingFiles?: ClinicalFile[]
+  onRemoveFile?: (fileId: string) => void
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
 
-export function ChatInterface({ activeAgent, isProcessing, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -71,7 +76,8 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
     console.log('🔄 Frontend: Iniciando envío de mensaje...', {
       hasInput: !!inputValue.trim(),
       hasSession: !!currentSession,
-      sessionId: currentSession?.sessionId
+      sessionId: currentSession?.sessionId,
+      pendingFilesCount: pendingFiles.length
     })
     
     if (!inputValue.trim() || !currentSession) {
@@ -537,22 +543,13 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
                 disabled={isProcessing || isStreaming}
               />
               <div className="absolute right-2 bottom-2 flex gap-1">
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
-                  onChange={(e) => handleFileUpload(e.target.files)}
-                  className="hidden"
-                  id="file-upload"
+                <FileUploadButton
+                  onFilesSelected={() => {}} // Los archivos se manejan automáticamente por uploadDocument
+                  uploadDocument={uploadDocument}
+                  disabled={isProcessing || isStreaming}
+                  pendingFiles={pendingFiles}
+                  onRemoveFile={onRemoveFile}
                 />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0"
-                  onClick={() => document.getElementById("file-upload")?.click()}
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
                 <VoiceInputButton
                   onTranscriptUpdate={handleVoiceTranscript}
                   disabled={isProcessing || isStreaming}
@@ -564,7 +561,15 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
             </div>
             <Button
               onClick={handleSendMessage}
-              disabled={!inputValue.trim() || isProcessing || isStreaming}
+              disabled={
+                !inputValue.trim() || 
+                isProcessing || 
+                isStreaming ||
+                pendingFiles.some(file => 
+                  (file as any).processingStatus && 
+                  (file as any).processingStatus !== 'active'
+                )
+              }
               className={cn(
                 "h-[60px] px-6",
                 config.buttonBgColor,
@@ -574,6 +579,54 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
               <Send className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* Indicador de estado de archivos */}
+          {pendingFiles.length > 0 && (
+            <div className="mt-2 p-2 bg-gray-50 rounded-lg">
+              <div className="text-xs text-gray-600 mb-1">Archivos adjuntos:</div>
+              <div className="space-y-1">
+                {pendingFiles.map((file) => {
+                  const processingStatus = (file as any).processingStatus
+                  const isProcessing = processingStatus === 'processing'
+                  const isError = processingStatus === 'error' || processingStatus === 'timeout'
+                  const isActive = processingStatus === 'active'
+                  
+                  return (
+                    <div key={file.id} className="flex items-center gap-2 text-xs">
+                      <Paperclip className="h-3 w-3 text-gray-400" />
+                      <span className="flex-1 truncate">{file.name}</span>
+                      {isProcessing && (
+                        <div className="flex items-center gap-1 text-amber-600">
+                          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></div>
+                          <span>Procesando...</span>
+                        </div>
+                      )}
+                      {isActive && (
+                        <div className="flex items-center gap-1 text-green-600">
+                          <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                          <span>Listo</span>
+                        </div>
+                      )}
+                      {isError && (
+                        <div className="flex items-center gap-1 text-red-600">
+                          <div className="w-2 h-2 rounded-full bg-red-400"></div>
+                          <span>Error</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {pendingFiles.some(file => 
+                (file as any).processingStatus && 
+                (file as any).processingStatus !== 'active'
+              ) && (
+                <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                  ⏳ Esperando a que los archivos terminen de procesarse antes de enviar el mensaje
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
             <div className="flex items-center gap-4">

@@ -9,8 +9,13 @@ import { DocumentPanel } from "@/components/document-panel"
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
+import { HopeAISystemSingleton } from "@/lib/hopeai-system"
 import { useSessionMetrics } from "@/hooks/use-session-metrics"
-import type { AgentType } from "@/types/clinical-types"
+import { useConversationHistory } from "@/hooks/use-conversation-history"
+import { usePioneerInvitation } from "@/hooks/use-pioneer-invitation"
+import { PioneerCircleInvitation } from "@/components/pioneer-circle-invitation"
+import { DebugPioneerInvitation } from "@/components/debug-pioneer-invitation"
+import type { AgentType, ClinicalFile } from "@/types/clinical-types"
 import * as Sentry from "@sentry/nextjs"
 
 // Componente de métricas de rendimiento (opcional, para desarrollo)
@@ -33,6 +38,7 @@ function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
 export function MainInterfaceOptimized({ showDebugElements = true }: { showDebugElements?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [documentPanelOpen, setDocumentPanelOpen] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<ClinicalFile[]>([])
   const isMobile = useMediaQuery("(max-width: 768px)")
 
   // Usar el sistema HopeAI
@@ -60,8 +66,62 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     currentAgent: systemState.activeAgent
   })
 
+  // Hook para obtener el conteo real de conversaciones (fuente de verdad)
+  const { totalCount: totalConversationsCount, loadConversations } = useConversationHistory()
+
+  // Cargar conversaciones para asegurar que tenemos el conteo correcto
+  useEffect(() => {
+    const userId = systemState.userId || "demo_user"
+    if (userId) {
+      loadConversations(userId)
+    }
+  }, [systemState.userId, loadConversations])
+
+  // Hook de invitación al Círculo de Pioneros
+  const {
+    shouldShowInvitation,
+    markAsShown,
+    recordResponse,
+    eligibilityMetrics
+  } = usePioneerInvitation({
+    userId: systemState.userId || "demo_user",
+    sessionId: systemState.sessionId || "temp_session",
+    currentAgent: systemState.activeAgent,
+    isActive: true,
+    currentMessageCount: systemState.history?.length || 0, // Usar el count real
+    totalConversations: totalConversationsCount || 0 // NUEVA: Pasar el conteo real de conversaciones
+  })
+
+  // Debug logging para Pioneer Circle
+  useEffect(() => {
+    console.log('🔍 Pioneer Circle Debug - Main Interface:', {
+      totalConversationsFromHook: totalConversationsCount,
+      currentMessageCount: systemState.history?.length || 0,
+      shouldShowInvitation,
+      eligibilityMetrics
+    });
+  }, [totalConversationsCount, systemState.history?.length, shouldShowInvitation, eligibilityMetrics])
+
   // Estado para controlar la creación de sesión por defecto
   const [sessionCreationAttempted, setSessionCreationAttempted] = useState(false)
+
+  // Cargar archivos pendientes cuando cambie la sesión
+  useEffect(() => {
+    const loadPendingFiles = async () => {
+      if (systemState.sessionId) {
+        try {
+          const files = await HopeAISystemSingleton.getPendingFilesForSession(systemState.sessionId)
+          setPendingFiles(files)
+        } catch (error) {
+          console.error('❌ Error cargando archivos pendientes:', error)
+        }
+      } else {
+        setPendingFiles([])
+      }
+    }
+
+    loadPendingFiles()
+  }, [systemState.sessionId])
   
   // Crear sesión por defecto si no existe (optimizado para evitar condiciones de carrera)
   useEffect(() => {
@@ -181,14 +241,32 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           span.setAttribute("message.streaming", useStreaming)
           span.setAttribute("agent.current", systemState.activeAgent)
           span.setAttribute("session.id", systemState.sessionId || "unknown_session")
+          span.setAttribute("attached_files_count", pendingFiles.length)
+          
+          // Validar que todos los archivos estén en estado 'active' antes de enviar
+          const nonActiveFiles = pendingFiles.filter(file => 
+            (file as any).processingStatus && (file as any).processingStatus !== 'active'
+          )
+          
+          if (nonActiveFiles.length > 0) {
+            const fileNames = nonActiveFiles.map(f => f.name).join(', ')
+            const errorMessage = `No se puede enviar el mensaje. Los siguientes archivos aún están procesándose: ${fileNames}. Por favor, espera a que terminen de procesarse.`
+            console.warn('⚠️ Archivos no listos:', nonActiveFiles)
+            throw new Error(errorMessage)
+          }
           
           const startTime = Date.now()
           console.log('📤 Enviando mensaje HopeAI:', message.substring(0, 50) + '...')
+          console.log('📎 Archivos adjuntos:', pendingFiles.length)
           
           // Actualizar actividad del usuario
           updateActivity()
           
           const response = await sendMessage(message, useStreaming)
+          
+          // Limpiar archivos pendientes después del envío exitoso
+          setPendingFiles([])
+          console.log('🧹 Archivos pendientes limpiados después del envío exitoso')
           
           const responseTime = Date.now() - startTime
           span.setAttribute("message.response_time", responseTime)
@@ -208,18 +286,145 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     )
   }
 
-  // Función de subida de documentos (placeholder - mantener compatibilidad)
+  // Manejar respuesta de invitación al Círculo de Pioneros
+  const handlePioneerResponse = (response: 'interested' | 'not_now' | 'not_interested') => {
+    recordResponse(response)
+    
+    // Log para tracking
+    console.log('🎯 Respuesta Pioneer Circle:', {
+      userId: systemState.userId,
+      sessionId: systemState.sessionId,
+      response,
+      eligibilityMetrics
+    })
+    
+    // Enviar evento a Sentry para analytics
+    Sentry.addBreadcrumb({
+      message: 'Pioneer Circle Response',
+      category: 'user_engagement',
+      data: {
+        user_id: systemState.userId,
+        session_id: systemState.sessionId,
+        response,
+        message_count: eligibilityMetrics.messageCount,
+        session_duration_minutes: Math.round(eligibilityMetrics.sessionDuration / 1000 / 60)
+      }
+    })
+  }
+
+  // Mostrar invitación cuando sea elegible
+  const handleShowPioneerInvitation = () => {
+    markAsShown()
+    console.log('📋 Invitación Pioneer Circle mostrada')
+  }
+
+  // Función de subida de documentos usando HopeAI System con estado reactivo
   const handleUploadDocument = async (file: File) => {
-    console.log('📎 Upload de documento (placeholder):', file.name)
-    // TODO: Implementar upload optimizado en futuras fases
-    return {
-      id: `doc_${Date.now()}`,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      uploadDate: new Date(),
-      status: 'processed' as const
+    if (!systemState.sessionId) {
+      console.error('❌ No hay sesión activa para subir documento')
+      throw new Error('No hay sesión activa')
     }
+
+    try {
+      console.log('📎 Subiendo documento:', file.name)
+      
+      // Usar el sistema HopeAI para subir el documento
+      const uploadedFile = await HopeAISystemSingleton.uploadDocument(
+        systemState.sessionId,
+        file,
+        systemState.userId || 'demo_user'
+      )
+      
+      // Agregar archivo con estado inicial de procesamiento
+      setPendingFiles(prev => [...prev, {
+        ...uploadedFile,
+        processingStatus: uploadedFile.status === 'processed' ? 'active' : 'processing'
+      }])
+      
+      // Si el archivo aún está procesando, iniciar polling para verificar estado
+      if (uploadedFile.status !== 'processed') {
+        pollFileStatus(uploadedFile.id, uploadedFile.geminiFileId)
+      }
+      
+      console.log('✅ Documento subido exitosamente:', uploadedFile.name)
+      return uploadedFile
+    } catch (error) {
+      console.error('❌ Error subiendo documento:', error)
+      throw error
+    }
+  }
+
+  // Función para verificar el estado de procesamiento de archivos
+  const pollFileStatus = async (fileId: string, geminiFileId?: string) => {
+    if (!geminiFileId) return
+    
+    const maxAttempts = 30 // 60 segundos máximo (2s * 30)
+    let attempts = 0
+    
+    const checkStatus = async () => {
+      try {
+        attempts++
+        
+        // Verificar estado del archivo en Google GenAI
+        const response = await fetch('/api/check-file-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ geminiFileId })
+        })
+        
+        if (response.ok) {
+          const { state } = await response.json()
+          
+          setPendingFiles(prev => prev.map(file => 
+            file.id === fileId 
+              ? { ...file, processingStatus: state === 'ACTIVE' ? 'active' : 'processing' }
+              : file
+          ))
+          
+          if (state === 'ACTIVE') {
+            console.log('✅ Archivo procesado y listo:', fileId)
+            return
+          }
+          
+          if (state === 'FAILED') {
+            console.error('❌ Archivo falló en procesamiento:', fileId)
+            setPendingFiles(prev => prev.map(file => 
+              file.id === fileId 
+                ? { ...file, processingStatus: 'error' }
+                : file
+            ))
+            return
+          }
+        }
+        
+        // Continuar polling si no ha alcanzado el máximo de intentos
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 2000) // Verificar cada 2 segundos
+        } else {
+          console.warn('⚠️ Timeout verificando estado del archivo:', fileId)
+          setPendingFiles(prev => prev.map(file => 
+            file.id === fileId 
+              ? { ...file, processingStatus: 'timeout' }
+              : file
+          ))
+        }
+      } catch (error) {
+        console.error('❌ Error verificando estado del archivo:', error)
+        setPendingFiles(prev => prev.map(file => 
+          file.id === fileId 
+            ? { ...file, processingStatus: 'error' }
+            : file
+        ))
+      }
+    }
+    
+    // Iniciar verificación después de 1 segundo
+    setTimeout(checkStatus, 1000)
+  }
+
+  // Función para remover archivos pendientes
+  const handleRemoveFile = (fileId: string) => {
+    setPendingFiles(prev => prev.filter(file => file.id !== fileId))
   }
 
   // Handle new conversation - Delegado completamente al Sidebar para evitar duplicación
@@ -347,6 +552,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               sendMessage={handleSendMessage}
               uploadDocument={handleUploadDocument}
               addStreamingResponseToHistory={addStreamingResponseToHistory}
+              pendingFiles={pendingFiles}
+              onRemoveFile={handleRemoveFile}
             />
           </div>
 
@@ -358,6 +565,30 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           />
         </div>
       </div>
+
+      {/* Invitación al Círculo de Pioneros */}
+      {shouldShowInvitation && (
+        <PioneerCircleInvitation
+          isOpen={shouldShowInvitation}
+          onClose={handleShowPioneerInvitation}
+          onResponse={handlePioneerResponse}
+          userMetrics={{
+            messageCount: eligibilityMetrics.messageCount,
+            sessionDuration: eligibilityMetrics.sessionDuration
+          }}
+          currentAgent={systemState.activeAgent}
+        />
+      )}
+
+      {/* Debug Pioneer Invitation (development only) */}
+      {systemState.sessionId && process.env.NODE_ENV === 'development' && showDebugElements && (
+        <DebugPioneerInvitation
+          userId={systemState.userId || "demo_user"}
+          sessionId={systemState.sessionId}
+          currentAgent={systemState.activeAgent}
+          currentMessageCount={systemState.history?.length || 0}
+        />
+      )}
 
       {/* Performance Metrics (development only) */}
        {systemState.sessionId && process.env.NODE_ENV === 'development' && showDebugElements && (

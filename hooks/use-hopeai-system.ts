@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 
 // Interfaz para el estado del sistema HopeAI
@@ -292,7 +292,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       const result = await hopeAISystem.current.sendMessage(
         systemState.sessionId,
         message,
-        useStreaming
+        useStreaming,
+        undefined // suggestedAgent
       )
 
       // Actualizar estado con la respuesta y información de enrutamiento

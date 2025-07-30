@@ -36,9 +36,32 @@ export class ClinicalFileManager {
         }
       })
 
-      // Update with Gemini file ID and processed status
-      clinicalFile.geminiFileId = uploadResult.name
-      clinicalFile.status = "processed"
+      // Validar que el resultado de upload contiene un nombre válido
+      if (!uploadResult.name) {
+        throw new Error('Upload result does not contain a valid file name')
+      }
+
+       // Update with Gemini file ID and URI for createPartFromUri
+      // El SDK @google/genai devuelve un objeto File con name y uri
+      // Para createPartFromUri necesitamos usar la propiedad uri, no name
+      clinicalFile.geminiFileId = uploadResult.name  // Mantener para compatibilidad
+      clinicalFile.geminiFileUri = uploadResult.uri   // URI real para createPartFromUri
+      clinicalFile.status = "processing"
+
+      await clinicalStorage.saveClinicalFile({
+        ...clinicalFile,
+        sessionId,
+      })
+
+      // Esperar a que el archivo esté listo para usar
+      try {
+        await this.waitForFileToBeActive(uploadResult.name, 60000) // 60 segundos máximo
+        clinicalFile.status = "processed"
+        console.log(`[ClinicalFileManager] File processing completed: ${uploadResult.name}`)
+      } catch (waitError) {
+        console.error(`[ClinicalFileManager] File processing timeout or failed: ${uploadResult.name}`, waitError)
+        clinicalFile.status = "error"
+      }
 
       await clinicalStorage.saveClinicalFile({
         ...clinicalFile,
@@ -67,6 +90,36 @@ export class ClinicalFileManager {
       console.error("Error getting file info:", error)
       throw error
     }
+  }
+
+  async waitForFileToBeActive(geminiFileId: string, maxWaitTimeMs: number = 30000): Promise<any> {
+    const startTime = Date.now()
+    const pollInterval = 2000 // 2 segundos
+    
+    while (Date.now() - startTime < maxWaitTimeMs) {
+      try {
+        const fileInfo = await this.getFileInfo(geminiFileId)
+        
+        if (fileInfo.state === 'ACTIVE') {
+          console.log(`[ClinicalFileManager] File is now ACTIVE: ${geminiFileId}`)
+          return fileInfo
+        }
+        
+        if (fileInfo.state === 'FAILED') {
+          throw new Error(`File processing failed: ${geminiFileId}`)
+        }
+        
+        console.log(`[ClinicalFileManager] File still processing: ${geminiFileId}, state: ${fileInfo.state}`)
+        
+        // Esperar antes del siguiente intento
+        await new Promise(resolve => setTimeout(resolve, pollInterval))
+      } catch (error) {
+        console.error(`[ClinicalFileManager] Error checking file status: ${geminiFileId}`, error)
+        throw error
+      }
+    }
+    
+    throw new Error(`File did not become ACTIVE within ${maxWaitTimeMs}ms: ${geminiFileId}`)
   }
 
   async deleteFile(fileId: string): Promise<void> {
