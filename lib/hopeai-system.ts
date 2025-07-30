@@ -2,6 +2,8 @@ import { clinicalAgentRouter } from "./clinical-agent-router"
 import { getStorageAdapter } from "./server-storage-adapter"
 import { clinicalFileManager } from "./clinical-file-manager"
 import { createIntelligentIntentRouter, type EnrichedContext } from "./intelligent-intent-router"
+import { DynamicOrchestrator } from "./dynamic-orchestrator"
+import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 import { trackAgentSwitch } from "./sentry-metrics-tracker"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
@@ -11,6 +13,8 @@ export class HopeAISystem {
   private _initialized = false
   private storage: any = null
   private intentRouter: any = null
+  private dynamicOrchestrator: DynamicOrchestrator | null = null
+  private useAdvancedOrchestration: boolean = true
   
   // Public getter for initialization status
   public get initialized(): boolean {
@@ -65,8 +69,24 @@ export class HopeAISystem {
         maxRetries: 2
       })
       
+      // Inicializar DynamicOrchestrator con optimizaciones de performance
+      if (this.useAdvancedOrchestration) {
+        this.dynamicOrchestrator = new DynamicOrchestrator(clinicalAgentRouter, {
+          enableAdaptiveLearning: true,
+          enableRecommendations: true,
+          asyncRecommendations: true,          // 🚀 Performance optimization
+          toolContinuityThreshold: 3,         // 🛠️ Smart tool persistence
+          dominantTopicsUpdateInterval: 5,    // 📊 Optimized update frequency
+          maxToolsPerSession: 8,
+          confidenceThreshold: 0.75,
+          sessionTimeoutMinutes: 60,
+          logLevel: 'info'
+        })
+        console.log("🧠 DynamicOrchestrator initialized with cross-session learning capabilities")
+      }
+      
       this._initialized = true
-      console.log("HopeAI System initialized successfully with Intelligent Intent Router")
+      console.log("✅ HopeAI System initialized successfully with Advanced Orchestration")
     } catch (error) {
       console.error("Failed to initialize HopeAI System:", error)
       throw error
@@ -155,8 +175,12 @@ export class HopeAISystem {
   ): Promise<{
     response: any
     updatedState: ChatState
+    interactionMetrics?: any
   }> {
     if (!this._initialized) await this.initialize()
+
+    // 🎯 START COMPREHENSIVE METRICS TRACKING
+    const interactionId = sessionMetricsTracker.startInteraction(sessionId, 'demo_user', message);
 
     // Load current session state or create a new one if it doesn't exist
     let currentState = await this.storage.loadChatSession(sessionId)
@@ -171,7 +195,8 @@ export class HopeAISystem {
           createdAt: new Date(),
           lastUpdated: new Date(),
           totalTokens: 0,
-          messageCount: 0
+          messageCount: 0,
+          fileReferences: []
         }
       }
       // Save the new session
@@ -188,8 +213,10 @@ export class HopeAISystem {
         parts: [{ text: msg.content }]
       }))
 
-      // Si hay un agente sugerido por el orquestador, usarlo; sino usar el router inteligente
+      // Determinar si usar orquestación avanzada o routing directo
       let routingResult;
+      let orchestrationResult = null;
+      
       if (suggestedAgent) {
         console.log(`[HopeAI] Usando agente sugerido por orquestador: ${suggestedAgent}`)
         routingResult = {
@@ -201,8 +228,48 @@ export class HopeAISystem {
             isExplicitRequest: false
           }
         }
+      } else if (this.useAdvancedOrchestration && this.dynamicOrchestrator) {
+        // 🧠 USAR ORQUESTACIÓN AVANZADA CON APRENDIZAJE CROSS-SESSION
+        console.log(`[HopeAI] 🧠 Using Advanced Orchestration with cross-session learning`)
+        
+        orchestrationResult = await this.dynamicOrchestrator.orchestrate(
+          message,
+          sessionId,
+          currentState.userId || 'demo_user'
+        )
+        
+        // 📊 RECORD ORCHESTRATION COMPLETION 
+        sessionMetricsTracker.recordOrchestrationComplete(
+          interactionId,
+          orchestrationResult.selectedAgent,
+          orchestrationResult.contextualTools.map(tool => tool.name || 'unknown_tool'),
+          currentState.activeAgent
+        );
+        
+        // Convertir resultado de orquestación a formato de routing
+        routingResult = {
+          targetAgent: orchestrationResult.selectedAgent,
+          enrichedContext: {
+            detectedIntent: orchestrationResult.reasoning,
+            confidence: orchestrationResult.confidence,
+            extractedEntities: [],
+            isExplicitRequest: false,
+            // 🎯 Información adicional del orchestrator
+            recommendations: orchestrationResult.recommendations,
+            contextualTools: orchestrationResult.contextualTools,
+            sessionContext: orchestrationResult.sessionContext
+          }
+        }
+        
+        console.log(`[HopeAI] 🎯 Advanced orchestration result:`, {
+          selectedAgent: orchestrationResult.selectedAgent,
+          confidence: orchestrationResult.confidence,
+          toolsSelected: orchestrationResult.contextualTools.length,
+          hasRecommendations: !!orchestrationResult.recommendations
+        })
       } else {
         // Usar el router inteligente para clasificar la intención y enrutar automáticamente
+        console.log(`[HopeAI] Using standard intelligent routing`)
         routingResult = await this.intentRouter.routeUserInput(
           message,
           sessionContext,
@@ -360,7 +427,8 @@ export class HopeAISystem {
         sessionId, 
         message, 
         useStreaming,
-        routingResult.enrichedContext
+        routingResult.enrichedContext,
+        interactionId  // 📊 Pass interaction ID for metrics tracking
       )
 
       // Save state with user message immediately (for both streaming and non-streaming)
@@ -376,7 +444,7 @@ export class HopeAISystem {
         
         // Add routing info as a property on the async generator
         if (streamingResponse && typeof streamingResponse[Symbol.asyncIterator] === 'function') {
-          streamingResponse.routingInfo = {
+          (streamingResponse as any).routingInfo = {
             detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
             targetAgent: routingResult.targetAgent,
             confidence: routingResult.enrichedContext?.confidence || 0,
@@ -384,9 +452,16 @@ export class HopeAISystem {
           }
         }
         
+        // 📊 COMPLETE COMPREHENSIVE METRICS TRACKING for streaming
+        // Note: Streaming metrics are completed in the wrapper async generator
+        const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
+        
+        console.log(`🎉 [SessionMetrics] Streaming interaction setup completed: ${sessionId} | Metrics will be captured on stream completion`);
+        
         return { 
           response: streamingResponse, 
-          updatedState: currentState 
+          updatedState: currentState,
+          interactionMetrics: completedMetrics 
         }
       } else {
         responseContent = response.text
@@ -410,6 +485,11 @@ export class HopeAISystem {
       // Save updated state
       await this.saveChatSessionBoth(currentState)
 
+      // 📊 COMPLETE COMPREHENSIVE METRICS TRACKING for non-streaming
+      const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
+      
+      console.log(`🎉 [SessionMetrics] Non-streaming interaction completed: ${sessionId} | ${completedMetrics?.totalResponseTime || 'N/A'}ms | ${completedMetrics?.totalTokens || 'N/A'} tokens | $${completedMetrics?.totalCost?.toFixed(6) || '0.000000'}`);
+
       return { 
         response: {
           ...response,
@@ -420,7 +500,8 @@ export class HopeAISystem {
             extractedEntities: routingResult.enrichedContext?.extractedEntities || []
           }
         }, 
-        updatedState: currentState 
+        updatedState: currentState,
+        interactionMetrics: completedMetrics
       }
     } catch (error) {
       console.error("Error sending message:", error)
@@ -677,6 +758,87 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       activeAgents: Array.from(clinicalAgentRouter.getAllAgents().keys()),
       totalSessions: allSessions.length,
     }
+  }
+
+  /**
+   * Get comprehensive user analytics and insights
+   */
+  async getUserAnalytics(userId: string): Promise<any> {
+    if (!this._initialized) await this.initialize()
+    
+    if (this.useAdvancedOrchestration && this.dynamicOrchestrator) {
+      return await this.dynamicOrchestrator.getUserAnalytics(userId)
+    }
+    
+    // Fallback for systems without advanced orchestration
+    return {
+      totalSessions: 0,
+      favoriteAgent: 'socratico',
+      topTools: [],
+      learningTrends: [],
+      efficiency: 0,
+      sessionInsights: {
+        averageLength: 0,
+        dominantTopics: [],
+        toolEffectiveness: {}
+      }
+    }
+  }
+
+  /**
+   * Enable or disable advanced orchestration features
+   */
+  setAdvancedOrchestration(enabled: boolean): void {
+    this.useAdvancedOrchestration = enabled
+    console.log(`🧠 Advanced orchestration ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  /**
+   * Get current orchestration status
+   */
+  getOrchestrationStatus(): {
+    useAdvancedOrchestration: boolean
+    hasDynamicOrchestrator: boolean
+    initialized: boolean
+  } {
+    return {
+      useAdvancedOrchestration: this.useAdvancedOrchestration,
+      hasDynamicOrchestrator: !!this.dynamicOrchestrator,
+      initialized: this._initialized
+    }
+  }
+
+  /**
+   * Get comprehensive session analytics for behavioral analysis
+   */
+  async getSessionAnalytics(sessionId: string): Promise<{
+    metrics: any;
+    behavioralInsights: any;
+  }> {
+    if (!this._initialized) await this.initialize()
+    
+    const sessionMetrics = sessionMetricsTracker.getSessionMetrics(sessionId);
+    
+    if (!sessionMetrics.snapshot) {
+      return {
+        metrics: null,
+        behavioralInsights: null
+      };
+    }
+    
+    console.log(`📊 [SessionAnalytics] Complete session metrics for ${sessionId}:`, {
+      totalTokens: sessionMetrics.snapshot.totals.tokensConsumed,
+      totalCost: `$${sessionMetrics.snapshot.totals.totalCost.toFixed(6)}`,
+      averageResponseTime: `${sessionMetrics.snapshot.totals.averageResponseTime}ms`,
+      preferredAgent: sessionMetrics.snapshot.patterns.preferredAgent,
+      efficiency: `${sessionMetrics.snapshot.efficiency.averageTokensPerSecond.toFixed(1)} tokens/sec`,
+      interactions: sessionMetrics.interactions.length
+    });
+    
+    return {
+      metrics: sessionMetrics.snapshot,
+      behavioralInsights: sessionMetrics.interactions
+    };
   }
 }
 

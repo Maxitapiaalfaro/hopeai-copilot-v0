@@ -20,6 +20,7 @@ import { ClinicalAgentRouter } from './clinical-agent-router';
 import { ToolRegistry, ClinicalTool } from './tool-registry';
 import { EntityExtractionEngine, ExtractedEntity } from './entity-extraction-engine';
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
+import { UserPreferencesManager } from './user-preferences-manager';
 import { ai } from './google-genai-config';
 
 /**
@@ -74,6 +75,9 @@ interface DynamicOrchestratorConfig {
   confidenceThreshold: number;
   sessionTimeoutMinutes: number;
   enableRecommendations: boolean;
+  asyncRecommendations?: boolean;          // ⭐ Performance optimization
+  toolContinuityThreshold?: number;        // ⭐ Smart tool persistence
+  dominantTopicsUpdateInterval?: number;   // ⭐ Reduce update frequency
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -93,7 +97,9 @@ export class DynamicOrchestrator {
   private toolRegistry: ToolRegistry;
   private entityExtractor: EntityExtractionEngine;
   private metricsTracker: SentryMetricsTracker;
+  private userPreferencesManager: UserPreferencesManager;
   private activeSessions: Map<string, SessionContext> = new Map();
+  private recommendationsCache: Map<string, DynamicOrchestrationResult['recommendations']> = new Map();
   private config: DynamicOrchestratorConfig;
 
   constructor(
@@ -106,6 +112,7 @@ export class DynamicOrchestrator {
     this.toolRegistry = ToolRegistry.getInstance();
     this.entityExtractor = new EntityExtractionEngine();
     this.metricsTracker = SentryMetricsTracker.getInstance();
+    this.userPreferencesManager = UserPreferencesManager.getInstance();
     this.activeSessions = new Map();
     
     this.config = {
@@ -114,6 +121,9 @@ export class DynamicOrchestrator {
       confidenceThreshold: 0.75,
       sessionTimeoutMinutes: 60,
       enableRecommendations: true,
+      asyncRecommendations: false,           // Default to sync for backward compatibility
+      toolContinuityThreshold: 3,           // Default threshold for tool persistence
+      dominantTopicsUpdateInterval: 5,      // Update every 5 interactions
       logLevel: 'info',
       ...config
     };
@@ -164,10 +174,28 @@ export class DynamicOrchestrator {
         optimizedTools
       );
       
-      // 6. Generar recomendaciones si están habilitadas
-      const recommendations = this.config.enableRecommendations
-        ? await this.generateRecommendations(orchestrationResult, sessionContext)
-        : undefined;
+      // 6. Generar recomendaciones (optimizado para performance)
+      let recommendations: DynamicOrchestrationResult['recommendations'] = undefined;
+      
+      if (this.config.enableRecommendations) {
+        if (this.config.asyncRecommendations) {
+          // 🚀 OPTIMIZACIÓN: Recomendaciones asíncronas (no bloquean respuesta)
+          this.generateRecommendations(orchestrationResult, sessionContext)
+            .then(rec => {
+              if (rec) {
+                this.cacheRecommendations(sessionId, rec);
+                this.log('info', `📊 Async recommendations generated for session ${sessionId}`);
+              }
+            })
+            .catch(error => this.log('warn', `Error generating async recommendations: ${error}`));
+          
+          // Usar recomendaciones cacheadas si existen
+          recommendations = this.getCachedRecommendations(sessionId);
+        } else {
+          // Modo síncrono tradicional
+          recommendations = await this.generateRecommendations(orchestrationResult, sessionContext);
+        }
+      }
       
       // Registrar cambio de agente si es diferente al anterior
       if (sessionContext.currentAgent && sessionContext.currentAgent !== orchestrationResult.selectedAgent) {
@@ -291,10 +319,17 @@ export class DynamicOrchestrator {
   }
 
   /**
-   * Actualiza los tópicos dominantes de la sesión
+   * Actualiza los tópicos dominantes de la sesión (con optimización de frecuencia)
    */
   private async updateDominantTopics(session: SessionContext): Promise<void> {
     if (session.conversationHistory.length < 2) return;
+    
+    // 🚀 OPTIMIZACIÓN: Solo actualizar cada N interacciones
+    const shouldUpdate = session.sessionMetadata.totalInteractions % (this.config.dominantTopicsUpdateInterval || 5) === 0;
+    if (!shouldUpdate) {
+      this.log('debug', `Skipping dominant topics update (interval: ${this.config.dominantTopicsUpdateInterval})`);
+      return;
+    }
     
     try {
       const recentMessages = session.conversationHistory.slice(-6);
@@ -315,29 +350,80 @@ export class DynamicOrchestrator {
         ...session.sessionMetadata.dominantTopics
       ])).slice(0, 10);
       
+      this.log('debug', `Updated dominant topics: ${topics.length} new topics identified`);
+      
     } catch (error) {
       this.log('warn', `Error actualizando tópicos dominantes: ${error}`);
     }
   }
 
   /**
-   * Genera recomendaciones basadas en el contexto
+   * Cachea recomendaciones para uso futuro
+   */
+  private cacheRecommendations(sessionId: string, recommendations: DynamicOrchestrationResult['recommendations']): void {
+    this.recommendationsCache.set(sessionId, recommendations);
+    
+         // Limpiar cache antiguo (máximo 50 sesiones)
+     if (this.recommendationsCache.size > 50) {
+       const oldestKey = this.recommendationsCache.keys().next().value;
+       if (oldestKey) {
+         this.recommendationsCache.delete(oldestKey);
+       }
+     }
+  }
+
+  /**
+   * Obtiene recomendaciones cacheadas
+   */
+  private getCachedRecommendations(sessionId: string): DynamicOrchestrationResult['recommendations'] {
+    return this.recommendationsCache.get(sessionId);
+  }
+
+  /**
+   * Genera recomendaciones basadas en el contexto y preferencias del usuario
    */
   private async generateRecommendations(
     orchestrationResult: OrchestrationResult,
     session: SessionContext
   ): Promise<DynamicOrchestrationResult['recommendations']> {
     try {
-      const prompt = this.buildRecommendationPrompt(orchestrationResult, session);
+      // 🧠 Obtener recomendaciones personalizadas basadas en historial del usuario
+      const personalizedRecs = await this.userPreferencesManager.getPersonalizedRecommendations(
+        session.userId,
+        {
+          currentAgent: orchestrationResult.selectedAgent,
+          recentTopics: session.sessionMetadata.dominantTopics,
+          sessionLength: session.sessionMetadata.totalInteractions
+        }
+      );
+      
+      // Combinar recomendaciones personalizadas con análisis contextual de AI
+      const contextPrompt = this.buildRecommendationPrompt(orchestrationResult, session, personalizedRecs);
       
       const result = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash-lite',
-        contents: prompt
+        contents: contextPrompt
       });
       
-      const recommendations = this.parseRecommendations(result.text || '');
+      const aiRecommendations = this.parseRecommendations(result.text || '');
       
-      return recommendations;
+      // Fusionar recomendaciones personalizadas con las de AI
+      const enhancedRecommendations = {
+        suggestedFollowUp: aiRecommendations?.suggestedFollowUp || personalizedRecs.rationale,
+        alternativeApproaches: [
+          ...(aiRecommendations?.alternativeApproaches || []),
+          ...personalizedRecs.suggestedTools.map((tool: string) => `Use ${tool} based on your successful past usage`)
+        ].slice(0, 3),
+                 clinicalConsiderations: [
+           ...(aiRecommendations?.clinicalConsiderations || []),
+           ...(personalizedRecs.suggestedAgent ? [`Consider switching to ${personalizedRecs.suggestedAgent} agent based on your preferences`] : [])
+         ]
+      };
+      
+      // 📊 Aprender de la interacción actual
+      await this.learnFromInteraction(session, orchestrationResult, personalizedRecs);
+      
+      return enhancedRecommendations;
       
     } catch (error) {
       this.log('warn', `Error generando recomendaciones: ${error}`);
@@ -346,25 +432,77 @@ export class DynamicOrchestrator {
   }
 
   /**
-   * Construye prompt para generar recomendaciones
+   * Construye prompt para generar recomendaciones con contexto personalizado
    */
   private buildRecommendationPrompt(
     orchestrationResult: OrchestrationResult,
-    session: SessionContext
+    session: SessionContext,
+    personalizedRecs?: any
   ): string {
-    return `Como asistente especializado en psicología clínica, analiza el siguiente contexto y genera recomendaciones:
+    const personalizationContext = personalizedRecs ? `
+    
+CONTEXTO PERSONALIZADO DEL USUARIO:
+- Agente preferido: ${personalizedRecs.suggestedAgent || 'Ninguna preferencia específica'}
+- Herramientas exitosas: ${personalizedRecs.suggestedTools.join(', ')}
+- Contexto de preferencias: ${personalizedRecs.rationale}
+- Confianza en personalización: ${(personalizedRecs.confidence * 100).toFixed(1)}%` : '';
 
+    return `Como asistente especializado en psicología clínica, analiza el siguiente contexto y genera recomendaciones personalizadas:
+
+CONTEXTO ACTUAL:
 Agente seleccionado: ${orchestrationResult.selectedAgent}
 Herramientas disponibles: ${orchestrationResult.contextualTools.map(t => t.name).join(', ')}
 Tópicos dominantes: ${session.sessionMetadata.dominantTopics.join(', ')}
-Interacciones en sesión: ${session.sessionMetadata.totalInteractions}
+Interacciones en sesión: ${session.sessionMetadata.totalInteractions}${personalizationContext}
 
-Genera recomendaciones en el siguiente formato JSON:
+Genera recomendaciones personalizadas en el siguiente formato JSON:
 {
-  "suggestedFollowUp": "Pregunta o acción sugerida para continuar",
+  "suggestedFollowUp": "Pregunta o acción sugerida basada en el historial y contexto actual",
   "alternativeApproaches": ["Enfoque alternativo 1", "Enfoque alternativo 2"],
-  "clinicalConsiderations": ["Consideración clínica 1", "Consideración clínica 2"]
+  "clinicalConsiderations": ["Consideración clínica personalizada 1", "Consideración clínica personalizada 2"]
 }`;
+  }
+
+  /**
+   * Aprende de la interacción actual para mejorar futuras recomendaciones
+   */
+  private async learnFromInteraction(
+    session: SessionContext,
+    orchestrationResult: OrchestrationResult,
+    personalizedRecs: any
+  ): Promise<void> {
+    try {
+      // Registrar el uso de herramientas y agente como comportamiento positivo
+      await this.userPreferencesManager.learnFromBehavior(
+        session.userId,
+        {
+          action: `agent_selection_${orchestrationResult.selectedAgent}`,
+          context: session.sessionMetadata.dominantTopics,
+          outcome: 'positive', // Asumir positivo por ahora, en producción esto vendría del feedback del usuario
+          agent: orchestrationResult.selectedAgent,
+          tools: orchestrationResult.contextualTools.map(tool => tool.name || 'unknown_tool')
+        }
+      );
+      
+      // Incrementar métricas de sesión
+      const userPrefs = await this.userPreferencesManager.getUserPreferences(session.userId);
+      await this.userPreferencesManager.updatePreferences(session.userId, {
+        sessionMetrics: {
+          ...userPrefs.sessionMetrics,
+          totalSessions: userPrefs.sessionMetrics.totalSessions + 1,
+          averageSessionLength: Math.round(
+            (userPrefs.sessionMetrics.averageSessionLength * userPrefs.sessionMetrics.totalSessions + 
+             session.sessionMetadata.totalInteractions) / 
+            (userPrefs.sessionMetrics.totalSessions + 1)
+          )
+        }
+      });
+      
+      this.log('info', `🎯 [DynamicOrchestrator] Cross-session learning completed for user: ${session.userId}`);
+      
+    } catch (error) {
+      this.log('warn', `Error learning from interaction: ${error}`);
+    }
   }
 
   /**
@@ -468,6 +606,64 @@ Genera recomendaciones en el siguiente formato JSON:
   public updateConfig(newConfig: Partial<DynamicOrchestratorConfig>): void {
     this.config = { ...this.config, ...newConfig };
     this.log('info', 'Configuración del orquestador actualizada');
+  }
+
+  /**
+   * Get comprehensive user analytics and insights
+   */
+  public async getUserAnalytics(userId: string): Promise<{
+    totalSessions: number;
+    favoriteAgent: string;
+    topTools: string[];
+    learningTrends: string[];
+    efficiency: number;
+    sessionInsights: {
+      averageLength: number;
+      dominantTopics: string[];
+      toolEffectiveness: { [key: string]: number };
+    };
+  }> {
+    try {
+      const userAnalytics = await this.userPreferencesManager.getUserAnalytics(userId);
+      
+      // Get additional insights from active session if exists
+      const userSessions = Array.from(this.activeSessions.values())
+        .filter(session => session.userId === userId);
+      
+      const currentSessionInsights = userSessions.length > 0 ? {
+        currentTopics: userSessions[0].sessionMetadata.dominantTopics,
+        currentAgent: userSessions[0].currentAgent,
+        currentInteractions: userSessions[0].sessionMetadata.totalInteractions
+      } : null;
+      
+      return {
+        ...userAnalytics,
+        sessionInsights: {
+          averageLength: userAnalytics.totalSessions > 0 ? 
+            userSessions.reduce((sum, s) => sum + s.sessionMetadata.totalInteractions, 0) / userSessions.length : 0,
+          dominantTopics: userAnalytics.learningTrends,
+          toolEffectiveness: userAnalytics.topTools.reduce((acc, tool, index) => {
+            acc[tool] = Math.max(0.9 - (index * 0.1), 0.5); // Simulate effectiveness based on ranking
+            return acc;
+          }, {} as { [key: string]: number })
+        }
+      };
+      
+    } catch (error) {
+      this.log('error', `Error getting user analytics for ${userId}: ${error}`);
+      return {
+        totalSessions: 0,
+        favoriteAgent: 'socratico',
+        topTools: [],
+        learningTrends: [],
+        efficiency: 0,
+        sessionInsights: {
+          averageLength: 0,
+          dominantTopics: [],
+          toolEffectiveness: {}
+        }
+      };
+    }
   }
 
   /**

@@ -1,6 +1,7 @@
 import { ai, clinicalModelConfig } from "./google-genai-config"
 import { createPartFromUri, createUserContent } from "@google/genai"
 import { clinicalFileManager } from "./clinical-file-manager"
+import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 // Removed manual PubMed tool - now using native GoogleSearch
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
 
@@ -660,7 +661,13 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
     }))
   }
 
-  async sendMessage(sessionId: string, message: string, useStreaming = true, enrichedContext?: any): Promise<any> {
+  async sendMessage(
+  sessionId: string, 
+  message: string, 
+  useStreaming = true, 
+  enrichedContext?: any,
+  interactionId?: string  // 📊 Add interaction ID for metrics tracking
+): Promise<any> {
     const sessionData = this.activeChatSessions.get(sessionId)
     if (!sessionData) {
       throw new Error(`Chat session not found: ${sessionId}. Active sessions: ${Array.from(this.activeChatSessions.keys()).join(', ')}`)
@@ -675,6 +682,13 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
         enhancedMessage = this.buildEnhancedMessage(message, enrichedContext)
       }
 
+      // 📊 RECORD MODEL CALL START - Estimate context tokens if interaction tracking enabled
+      if (interactionId) {
+        const currentHistory = sessionData.history || [];
+        const contextTokens = this.estimateTokenCount(currentHistory);
+        sessionMetricsTracker.recordModelCallStart(interactionId, 'gemini-2.5-flash-lite', contextTokens);
+      }
+
       // Construir las partes del mensaje (texto + archivos adjuntos)
       const messageParts: any[] = [{ text: enhancedMessage }]
       
@@ -686,32 +700,148 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
         message: messageParts
       }
 
+            let result;
       if (useStreaming) {
-        const result = await chat.sendMessageStream(messageParams)
+        const streamResult = await chat.sendMessageStream(messageParams)
 
         // Handle function calls for academic agent
         if (agent === "academico") {
-          return this.handleStreamingWithTools(result, sessionId)
+          result = this.handleStreamingWithTools(streamResult, sessionId, interactionId)
+        } else {
+          // 📊 Create streaming wrapper that captures metrics when stream completes
+          result = this.createMetricsStreamingWrapper(streamResult, interactionId, enhancedMessage)
         }
-
-        return result
       } else {
-        const result = await chat.sendMessage(messageParams)
-
-        // Handle function calls for academic agent
-        if (agent === "academico") {
-          return this.handleNonStreamingWithTools(result, sessionId)
+        result = await chat.sendMessage(messageParams)
+        
+        // 📊 RECORD MODEL CALL COMPLETION for non-streaming
+        if (interactionId && result?.response) {
+          try {
+            const response = result.response;
+            const responseText = response.text() || '';
+            
+            // Extract token usage from response metadata if available
+            const usageMetadata = response.usageMetadata;
+            if (usageMetadata) {
+              sessionMetricsTracker.recordModelCallComplete(
+                interactionId,
+                usageMetadata.promptTokenCount || 0,
+                usageMetadata.candidatesTokenCount || 0,
+                responseText
+              );
+              
+              console.log(`📊 [ClinicalRouter] Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+            } else {
+              // Fallback: estimate tokens if usage metadata not available
+              const inputTokens = Math.ceil(enhancedMessage.length / 4);
+              const outputTokens = Math.ceil(responseText.length / 4);
+              sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, responseText);
+              
+              console.log(`📊 [ClinicalRouter] Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
+            }
+          } catch (error) {
+            console.warn(`⚠️ [ClinicalRouter] Could not extract token usage:`, error);
+          }
         }
-
-        return result
       }
+
+      return result;
+
     } catch (error) {
-      console.error("Error sending message:", error)
+      console.error(`[ClinicalRouter] Error sending message to ${agent}:`, error)
       throw error
     }
   }
 
-  private async handleStreamingWithTools(result: any, sessionId: string): Promise<any> {
+    /**
+   * Create a streaming wrapper that captures metrics when the stream completes
+   */
+  private createMetricsStreamingWrapper(streamResult: any, interactionId: string | undefined, enhancedMessage: string) {
+    const self = this;
+    
+    // Return an async generator that wraps the original stream
+    const wrappedGenerator = (async function* () {
+      let accumulatedText = "";
+      let finalResponse: any = null;
+      
+      try {
+        // Process all chunks from the original stream
+        for await (const chunk of streamResult) {
+          if (chunk.text) {
+            accumulatedText += chunk.text;
+          }
+          
+          // Store the final response object for token extraction
+          if (chunk.candidates && chunk.candidates[0]) {
+            finalResponse = chunk;
+          }
+          
+          // Yield the chunk unchanged to maintain streaming behavior
+          yield chunk;
+        }
+        
+        // 📊 CAPTURE METRICS AFTER STREAM COMPLETION
+        if (interactionId && finalResponse) {
+          try {
+            // Try to extract token usage from the final response
+            const usageMetadata = finalResponse.usageMetadata;
+            if (usageMetadata) {
+              sessionMetricsTracker.recordModelCallComplete(
+                interactionId,
+                usageMetadata.promptTokenCount || 0,
+                usageMetadata.candidatesTokenCount || 0,
+                accumulatedText
+              );
+              
+              console.log(`📊 [ClinicalRouter] Streaming Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+            } else {
+              // Fallback: estimate tokens
+              const inputTokens = Math.ceil(enhancedMessage.length / 4);
+              const outputTokens = Math.ceil(accumulatedText.length / 4);
+              sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, accumulatedText);
+              
+              console.log(`📊 [ClinicalRouter] Streaming Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
+            }
+          } catch (error) {
+            console.warn(`⚠️ [ClinicalRouter] Could not extract streaming token usage:`, error);
+          }
+        }
+        
+      } catch (error) {
+        console.error(`❌ [ClinicalRouter] Error in streaming wrapper:`, error);
+        throw error;
+      }
+    })();
+    
+         // Copy any properties from the original stream result
+     if (streamResult.routingInfo) {
+       (wrappedGenerator as any).routingInfo = streamResult.routingInfo;
+     }
+     
+     return wrappedGenerator;
+  }
+
+  /**
+   * Estimate token count for content array (rough approximation)
+   */
+  private estimateTokenCount(content: any[]): number {
+    let totalChars = 0;
+    
+    content.forEach((msg: any) => {
+      if (msg.parts) {
+        msg.parts.forEach((part: any) => {
+          if ('text' in part && part.text) {
+            totalChars += part.text.length;
+          }
+        });
+      }
+    });
+    
+    // Rough estimate: 4 characters per token on average
+    return Math.ceil(totalChars / 4);
+  }
+
+  private async handleStreamingWithTools(result: any, sessionId: string, interactionId?: string): Promise<any> {
     const sessionData = this.activeChatSessions.get(sessionId)
     if (!sessionData) {
       throw new Error(`Session not found: ${sessionId}`)
