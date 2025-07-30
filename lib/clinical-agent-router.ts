@@ -142,6 +142,7 @@ Juntos formamos un trípode de excelencia clínica que amplifica exponencialment
 
   * **Síntesis:** Tu análisis debe ser una síntesis de toda la información disponible en el contexto de la sesión actual.
   * **Alcance de la Memoria:** Tu memoria se limita estrictamente al caso que se está discutiendo en la conversación actual. Cuando el sistema recupera contexto de una conversación existente (mensajes anteriores y documentos), tienes acceso completo a toda esa información para mantener la continuidad clínica. Sin embargo, no tienes acceso a información de conversaciones completamente diferentes. El perfil del terapeuta (Sección 7) puede ser re-establecido entre sesiones.
+  * **Archivos Adjuntos (CRÍTICO):** Cuando el usuario adjunte archivos (documentos clínicos, transcripciones, notas), debes SIEMPRE reconocer su presencia en tu respuesta inicial. Menciona específicamente que has recibido el/los archivo(s) y ofrece un análisis relevante de su contenido. No esperes a que el usuario te pregunte explícitamente sobre los archivos - tu función es reconocerlos automáticamente y demostrar que puedes trabajar con ellos.
   * **Idioma:** Utiliza Español profesional con la resonancia, el léxico y los matices del contexto clínico de Latinoamérica.
   * **Tono:** Calmado, sereno, profesional pero cálido. Tu tono debe transmitir seguridad, confianza y una profunda empatía por la compleja labor del terapeuta.
   * **Formalidad:** Utiliza el trato de "usted" por defecto, a menos que el estilo inferido del terapeuta sugiera claramente una preferencia por un tono más informal.
@@ -324,6 +325,7 @@ Juntos formamos un trípode de excelencia clínica que garantiza la continuidad 
 
   * **Síntesis Contextual:** Integra toda la información disponible en el contexto de la conversación actual para crear documentación comprehensiva.
   * **Memoria Documental:** Mantén consistencia en terminología, pseudónimos y referencias a través de la documentación de un mismo caso.
+  * **Archivos Adjuntos (CRÍTICO):** Cuando el usuario adjunte archivos (documentos clínicos, transcripciones, notas), debes SIEMPRE reconocer su presencia en tu respuesta inicial. Menciona específicamente que has recibido el/los archivo(s) y ofrece análisis documental relevante de su contenido. No esperes a que el usuario te pregunte explícitamente sobre los archivos - tu función es reconocerlos automáticamente y demostrar que puedes trabajar con ellos para generar documentación estructurada.
   * **Idioma:** Español profesional con terminología clínica apropiada para el contexto latinoamericano.
   * **Tono:** Profesional, objetivo, preciso pero humano. Tu documentación debe reflejar la seriedad del trabajo clínico manteniendo la calidez humana.
   * **Formalidad:** Registro profesional estándar, apropiado para expedientes clínicos y comunicación interprofesional.
@@ -499,6 +501,7 @@ Juntos formamos un trípode de excelencia clínica que garantiza la práctica ba
 
   * **Síntesis Contextual:** Integra toda la información disponible en el contexto de la conversación para dirigir búsquedas específicas y relevantes.
   * **Memoria de Búsqueda:** Mantén registro de búsquedas previas para evitar redundancia y construir sobre hallazgos anteriores.
+  * **Archivos Adjuntos (CRÍTICO):** Cuando el usuario adjunte archivos (documentos clínicos, transcripciones, notas), debes SIEMPRE reconocer su presencia en tu respuesta inicial. Menciona específicamente que has recibido el/los archivo(s) y ofrece análisis basado en evidencia relevante de su contenido. No esperes a que el usuario te pregunte explícitamente sobre los archivos - tu función es reconocerlos automáticamente y demostrar que puedes trabajar con ellos para proporcionar contexto científico y evidencia empírica relevante.
   * **Idioma:** Español científico profesional con terminología técnica apropiada, pero accesible para aplicación clínica.
   * **Tono:** Riguroso pero accesible, científico pero práctico. Tu comunicación debe reflejar autoridad académica manteniendo relevancia clínica.
   * **Formalidad:** Registro académico-profesional, apropiado para comunicación científica pero adaptado al contexto clínico.
@@ -569,15 +572,20 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
     })
   }
 
-  async createChatSession(sessionId: string, agent: AgentType, history?: ChatMessage[]): Promise<any> {
+  async createChatSession(sessionId: string, agent: AgentType, history?: ChatMessage[], isAgentTransition = false): Promise<any> {
     const agentConfig = this.agents.get(agent)
     if (!agentConfig) {
       throw new Error(`Agent not found: ${agent}`)
     }
 
     try {
-      // Convert history to Gemini format if provided
-      const geminiHistory = history ? await this.convertHistoryToGeminiFormat(history) : []
+      // Convert history to Gemini format if provided - NOW AGENT-AWARE
+      let geminiHistory = history ? await this.convertHistoryToGeminiFormat(history, agent) : []
+      
+      // Add transition context if this is an agent switch to maintain conversational flow
+      if (isAgentTransition && history && history.length > 0) {
+        geminiHistory = this.addAgentTransitionContext(geminiHistory, agent)
+      }
 
       // Create chat session using the correct SDK API
       const chat = ai.chats.create({
@@ -602,7 +610,7 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
     }
   }
 
-  private async convertHistoryToGeminiFormat(history: ChatMessage[]) {
+  async convertHistoryToGeminiFormat(history: ChatMessage[], agentType: AgentType) {
     return Promise.all(history.map(async (msg) => {
       const parts: any[] = [{ text: msg.content }]
       
@@ -610,47 +618,70 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
       // Files from previous messages are already available in the conversation context
       const isLastMessage = history.indexOf(msg) === history.length - 1
       
+      // ARQUITECTURA OPTIMIZADA: Procesamiento dinámico de archivos por ID
       if (isLastMessage && msg.fileReferences && msg.fileReferences.length > 0) {
-        console.log(`[ClinicalRouter] Processing files for latest message only: ${msg.fileReferences.length} files`)
+        console.log(`[ClinicalRouter] Processing files for latest message only: ${msg.fileReferences.length} file IDs`)
         
-        for (const fileRef of msg.fileReferences) {
-          if (fileRef.geminiFileId) {
-            try {
-              // Usar geminiFileUri si está disponible, sino usar geminiFileId como fallback
-              const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/') 
-                ? fileRef.geminiFileId 
-                : `files/${fileRef.geminiFileId}`)
-              
-              if (!fileUri) {
-                console.error(`[ClinicalRouter] No valid URI found for file reference: ${fileRef.name}`)
-                continue
+        try {
+          // Obtener objetos de archivo completos usando IDs
+          const { getFilesByIds } = await import('./hopeai-system')
+          const fileObjects = await getFilesByIds(msg.fileReferences)
+          
+          if (fileObjects.length > 0) {
+            // Add AGENT-SPECIFIC context enrichment instruction for file awareness
+            const fileNames = fileObjects.map(f => f.name).join(', ')
+            const enrichedContent = msg.role === 'user' 
+              ? `${msg.content}
+
+${this.buildAgentSpecificFileContext(agentType, fileObjects.length, fileNames)}`
+              : msg.content
+            
+            // Update the text part with enriched content
+            parts[0] = { text: enrichedContent }
+            
+            for (const fileRef of fileObjects) {
+              if (fileRef.geminiFileId) {
+                try {
+                  // Usar geminiFileUri si está disponible, sino usar geminiFileId como fallback
+                  const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/') 
+                    ? fileRef.geminiFileId 
+                    : `files/${fileRef.geminiFileId}`)
+                  
+                  if (!fileUri) {
+                    console.error(`[ClinicalRouter] No valid URI found for file reference: ${fileRef.name}`)
+                    continue
+                  }
+                  
+                  console.log(`[ClinicalRouter] Adding file to context: ${fileRef.name}, URI: ${fileUri}`)
+                  
+                  // Verificar que el archivo existe y está en estado ACTIVE en Google AI antes de usarlo
+                  try {
+                    // Usar geminiFileId para la verificación de estado
+                    const fileIdForCheck = fileRef.geminiFileId || fileUri
+                    const fileInfo = await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
+                    console.log(`[ClinicalRouter] File verified as ACTIVE: ${fileIdForCheck}`)
+                  } catch (fileError) {
+                    console.error(`[ClinicalRouter] File not ready or not found: ${fileUri}`, fileError)
+                    // El archivo no está listo o no existe, omitirlo del mensaje
+                    continue
+                  }
+                  
+                  // Usar createPartFromUri para crear la parte del archivo correctamente
+                  const filePart = createPartFromUri(fileUri, fileRef.type)
+                  
+                  parts.push(filePart)
+                  console.log(`[ClinicalRouter] Successfully added file part for: ${fileRef.name}`)
+                } catch (error) {
+                  console.error(`[ClinicalRouter] Error processing file reference ${fileRef.name}:`, error)
+                  // Continuar con el siguiente archivo en lugar de fallar completamente
+                  continue
+                }
               }
-              
-              console.log(`[ClinicalRouter] Adding file to context: ${fileRef.name}, URI: ${fileUri}`)
-              
-              // Verificar que el archivo existe y está en estado ACTIVE en Google AI antes de usarlo
-              try {
-                // Usar geminiFileId para la verificación de estado
-                const fileIdForCheck = fileRef.geminiFileId || fileUri
-                const fileInfo = await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
-                console.log(`[ClinicalRouter] File verified as ACTIVE: ${fileIdForCheck}`)
-              } catch (fileError) {
-                console.error(`[ClinicalRouter] File not ready or not found: ${fileUri}`, fileError)
-                // El archivo no está listo o no existe, omitirlo del mensaje
-                continue
-              }
-              
-              // Usar createPartFromUri para crear la parte del archivo correctamente
-              const filePart = createPartFromUri(fileUri, fileRef.type)
-              
-              parts.push(filePart)
-              console.log(`[ClinicalRouter] Successfully added file part for: ${fileRef.name}`)
-            } catch (error) {
-              console.error(`[ClinicalRouter] Error processing file reference ${fileRef.name}:`, error)
-              // Continuar con el siguiente archivo en lugar de fallar completamente
-              continue
             }
           }
+        } catch (error) {
+          console.error(`[ClinicalRouter] Error retrieving files by IDs:`, error)
+          // Continuar sin archivos si hay error en la recuperación
         }
       }
       
@@ -950,6 +981,70 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
         }
       }
     })()
+  }
+
+  /**
+   * ARCHITECTURAL FIX: Generate agent-specific context for file attachments
+   * Provides flexible, conversation-aware context that maintains flow between agents
+   * while enabling specialized responses based on agent expertise.
+   */
+  private buildAgentSpecificFileContext(agentType: AgentType, fileCount: number, fileNames: string): string {
+    const baseContext = `**Archivos en contexto:** ${fileNames} (${fileCount} archivo${fileCount > 1 ? 's' : ''}).`;
+    
+    switch (agentType) {
+      case 'socratico':
+        return `${baseContext}
+
+Como especialista en exploración reflexiva, puedes aprovechar este material para enriquecer el diálogo terapéutico. Responde naturalmente integrando tu perspectiva socrática según el flujo de la conversación.`;
+
+      case 'clinico':
+        return `${baseContext}
+
+Como especialista en documentación clínica, este material está disponible para síntesis profesional. Integra tu perspectiva organizacional según sea relevante para la conversación en curso.`;
+
+      case 'academico':
+        return `${baseContext}
+
+Como especialista en evidencia científica, puedes utilizar este material para informar tu análisis académico. Integra tu perspectiva basada en investigación según el contexto conversacional.`;
+
+      default:
+        return `${baseContext} Material disponible para análisis contextual apropiado.`;
+    }
+  }
+
+  /**
+   * Adds subtle transition context when switching agents to maintain conversational flow
+   */
+  private addAgentTransitionContext(geminiHistory: any[], newAgentType: AgentType): any[] {
+    if (geminiHistory.length === 0) return geminiHistory;
+    
+    // Add a subtle system message that helps the new agent understand it's continuing a conversation
+    const transitionMessage = {
+      role: 'user' as const,
+      parts: [{
+        text: `[Contexto de transición] Continuando conversación con perspectiva especializada en ${this.getAgentSpecialtyName(newAgentType)}. Mantén el flujo natural de la discusión previa mientras aportas tu expertise específica.`
+      }]
+    };
+    
+    // Insert the transition context before the last user message to maintain natural flow
+    const historyWithTransition = [...geminiHistory];
+    if (historyWithTransition.length > 0) {
+      historyWithTransition.splice(-1, 0, transitionMessage);
+    }
+    
+    return historyWithTransition;
+  }
+
+  /**
+   * Gets human-readable specialty name for agent types
+   */
+  private getAgentSpecialtyName(agentType: AgentType): string {
+    switch (agentType) {
+      case 'socratico': return 'exploración reflexiva y cuestionamiento socrático';
+      case 'clinico': return 'documentación clínica y síntesis profesional';
+      case 'academico': return 'evidencia científica e investigación académica';
+      default: return 'análisis especializado';
+    }
   }
 
   private buildEnhancedMessage(originalMessage: string, enrichedContext: any): string {

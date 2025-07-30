@@ -102,6 +102,7 @@ export function DocumentUpload({ onUpload, onClose }: DocumentUploadProps) {
           accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
           onChange={handleFileSelect}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          aria-label="Seleccionar archivos clínicos"
         />
       </div>
 

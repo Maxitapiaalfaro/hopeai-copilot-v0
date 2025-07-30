@@ -38,7 +38,7 @@ export class ServerStorageAdapter {
 
   // Obtener todas las sesiones de un usuario (método legacy - mantener compatibilidad)
   async getUserSessions(userId: string): Promise<ChatState[]> {
-    const result = await this.getUserSessionsPaginated(userId, { pageSize: 1000 })
+    const result = await this.getUserSessionsPaginated(userId, { pageSize: 2000 })
     return result.items
   }
 
@@ -61,8 +61,8 @@ export class ServerStorageAdapter {
     
     try {
       const {
-        pageSize = 20,
-        pageToken,
+      pageSize = 50,
+      pageToken,
         sortBy = 'lastUpdated',
         sortOrder = 'desc'
       } = options
@@ -139,6 +139,16 @@ export class ServerStorageAdapter {
     }
     
     return files
+  }
+
+  async getClinicalFileById(fileId: string): Promise<ClinicalFile | null> {
+    if (!this.initialized) throw new Error("Storage not initialized")
+    return this.clinicalFiles.get(fileId) || null
+  }
+
+  async deleteClinicalFile(fileId: string): Promise<void> {
+    if (!this.initialized) throw new Error("Storage not initialized")
+    this.clinicalFiles.delete(fileId)
   }
 
   async clearAllData(): Promise<void> {

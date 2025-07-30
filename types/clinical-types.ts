@@ -8,9 +8,11 @@ export interface ChatMessage {
   role: "user" | "model"
   agent?: AgentType
   timestamp: Date
-  attachments?: ClinicalFile[]
-  fileReferences?: ClinicalFile[]
+  // ARQUITECTURA OPTIMIZADA: Archivos se referencian por ID, no objetos completos
+  // Esto previene la acumulación exponencial que causa RESOURCE_EXHAUSTED
+  fileReferences?: string[]  // IDs de archivos, no objetos completos
   groundingUrls?: Array<{title: string, url: string, domain?: string}>
+  // ELIMINADO: attachments duplicados - usar solo fileReferences por ID
 }
 
 export interface ClinicalFile {

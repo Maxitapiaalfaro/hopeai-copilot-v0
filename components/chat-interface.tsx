@@ -6,41 +6,77 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown } from "lucide-react"
+import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown, Brain, Search, Stethoscope, BookOpen, Maximize2, Minimize2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { AgentType, ChatState } from "@/types/clinical-types"
+import type { AgentType, ChatState, ClinicalFile } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
+import { useSpeechToText } from "@/hooks/use-speech-to-text"
 import { MarkdownRenderer, StreamingMarkdownRenderer } from "@/components/markdown-renderer"
 import { getAgentVisualConfig, getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 import { trackMessage } from "@/lib/sentry-metrics-tracker"
 import { FileUploadButton } from "@/components/file-upload-button"
+import { MessageFileAttachments } from "@/components/message-file-attachments"
+import { getFilesByIds } from "@/lib/hopeai-system"
 import * as Sentry from "@sentry/nextjs"
-
-import type { ClinicalFile } from "@/types/clinical-types"
+import type { TransitionState } from "@/hooks/use-hopeai-system"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
   isProcessing: boolean
+  isUploading?: boolean
   currentSession: ChatState | null
   sendMessage: (message: string, useStreaming?: boolean, attachedFiles?: ClinicalFile[]) => Promise<any>
   uploadDocument: (file: File) => Promise<any>
   addStreamingResponseToHistory?: (responseContent: string, agent: AgentType, groundingUrls?: Array<{title: string, url: string, domain?: string}>) => Promise<void>
   pendingFiles?: ClinicalFile[]
   onRemoveFile?: (fileId: string) => void
+  transitionState?: TransitionState
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
 
-export function ChatInterface({ activeAgent, isProcessing, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle' }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
   const [forceUpdate, setForceUpdate] = useState(0)
   const [autoScroll, setAutoScroll] = useState(true)
   const [visibleMessageCount, setVisibleMessageCount] = useState(20)
-  const [streamingGroundingUrls, setStreamingGroundingUrls] = useState<Array<{title: string, url: string, domain?: string}>>([])
+  const [streamingGroundingUrls, setStreamingGroundingUrls] = useState<Array<{title: string, url: string, domain?: string}>>([])  
+  const [messageFiles, setMessageFiles] = useState<Record<string, ClinicalFile[]>>({})
+  const [isInputExpanded, setIsInputExpanded] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Hook para speech-to-text
+  const { isListening, interimTranscript, error: speechError } = useSpeechToText({
+    language: 'es-ES'
+  })
+
+  // Load files for messages with fileReferences
+  useEffect(() => {
+    const loadMessageFiles = async () => {
+      const newMessageFiles: Record<string, ClinicalFile[]> = {}
+      
+      for (const message of currentSession?.history || []) {
+        if (message.fileReferences && message.fileReferences.length > 0) {
+          try {
+            const files = await getFilesByIds(message.fileReferences)
+            if (files.length > 0) {
+              newMessageFiles[message.id] = files
+            }
+          } catch (error) {
+            console.error('Error loading files for message:', message.id, error)
+          }
+        }
+      }
+      
+      setMessageFiles(newMessageFiles)
+    }
+
+    loadMessageFiles()
+  }, [currentSession?.history])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -48,6 +84,17 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }
   }, [currentSession?.history, streamingResponse, autoScroll])
+
+  // Auto-resize textarea when input value changes
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      textarea.style.height = 'auto'
+      const maxHeight = isInputExpanded ? 400 : 200
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight)
+      textarea.style.height = `${newHeight}px`
+    }
+  }, [inputValue, isInputExpanded])
 
   // Manejar scroll manual para detectar si el usuario está en el fondo
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -118,7 +165,15 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
             isStreaming: true
           })
           
-          const response = await sendMessage(message, true)
+          // CRITICAL: Capturar archivos adjuntos antes del envío para mostrar en historial
+          const attachedFilesForMessage = [...pendingFiles]
+          
+          const response = await sendMessage(message, true, attachedFilesForMessage)
+          
+          // ARCHITECTURAL FIX: Limpiar estado visual inmediatamente después del envío exitoso
+          // Los archivos ya están en el contexto de sesión, no necesitamos mostrarlos más en UI
+          console.log('🧹 Frontend: Limpiando estado visual de archivos adjuntos post-envío')
+          
           const responseTime = Date.now() - startTime
           
           span.setAttribute("message.response_time", responseTime)
@@ -290,50 +345,9 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
   const IconComponent = config.icon
 
   return (
-    <div className="flex-1 flex flex-col bg-gradient-to-b from-white to-gray-50 h-full overflow-hidden">
-      {/* Agent Indicator */}
-      <div className={cn("border-b transition-all duration-300 px-4 py-3", config.bgColor, config.borderColor)}>
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <IconComponent className={cn("h-5 w-5", config.textColor)} />
-              {(isProcessing || isStreaming) && (
-                <div className="absolute -top-1 -right-1">
-                  <Zap className="h-3 w-3 text-amber-500 animate-pulse" />
-                </div>
-              )}
-            </div>
-            <div>
-              <h3 className={cn("font-semibold text-sm", config.textColor)}>{config.name}</h3>
-              <p className="text-xs text-gray-600">
-                {activeAgent === "socratico" && "Especialista en diálogo terapéutico y reflexión profunda"}
-                {activeAgent === "clinico" && "Especialista en síntesis y documentación clínica"}
-                {activeAgent === "academico" && "Especialista en investigación y evidencia científica"}
-              </p>
-            </div>
-          </div>
-
-          {(isProcessing || isStreaming) && (
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <div className="flex gap-1">
-                <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", `bg-${config.color}-500`)}></div>
-                <div
-                  className={cn("w-1.5 h-1.5 rounded-full animate-pulse", `bg-${config.color}-500`)}
-                  style={{ animationDelay: "0.2s" }}
-                ></div>
-                <div
-                  className={cn("w-1.5 h-1.5 rounded-full animate-pulse", `bg-${config.color}-500`)}
-                  style={{ animationDelay: "0.4s" }}
-                ></div>
-              </div>
-              <span>Procesando...</span>
-            </div>
-          )}
-        </div>
-      </div>
-
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4 relative" onScrollCapture={handleScroll}>
+      <ScrollArea className="flex-1 p-4 relative scrollbar-hide" onScrollCapture={handleScroll} style={{scrollbarWidth: 'none', msOverflowStyle: 'none'}}>
         <div className="max-w-4xl mx-auto space-y-4">
           {/* Indicador de mensajes anteriores */}
           {currentSession?.history && currentSession.history.length > visibleMessageCount && (
@@ -346,22 +360,78 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
             </div>
           )}
 
-          {/* Welcome message if no history */}
+          {/* Welcome suggestions if no history */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
-            <div className="flex justify-start">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
-                  config.bgColor,
-                  config.borderColor,
-                )}
-              >
-                <IconComponent className={cn("h-4 w-4", config.textColor)} />
-              </div>
-              <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg", config.bgColor, `border ${config.borderColor}`)}>                <MarkdownRenderer                   content={`Hola, soy **${config.name}**, tu copiloto clínico especializado. ¿En qué puedo ayudarte hoy?`}                  className="text-sm"                />
-                <div className="text-xs text-gray-500 mt-1">
-                  {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            <div className="space-y-8 animate-in fade-in duration-700 ease-out">
+              {/* Mensaje de bienvenida minimalista */}
+              <div className="text-center space-y-3">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-medium text-gray-900">¿En qué puedo ayudarte hoy?</h2>
+                  <p className="text-sm text-gray-500">Explora estas opciones para comenzar</p>
                 </div>
+              </div>
+              
+              {/* Sugerencias predefinidas - Diseño minimalista */}
+              <div className="grid gap-3 max-w-xl mx-auto">
+                {/* Socrático suggestion */}
+                <button
+                  onClick={() => setInputValue("Ayúdame a explorar las emociones y pensamientos de mi paciente con ansiedad social")}
+                  className="animate-slide-up group relative overflow-hidden rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-200 transition-all duration-300 ease-out hover:shadow-sm"
+                  style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
+                >
+                  <div className="flex items-center gap-4 p-4">
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 group-hover:scale-105 transition-all duration-300">
+                      <Brain className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <h3 className="font-medium text-gray-900 mb-1 group-hover:text-blue-900 transition-colors">Exploración Socrática</h3>
+                      <p className="text-xs text-gray-500 leading-relaxed">Explora emociones y pensamientos con técnicas socráticas</p>
+                    </div>
+                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                      <span className="text-xs text-gray-600">→</span>
+                    </div>
+                  </div>
+                </button>
+                
+                {/* Clínico suggestion */}
+                <button
+                  onClick={() => setInputValue("Genera un resumen clínico de la sesión con mi paciente que presenta síntomas de depresión")}
+                  className="animate-slide-up group relative overflow-hidden rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-green-200 transition-all duration-300 ease-out hover:shadow-sm"
+                  style={{ animationDelay: '0.2s', animationFillMode: 'both' }}
+                >
+                  <div className="flex items-center gap-4 p-4">
+                    <div className="w-10 h-10 rounded-lg bg-green-50 border border-green-100 flex items-center justify-center flex-shrink-0 group-hover:bg-green-100 group-hover:scale-105 transition-all duration-300">
+                      <Stethoscope className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <h3 className="font-medium text-gray-900 mb-1 group-hover:text-green-900 transition-colors">Documentación Clínica</h3>
+                      <p className="text-xs text-gray-500 leading-relaxed">Genera resúmenes y documentación profesional</p>
+                    </div>
+                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                      <span className="text-xs text-gray-600">→</span>
+                    </div>
+                  </div>
+                </button>
+                
+                {/* Académico suggestion */}
+                <button
+                  onClick={() => setInputValue("Busca evidencia científica reciente sobre terapia cognitivo-conductual para trastorno de pánico")}
+                  className="animate-slide-up group relative overflow-hidden rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-purple-200 transition-all duration-300 ease-out hover:shadow-sm"
+                  style={{ animationDelay: '0.3s', animationFillMode: 'both' }}
+                >
+                  <div className="flex items-center gap-4 p-4">
+                    <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 group-hover:scale-105 transition-all duration-300">
+                      <BookOpen className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <h3 className="font-medium text-gray-900 mb-1 group-hover:text-purple-900 transition-colors">Investigación Académica</h3>
+                      <p className="text-xs text-gray-500 leading-relaxed">Busca evidencia científica y estudios recientes</p>
+                    </div>
+                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                      <span className="text-xs text-gray-600">→</span>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
           )}
@@ -397,6 +467,14 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
                     className="text-sm"
                     trusted={message.role === "model"}
                   />
+                  {/* Mostrar archivos adjuntos si existen */}
+                  {messageFiles[message.id] && messageFiles[message.id].length > 0 && (
+                        <MessageFileAttachments 
+                          files={messageFiles[message.id]} 
+                          variant="compact"
+                          isUserMessage={message.role === 'user'}
+                        />
+                      )}
                   {/* Mostrar referencias de grounding si existen */}
                   {message.groundingUrls && message.groundingUrls.length > 0 && (
                     <div className="mt-3 pt-2 border-t border-gray-200">
@@ -420,16 +498,6 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
                       </div>
                     </div>
                   )}
-                  {message.attachments && message.attachments.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {message.attachments.map((file, index) => (
-                        <div key={index} className="text-xs opacity-75 flex items-center gap-1">
-                          <Paperclip className="h-3 w-3" />
-                          {file.name}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                   <div className={cn("text-xs mt-1", message.role === "user" ? "text-blue-100" : "text-gray-500")}>
                     {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </div>
@@ -446,28 +514,28 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
 
           {/* Streaming Response */}
           {isStreaming && streamingResponse && (
-            <div className="flex justify-start">
+            <div className="flex justify-start animate-in fade-in slide-in-from-left-2 duration-500 ease-out">
               <div
                 className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
+                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border transition-all duration-300 ease-out",
                   config.bgColor,
                   config.borderColor,
                 )}
               >
-                <IconComponent className={cn("h-4 w-4", config.textColor)} />
+                <IconComponent className={cn("h-4 w-4 transition-all duration-300 ease-out", config.textColor)} />
               </div>
-              <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg", config.bgColor, `border ${config.borderColor}`)}>                <StreamingMarkdownRenderer                   content={streamingResponse}                  className="text-sm"                  showTypingIndicator={true}                />                {/* Mostrar referencias de grounding durante streaming si existen */}
+              <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg transition-all duration-300 ease-out", config.bgColor, `border ${config.borderColor}`)}>                <StreamingMarkdownRenderer                   content={streamingResponse}                  className="text-sm"                  showTypingIndicator={true}                />                {/* Mostrar referencias de grounding durante streaming si existen */}
                 {streamingGroundingUrls && streamingGroundingUrls.length > 0 && (
-                  <div className="mt-3 pt-2 border-t border-gray-200">
+                  <div className="mt-3 pt-2 border-t border-gray-200 animate-in fade-in duration-300 ease-out">
                     <div className="text-xs font-medium text-gray-600 mb-2">Referencias:</div>
                     <div className="space-y-1">
                       {streamingGroundingUrls.map((ref, index) => (
-                        <div key={index} className="text-xs">
+                        <div key={index} className="text-xs animate-in fade-in duration-200 ease-out" style={{ animationDelay: `${index * 100}ms` }}>
                           <a 
                             href={ref.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 underline"
+                            className="text-blue-600 hover:text-blue-800 underline transition-colors duration-200"
                           >
                             {ref.title}
                           </a>
@@ -482,32 +550,73 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
             </div>
           )}
 
-          {/* Typing Indicator */}
+          {/* Typing Indicator with Transition States */}
           {(isProcessing || isStreaming) && !streamingResponse && (
             <div className="flex justify-start">
               <div
                 className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
-                  config.bgColor,
-                  config.borderColor,
+                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border transition-all duration-500 ease-in-out",
+                  transitionState === 'thinking' ? "bg-blue-50 border-blue-200" :
+                  transitionState === 'selecting_agent' ? "bg-purple-50 border-purple-200" :
+                  transitionState === 'specialist_responding' ? config.bgColor : config.bgColor,
+                  transitionState === 'thinking' ? "border-blue-200" :
+                  transitionState === 'selecting_agent' ? "border-purple-200" :
+                  transitionState === 'specialist_responding' ? config.borderColor : config.borderColor,
                 )}
               >
-                <IconComponent className={cn("h-4 w-4", config.textColor)} />
+                <div className="transition-all duration-700 ease-out">
+                  {transitionState === 'thinking' && <Brain className="h-4 w-4 text-blue-600" style={{ animation: 'gentle-pulse 2s ease-in-out infinite' }} />}
+                  {transitionState === 'selecting_agent' && <Search className="h-4 w-4 text-purple-600" style={{ animation: 'gentle-fade 1.5s ease-in-out infinite alternate' }} />}
+                  {(transitionState === 'specialist_responding' || transitionState === 'idle') && <IconComponent className={cn("h-4 w-4", config.textColor)} />}
+                </div>
               </div>
-              <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg", config.bgColor, `border ${config.borderColor}`)}>
-                <div className="flex items-center gap-2">
+              <div className={cn(
+                "max-w-[80%] mx-2 p-4 rounded-lg transition-all duration-500 ease-in-out",
+                transitionState === 'thinking' ? "bg-blue-50 border border-blue-200" :
+                transitionState === 'selecting_agent' ? "bg-purple-50 border border-purple-200" :
+                transitionState === 'specialist_responding' ? `${config.bgColor} border ${config.borderColor}` :
+                `${config.bgColor} border ${config.borderColor}`
+              )}>
+                <div className="flex items-center gap-3">
                   <div className="flex gap-1">
-                    <div className={cn("w-2 h-2 rounded-full animate-bounce", config.typingDotColor)}></div>
-                    <div
-                      className={cn("w-2 h-2 rounded-full animate-bounce", config.typingDotColor)}
-                      style={{ animationDelay: "0.1s" }}
+                    <div 
+                      className={cn(
+                        "w-2 h-2 rounded-full transition-colors duration-500",
+                        transitionState === 'thinking' ? "bg-blue-400" :
+                        transitionState === 'selecting_agent' ? "bg-purple-400" :
+                        config.typingDotColor
+                      )}
+                      style={{ animation: 'gentle-bounce 2s ease-in-out infinite' }}
                     ></div>
                     <div
-                      className={cn("w-2 h-2 rounded-full animate-bounce", config.typingDotColor)}
-                      style={{ animationDelay: "0.2s" }}
+                      className={cn(
+                        "w-2 h-2 rounded-full transition-colors duration-500",
+                        transitionState === 'thinking' ? "bg-blue-400" :
+                        transitionState === 'selecting_agent' ? "bg-purple-400" :
+                        config.typingDotColor
+                      )}
+                      style={{ animation: 'gentle-bounce 2s ease-in-out infinite', animationDelay: "0.4s" }}
+                    ></div>
+                    <div
+                      className={cn(
+                        "w-2 h-2 rounded-full transition-colors duration-500",
+                        transitionState === 'thinking' ? "bg-blue-400" :
+                        transitionState === 'selecting_agent' ? "bg-purple-400" :
+                        config.typingDotColor
+                      )}
+                      style={{ animation: 'gentle-bounce 2s ease-in-out infinite', animationDelay: "0.8s" }}
                     ></div>
                   </div>
-                  <span className={cn("text-sm", config.textColor)}>HopeAI está escribiendo...</span>
+                  <span className={cn(
+                    "text-sm transition-all duration-300 ease-in-out",
+                    transitionState === 'thinking' ? "text-blue-600" :
+                    transitionState === 'selecting_agent' ? "text-purple-600" :
+                    config.textColor
+                  )}>
+                    {transitionState === 'thinking' && 'HopeAI analizando tu consulta...'}
+                    {transitionState === 'selecting_agent' && 'HopeAI activando capacidades especializadas...'}
+                    {(transitionState === 'specialist_responding' || transitionState === 'idle') && `HopeAI generando respuesta...`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -529,59 +638,101 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-4 bg-white">
+      <div className="p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-end gap-2">
-            <div className="flex-1 relative">
+          <div className="relative">
+            {/* Input container con estilo Gemini adaptado al agente activo */}
+            <div className={cn(
+              "relative bg-gray-50 rounded-3xl border transition-all duration-300 ease-in-out",
+              config.borderColor,
+              `hover:${config.borderColor.replace('border-', 'border-').replace('-200', '-300')}`,
+              `focus-within:${config.borderColor.replace('border-', 'border-').replace('-200', '-400')} focus-within:bg-white`,
+              isInputExpanded && "rounded-2xl"
+            )}>
               <Textarea
+                ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Describe tu consulta clínica, sube documentos o solicita asistencia especializada..."
-                className="min-h-[60px] max-h-32 resize-none pr-20"
-                rows={2}
-                disabled={isProcessing || isStreaming}
+                placeholder="Pregúntale a HopeAI"
+                className={cn(
+                  "w-full min-h-[60px] resize-none border-0 bg-transparent px-6 py-4 pr-32 pb-12 text-base placeholder:text-gray-500 focus:outline-none focus:ring-0 focus:border-transparent focus-visible:outline-none focus-visible:ring-0 overflow-y-auto transition-all duration-200 ease-out scrollbar-hide",
+                  isInputExpanded ? "max-h-[400px]" : "max-h-[200px]"
+                )}
+                rows={1}
+                disabled={isProcessing || isStreaming || isUploading}
+                style={{ 
+                  outline: 'none', 
+                  boxShadow: 'none',
+                  height: 'auto',
+                  lineHeight: '1.5'
+                }}
               />
-              <div className="absolute right-2 bottom-2 flex gap-1">
+              
+              {/* Botones dentro del input - estilo Gemini */}
+              <div className="absolute bottom-2 right-2 flex items-center gap-2">
                 <FileUploadButton
                   onFilesSelected={() => {}} // Los archivos se manejan automáticamente por uploadDocument
                   uploadDocument={uploadDocument}
-                  disabled={isProcessing || isStreaming}
+                  disabled={isProcessing || isStreaming || isUploading}
                   pendingFiles={pendingFiles}
                   onRemoveFile={onRemoveFile}
                 />
                 <VoiceInputButton
                   onTranscriptUpdate={handleVoiceTranscript}
-                  disabled={isProcessing || isStreaming}
+                  disabled={isProcessing || isStreaming || isUploading}
                   size="sm"
                   variant="ghost"
                   language="es-ES"
                 />
+                <Button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Expand button clicked, current state:', isInputExpanded);
+                    setIsInputExpanded(!isInputExpanded);
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  size="sm"
+                  variant="ghost"
+                  className="h-10 w-10 md:h-8 md:w-8 p-0 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 touch-manipulation select-none"
+                  title={isInputExpanded ? "Contraer input" : "Expandir input"}
+                >
+                  {isInputExpanded ? <Minimize2 className="h-5 w-5 md:h-4 md:w-4" /> : <Maximize2 className="h-5 w-5 md:h-4 md:w-4" />}
+                </Button>
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={
+                    !inputValue.trim() || 
+                    isProcessing || 
+                    isStreaming ||
+                    isUploading ||
+                    pendingFiles.some(file => 
+                      (file as any).processingStatus && 
+                      (file as any).processingStatus !== 'active'
+                    )
+                  }
+                  size="sm"
+                  className={cn(
+                    "h-10 w-10 md:h-8 md:w-8 p-0 rounded-full transition-all duration-300 ease-in-out text-white touch-manipulation",
+                    config.buttonBgColor,
+                    config.buttonHoverColor,
+                    // Estado disabled
+                    (!inputValue.trim() || isProcessing || isStreaming || isUploading) && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <Send className="h-5 w-5 md:h-4 md:w-4" />
+                </Button>
               </div>
             </div>
-            <Button
-              onClick={handleSendMessage}
-              disabled={
-                !inputValue.trim() || 
-                isProcessing || 
-                isStreaming ||
-                pendingFiles.some(file => 
-                  (file as any).processingStatus && 
-                  (file as any).processingStatus !== 'active'
-                )
-              }
-              className={cn(
-                "h-[60px] px-6",
-                config.buttonBgColor,
-                config.buttonHoverColor,
-              )}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+
           </div>
 
           {/* Indicador de estado de archivos */}
-          {pendingFiles.length > 0 && (
+          {pendingFiles.length > 0 && !isStreaming && (
             <div className="mt-2 p-2 bg-gray-50 rounded-lg">
               <div className="text-xs text-gray-600 mb-1">Archivos adjuntos:</div>
               <div className="space-y-1">
@@ -643,6 +794,14 @@ export function ChatInterface({ activeAgent, isProcessing, currentSession, sendM
           </div>
         </div>
       </div>
+      
+      {/* Overlay de estado de voz para móviles */}
+      <VoiceStatus 
+        isListening={isListening}
+        interimTranscript={interimTranscript}
+        confidence={0}
+        error={speechError}
+      />
     </div>
   )
 }

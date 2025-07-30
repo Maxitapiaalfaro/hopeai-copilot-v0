@@ -234,6 +234,8 @@ export function VoiceInputButton({
           </div>
         )}
         
+
+        
         {/* Indicador de error cuando no está grabando */}
         {error && !isListening && (
           <div className="absolute -top-1 -right-1">
@@ -269,11 +271,42 @@ export function VoiceStatus({
   
   if (!isListening && !error) return null
 
+  // En móviles, mostrar un overlay elegante y sutil
+  if (mobileDetection.isMobile && isListening) {
+    return (
+      <div className="fixed inset-x-6 top-24 z-50 mx-auto max-w-sm">
+        <div className="bg-white/95 backdrop-blur-md border border-gray-200/50 p-4 rounded-2xl shadow-lg">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              <div className="absolute inset-0 w-2 h-2 bg-red-500 rounded-full animate-ping opacity-75"></div>
+            </div>
+            <span className="text-gray-700 text-sm font-medium">Escuchando...</span>
+          </div>
+          
+          {interimTranscript ? (
+            <div className="mb-3">
+              <div className="text-gray-900 text-base leading-relaxed font-normal">
+                "{interimTranscript}"
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-500 text-sm mb-3">
+              Habla ahora...
+            </div>
+          )}
+          
+          <div className="text-center text-xs text-gray-400 border-t border-gray-100 pt-2">
+            Toca el micrófono para detener
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Versión desktop (original)
   return (
-    <div className={cn(
-      "flex items-center gap-2 text-xs text-gray-600 mt-1",
-      mobileDetection.isMobile && "text-xs flex-col text-center"
-    )}>
+    <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
       {isListening && (
         <>
           <div className="flex items-center gap-1">
@@ -282,11 +315,8 @@ export function VoiceStatus({
           </div>
           
           {interimTranscript && (
-            <div className={cn(
-              "flex-1 truncate",
-              mobileDetection.isMobile && "max-w-[180px]"
-            )}>
-              <span className="italic">"{ interimTranscript}"</span>
+            <div className="flex-1 truncate">
+              <span className="italic">"{interimTranscript}"</span>
             </div>
           )}
           

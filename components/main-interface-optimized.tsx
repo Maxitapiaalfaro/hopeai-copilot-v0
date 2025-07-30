@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { ChatInterface } from "@/components/chat-interface"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { DocumentPanel } from "@/components/document-panel"
+
 
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -36,9 +36,11 @@ function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
 }
 
 export function MainInterfaceOptimized({ showDebugElements = true }: { showDebugElements?: boolean }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [documentPanelOpen, setDocumentPanelOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
   const [pendingFiles, setPendingFiles] = useState<ClinicalFile[]>([])
+  const [isUploading, setIsUploading] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
 
   // Usar el sistema HopeAI
@@ -171,17 +173,17 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Responsive sidebar management
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 768) {
+      // El sidebar permanece cerrado por defecto en todas las pantallas
+      // Solo se cierra automáticamente en móviles si estaba abierto
+      if (window.innerWidth < 768 && sidebarOpen) {
         setSidebarOpen(false)
-      } else if (window.innerWidth >= 1024) {
-        setSidebarOpen(true)
       }
     }
 
     handleResize()
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
-  }, [])
+  }, [sidebarOpen])
 
   // Manejar cambio de agente con métricas Sentry
   const handleAgentChange = async (agent: AgentType) => {
@@ -262,7 +264,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           // Actualizar actividad del usuario
           updateActivity()
           
-          const response = await sendMessage(message, useStreaming)
+          // CRITICAL: Capturar archivos antes de envío para mostrar inmediatamente en historial
+          const attachedFilesForMessage = [...pendingFiles]
+          
+          const response = await sendMessage(message, useStreaming, attachedFilesForMessage)
           
           // Limpiar archivos pendientes después del envío exitoso
           setPendingFiles([])
@@ -325,6 +330,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       throw new Error('No hay sesión activa')
     }
 
+    setIsUploading(true) // ⭐ Bloquear chat mientras se sube archivo
+    
     try {
       console.log('📎 Subiendo documento:', file.name)
       
@@ -351,6 +358,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     } catch (error) {
       console.error('❌ Error subiendo documento:', error)
       throw error
+    } finally {
+      setIsUploading(false) // ⭐ Desbloquear chat
     }
   }
 
@@ -510,7 +519,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Sidebar - Conversation History */}
       <Sidebar 
         isOpen={sidebarOpen} 
@@ -523,18 +532,16 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <Header
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          onToggleDocuments={() => setDocumentPanelOpen(!documentPanelOpen)}
-          documentPanelOpen={documentPanelOpen}
-        />
+        <Header onHistoryToggle={() => setMobileNavOpen(true)} />
 
-        {/* Mobile Navigation (only visible on small screens) */}
+        {/* Mobile Navigation */}
         {isMobile && (
-          <MobileNav
-            activeAgent={systemState.activeAgent}
-            onToggleDocuments={() => setDocumentPanelOpen(!documentPanelOpen)}
-            documentPanelOpen={documentPanelOpen}
+          <MobileNav 
+            userId={systemState.userId || "demo_user"}
+            createSession={createSession}
+            onConversationSelect={handleConversationSelect}
+            isOpen={mobileNavOpen}
+            onOpenChange={setMobileNavOpen}
           />
         )}
 
@@ -548,21 +555,18 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
             <ChatInterface
               activeAgent={systemState.activeAgent}
               isProcessing={systemState.isLoading}
+              isUploading={isUploading}
               currentSession={compatibleSession}
               sendMessage={handleSendMessage}
               uploadDocument={handleUploadDocument}
               addStreamingResponseToHistory={addStreamingResponseToHistory}
               pendingFiles={pendingFiles}
               onRemoveFile={handleRemoveFile}
+              transitionState={systemState.transitionState}
             />
           </div>
 
-          {/* Document Panel */}
-          <DocumentPanel
-            isOpen={documentPanelOpen}
-            onClose={() => setDocumentPanelOpen(false)}
-            currentSession={compatibleSession}
-          />
+
         </div>
       </div>
 

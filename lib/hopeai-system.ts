@@ -213,6 +213,25 @@ export class HopeAISystem {
         parts: [{ text: msg.content }]
       }))
 
+      // ARCHITECTURAL FIX: Create enriched context with current message files for intent detection
+      let enrichedSessionContext = [...sessionContext]
+      
+      // Add current message with files to context for intent detection
+      if (sessionFiles && sessionFiles.length > 0) {
+        const fileNames = sessionFiles.map(f => f.name).join(', ')
+        const currentMessageWithFiles = {
+          role: 'user' as const,
+          parts: [{ 
+            text: `${message}
+
+**CONTEXTO PARA DETECCIÓN DE INTENCIÓN:** El usuario ha adjuntado ${sessionFiles.length} archivo(s): ${fileNames}. Esta información debe considerarse al detectar la intención del mensaje.`
+          }]
+        }
+        enrichedSessionContext.push(currentMessageWithFiles)
+        
+        console.log(`[HopeAI] Context enriched with ${sessionFiles.length} files for intent detection:`, fileNames)
+      }
+
       // Determinar si usar orquestación avanzada o routing directo
       let routingResult;
       let orchestrationResult = null;
@@ -235,7 +254,8 @@ export class HopeAISystem {
         orchestrationResult = await this.dynamicOrchestrator.orchestrate(
           message,
           sessionId,
-          currentState.userId || 'demo_user'
+          currentState.userId || 'demo_user',
+          sessionFiles
         )
         
         // 📊 RECORD ORCHESTRATION COMPLETION 
@@ -272,7 +292,7 @@ export class HopeAISystem {
         console.log(`[HopeAI] Using standard intelligent routing`)
         routingResult = await this.intentRouter.routeUserInput(
           message,
-          sessionContext,
+          enrichedSessionContext,
           currentState.activeAgent
         )
       }
@@ -303,8 +323,8 @@ export class HopeAISystem {
               // Close current chat session
               clinicalAgentRouter.closeChatSession(sessionId)
               
-              // Create new chat session with new agent
-              return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history)
+              // Create new chat session with new agent - mark as transition to maintain flow
+              return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history, true)
             }
           )
           
@@ -377,13 +397,16 @@ export class HopeAISystem {
       }
 
       // Para mensajes normales (no explícitos), agregar el mensaje del usuario al historial
+      // ARQUITECTURA OPTIMIZADA: Separar gestión de archivos del historial de conversación
+      // Los archivos se almacenan a nivel de sesión y se referencian por ID, no se duplican en cada mensaje
       const userMessage: ChatMessage = {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         content: message,
         role: "user",
         timestamp: new Date(),
-        fileReferences: sessionFiles || [],
-        attachments: sessionFiles || []
+        // OPTIMIZACIÓN: Solo referenciar IDs de archivos, no objetos completos
+        fileReferences: sessionFiles?.map(file => file.id) || [],
+        // ELIMINADO: attachments duplicados - usar solo fileReferences
       }
 
       currentState.history.push(userMessage)
@@ -409,8 +432,8 @@ export class HopeAISystem {
             // Close current chat session
             clinicalAgentRouter.closeChatSession(sessionId)
             
-            // Create new chat session with new agent
-            return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history)
+            // Create new chat session with new agent - mark as transition to maintain flow
+            return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history, true)
           }
         )
         
@@ -488,7 +511,7 @@ export class HopeAISystem {
       // 📊 COMPLETE COMPREHENSIVE METRICS TRACKING for non-streaming
       const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
       
-      console.log(`🎉 [SessionMetrics] Non-streaming interaction completed: ${sessionId} | ${completedMetrics?.totalResponseTime || 'N/A'}ms | ${completedMetrics?.totalTokens || 'N/A'} tokens | $${completedMetrics?.totalCost?.toFixed(6) || '0.000000'}`);
+      console.log(`🎉 [SessionMetrics] Non-streaming interaction completed: ${sessionId} | ${completedMetrics?.timing?.totalResponseTime || 'N/A'}ms | ${completedMetrics?.tokens?.totalTokens || 'N/A'} tokens | $${completedMetrics?.tokens?.estimatedCost?.toFixed(6) || '0.000000'}`);
 
       return { 
         response: {
@@ -534,8 +557,8 @@ export class HopeAISystem {
         // Close current chat session
         clinicalAgentRouter.closeChatSession(sessionId)
 
-        // Create new chat session with new agent
-        await clinicalAgentRouter.createChatSession(sessionId, newAgent, currentState.history)
+        // Create new chat session with new agent - mark as transition to maintain flow
+        await clinicalAgentRouter.createChatSession(sessionId, newAgent, currentState.history, true)
 
         // Update state
         currentState.activeAgent = newAgent
@@ -671,7 +694,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       const duplicateFile = existingFiles.find(existingFile => 
         existingFile.name === file.name && 
         existingFile.size === file.size &&
-        existingFile.status !== 'failed'
+        existingFile.status !== 'error'
       )
       
       if (duplicateFile) {
@@ -697,25 +720,66 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     }
   }
 
+  /**
+   * ARQUITECTURA OPTIMIZADA: Gestión de archivos separada del historial
+   * Implementa las mejores prácticas del SDK de GenAI para manejo eficiente de contexto
+   * CORREGIDO: Solo devuelve archivos que NO han sido enviados en mensajes anteriores
+   */
   async getPendingFilesForSession(sessionId: string): Promise<ClinicalFile[]> {
     if (!this._initialized) await this.initialize()
     
     try {
-      console.log(`📋 Getting pending files for session: ${sessionId}`)
+      console.log(`📋 [OPTIMIZED] Getting pending files for session: ${sessionId}`)
       
       // Obtener archivos clínicos de la sesión desde el almacenamiento
       const clinicalFiles = await this.storage.getClinicalFiles(sessionId)
       
-      // Filtrar archivos que pertenecen a esta sesión y están en estado procesado
-      const sessionFiles = clinicalFiles.filter(file => 
+      // Obtener el historial de la sesión para verificar qué archivos ya fueron enviados
+      const sessionState = await this.storage.loadChatSession(sessionId)
+      const sentFileIds = new Set<string>()
+      
+      // Recopilar todos los IDs de archivos que ya fueron enviados en mensajes
+      if (sessionState?.history) {
+        sessionState.history.forEach((message: any) => {
+          if (message.fileReferences && message.fileReferences.length > 0) {
+            message.fileReferences.forEach((fileId: string) => sentFileIds.add(fileId))
+          }
+        })
+      }
+      
+      // Filtrar archivos que pertenecen a esta sesión, están procesados Y NO han sido enviados
+      const pendingFiles = clinicalFiles.filter((file: ClinicalFile) => 
         file.sessionId === sessionId && 
-        file.status === 'processed'
+        file.status === 'processed' &&
+        !sentFileIds.has(file.id) // Solo archivos que NO han sido enviados
       )
       
-      console.log(`📋 Found ${sessionFiles.length} files for session ${sessionId}`)
-      return sessionFiles
+      console.log(`📋 [OPTIMIZED] Found ${pendingFiles.length} truly pending files for session ${sessionId} (${clinicalFiles.length} total, ${sentFileIds.size} already sent)`)
+      return pendingFiles
     } catch (error) {
       console.error(`❌ Error getting pending files for session ${sessionId}:`, error)
+      return []
+    }
+  }
+
+  /**
+   * NUEVA FUNCIÓN: Obtener archivos por IDs para procesamiento dinámico
+   * Implementa patrón de referencia por ID siguiendo mejores prácticas del SDK
+   */
+  async getFilesByIds(fileIds: string[]): Promise<ClinicalFile[]> {
+    if (!this._initialized) await this.initialize()
+    
+    try {
+      const files: ClinicalFile[] = []
+      for (const fileId of fileIds) {
+        const file = await this.storage.getClinicalFileById(fileId)
+        if (file && file.status === 'processed') {
+          files.push(file)
+        }
+      }
+      return files
+    } catch (error) {
+      console.error(`❌ Error getting files by IDs:`, error)
       return []
     }
   }
@@ -733,7 +797,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       const currentState = await this.storage.loadChatSession(sessionId)
       if (currentState) {
         currentState.metadata.fileReferences = currentState.metadata.fileReferences.filter(
-          ref => ref !== fileId
+          (ref: string) => ref !== fileId
         )
         currentState.metadata.lastUpdated = new Date()
         await this.saveChatSessionBoth(currentState)
@@ -1001,4 +1065,13 @@ export async function getGlobalOrchestrationSystem(): Promise<HopeAISystem> {
 export function getOrchestrationSystem(): HopeAISystem {
   console.warn('⚠️ getOrchestrationSystem() is deprecated. Use getGlobalOrchestrationSystem() instead.')
   return HopeAISystemSingleton.getInstance()
+}
+
+/**
+ * ARQUITECTURA OPTIMIZADA: Función exportada para obtener archivos por IDs
+ * Permite procesamiento dinámico sin acumulación en el contexto
+ */
+export async function getFilesByIds(fileIds: string[]): Promise<ClinicalFile[]> {
+  const instance = await HopeAISystemSingleton.getInitializedInstance()
+  return instance.getFilesByIds(fileIds)
 }

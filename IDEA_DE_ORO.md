@@ -1,0 +1,1 @@
+Como Archivista Clínico de HopeAI, mi objetivo es asegurar que esta información esté organizada y lista para su integración en el expediente clínico de Javier, facilitando la continuidad del cuidado y la toma de decisiones profesionales.

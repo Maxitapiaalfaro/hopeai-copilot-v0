@@ -187,16 +187,16 @@ export function useSpeechToText(
     }
   }, [mobileDetection.isMobile, browserSupportsSpeechRecognition])
 
-  // Manejo de timeouts para detección de silencio
+  // Manejo de timeouts para detección de silencio (solo en desktop)
   useEffect(() => {
-    if (listening) {
+    if (listening && !mobileDetection.isMobile) {
       // Limpiar timeout anterior
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current)
       }
       
-      // Configurar timeout de silencio adaptativo (más corto en móvil)
-      const silenceTimeout = mobileDetection.isMobile ? 2000 : 5000
+      // Configurar timeout de silencio solo en desktop
+      const silenceTimeout = 5000
       silenceTimeoutRef.current = setTimeout(() => {
         if (listening && !interimTranscript) {
           console.log('🔇 Silencio detectado, deteniendo grabación automáticamente')
@@ -215,7 +215,7 @@ export function useSpeechToText(
         clearTimeout(silenceTimeoutRef.current)
       }
     }
-  }, [listening, interimTranscript])
+  }, [listening, interimTranscript, mobileDetection.isMobile])
 
   // Resetear estado de procesamiento cuando cambie el estado de listening
   useEffect(() => {
@@ -274,12 +274,14 @@ export function useSpeechToText(
       
       SpeechRecognition.startListening(options)
       
-      // Timeout de procesamiento adaptativo (más corto en móvil para conservar batería)
-      const maxRecordingTime = mobileDetection.isMobile ? 30000 : 60000
-      processingTimeoutRef.current = setTimeout(() => {
-        console.log('⏰ Timeout de grabación alcanzado')
-        stopListening()
-      }, maxRecordingTime)
+      // Timeout de procesamiento solo en desktop (en móvil el usuario controla manualmente)
+      if (!mobileDetection.isMobile) {
+        const maxRecordingTime = 60000
+        processingTimeoutRef.current = setTimeout(() => {
+          console.log('⏰ Timeout de grabación alcanzado')
+          stopListening()
+        }, maxRecordingTime)
+      }
       
       // Timeout de seguridad para evitar bloqueo infinito
       setTimeout(() => {

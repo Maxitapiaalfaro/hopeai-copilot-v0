@@ -1,47 +1,39 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Menu, Brain, Sparkles, FileText, X } from "lucide-react"
+import { History } from "lucide-react"
 
 interface HeaderProps {
-  onToggleSidebar: () => void
-  onToggleDocuments: () => void
-  documentPanelOpen: boolean
+  onHistoryToggle?: () => void
 }
 
-export function Header({ onToggleSidebar, onToggleDocuments, documentPanelOpen }: HeaderProps) {
+export function Header({ onHistoryToggle }: HeaderProps) {
   return (
-    <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onToggleSidebar} className="md:hidden">
-          <Menu className="h-5 w-5" />
+    <header className="px-6 py-6 flex items-center justify-between border-b border-gray-100">
+      <div className="flex items-center gap-4">
+        {/* Botón de historial en móvil - donde antes estaba el toggle */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="md:hidden p-2 h-8 w-8"
+          onClick={onHistoryToggle}
+        >
+          <History className="h-4 w-4" />
         </Button>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Brain className="h-8 w-8 text-blue-600" />
-            <Sparkles className="h-3 w-3 text-amber-500 absolute -top-1 -right-1" />
-          </div>
+        
+        {/* Logo y título con estilo limpio y coherente */}
+        <div className="flex items-center gap-3">
+          {/* Indicador visual minimalista */}
+          <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 opacity-80"></div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">HopeAI</h1>
-            <p className="text-xs text-gray-500">Copilot Clínico</p>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">HopeAI</h1>
+            <p className="text-sm text-gray-600 font-medium -mt-1">Copilot Clínico</p>
           </div>
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <div className="hidden sm:flex items-center gap-1 text-xs text-gray-500">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          Sistema activo
-        </div>
 
-        <Button
-          variant={documentPanelOpen ? "default" : "outline"}
-          size="sm"
-          onClick={onToggleDocuments}
-          className="flex items-center gap-1"
-        >
-          {documentPanelOpen ? <X className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-          <span className="hidden sm:inline">{documentPanelOpen ? "Cerrar documentos" : "Documentos"}</span>
-        </Button>
+
       </div>
     </header>
   )

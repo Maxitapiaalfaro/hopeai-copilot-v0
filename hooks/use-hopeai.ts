@@ -89,8 +89,7 @@ export function useHopeAI() {
         hasSession: !!currentSession,
         sessionId: currentSession?.sessionId,
         message: message.substring(0, 50) + '...',
-        useStreaming,
-        sessionId: currentSession.sessionId
+        useStreaming
       })
       
       if (!currentSession) {

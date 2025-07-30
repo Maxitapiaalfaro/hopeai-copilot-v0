@@ -81,7 +81,7 @@ export class ClinicalContextStorage {
 
   // Obtener todas las sesiones de un usuario (método legacy - mantener compatibilidad)
   async getUserSessions(userId: string): Promise<ChatState[]> {
-    const result = await this.getUserSessionsPaginated(userId, { pageSize: 1000 })
+    const result = await this.getUserSessionsPaginated(userId, { pageSize: 2000 })
     return result.items
   }
 
@@ -104,8 +104,8 @@ export class ClinicalContextStorage {
 
     try {
       const {
-        pageSize = 20,
-        pageToken,
+      pageSize = 50,
+      pageToken,
         sortBy = 'lastUpdated',
         sortOrder = 'desc'
       } = options
@@ -212,6 +212,19 @@ export class ClinicalContextStorage {
         request.onsuccess = () => resolve(request.result)
         request.onerror = () => reject(request.error)
       }
+    })
+  }
+
+  async getClinicalFileById(fileId: string): Promise<ClinicalFile | null> {
+    if (!this.db) throw new Error("Database not initialized")
+
+    const transaction = this.db.transaction(["clinical_files"], "readonly")
+    const store = transaction.objectStore("clinical_files")
+
+    return new Promise((resolve, reject) => {
+      const request = store.get(fileId)
+      request.onsuccess = () => resolve(request.result || null)
+      request.onerror = () => reject(request.error)
     })
   }
 

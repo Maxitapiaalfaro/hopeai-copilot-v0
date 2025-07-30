@@ -103,7 +103,7 @@ export class SessionMetricsComprehensiveTracker {
   private interactions: Map<string, ComprehensiveSessionMetrics[]> = new Map();
   
   // Model pricing (tokens per USD) - Update based on current pricing
-  private readonly MODEL_PRICING = {
+  private readonly MODEL_PRICING: Record<string, { inputCostPer1KTokens: number; outputCostPer1KTokens: number }> = {
     'gemini-2.5-flash-lite': {
       inputCostPer1KTokens: 0.000125,  // $0.000125 per 1K input tokens
       outputCostPer1KTokens: 0.000375  // $0.000375 per 1K output tokens
@@ -175,12 +175,12 @@ export class SessionMetricsComprehensiveTracker {
     interaction.timing.orchestrationTime = now - interaction.timing.requestStartTime;
     
     if (!interaction.computational) interaction.computational = {} as any;
-    interaction.computational.agentUsed = agent;
-    interaction.computational.toolsUsed = tools;
+    interaction.computational!.agentUsed = agent;
+    interaction.computational!.toolsUsed = tools;
     
     if (!interaction.behavioral) interaction.behavioral = {} as any;
-    interaction.behavioral.agentSwitched = previousAgent ? previousAgent !== agent : false;
-    interaction.behavioral.previousAgent = previousAgent;
+    interaction.behavioral!.agentSwitched = previousAgent ? previousAgent !== agent : false;
+    interaction.behavioral!.previousAgent = previousAgent;
     
     console.log(`🎯 [SessionMetrics] Orchestration complete for ${interactionId}: ${agent} with ${tools.length} tools`);
   }
@@ -195,11 +195,19 @@ export class SessionMetricsComprehensiveTracker {
     interaction.timing.modelCallStartTime = Date.now();
     
     if (!interaction.computational) interaction.computational = {} as any;
-    interaction.computational.modelUsed = model;
-    interaction.computational.contextWindowSize = contextTokens;
+    interaction.computational!.modelUsed = model;
+    interaction.computational!.contextWindowSize = contextTokens;
     
-    if (!interaction.tokens) interaction.tokens = {} as any;
-    interaction.tokens.contextTokens = contextTokens;
+    if (!interaction.tokens) {
+      interaction.tokens = {
+        contextTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        estimatedCost: 0
+      } as any;
+    }
+    interaction.tokens!.contextTokens = contextTokens;
     
     console.log(`🤖 [SessionMetrics] Model call started for ${interactionId}: ${model} with ${contextTokens} context tokens`);
   }
@@ -225,19 +233,27 @@ export class SessionMetricsComprehensiveTracker {
     interaction.tokens.outputTokens = outputTokens;
     interaction.tokens.totalTokens = inputTokens + outputTokens + (interaction.tokens.contextTokens || 0);
     
-    // Calculate estimated cost
+    // Calculate estimated cost with defensive checks
     const model = interaction.computational?.modelUsed || 'gemini-2.5-flash-lite';
     const pricing = this.MODEL_PRICING[model] || this.MODEL_PRICING['gemini-2.5-flash-lite'];
-    interaction.tokens.estimatedCost = 
-      (inputTokens / 1000) * pricing.inputCostPer1KTokens + 
-      (outputTokens / 1000) * pricing.outputCostPer1KTokens;
+    
+    // Ensure pricing exists and has required properties
+    if (pricing && pricing.inputCostPer1KTokens !== undefined && pricing.outputCostPer1KTokens !== undefined) {
+      interaction.tokens.estimatedCost = 
+        (inputTokens / 1000) * pricing.inputCostPer1KTokens + 
+        (outputTokens / 1000) * pricing.outputCostPer1KTokens;
+    } else {
+      // Default to 0 if pricing is not available
+      interaction.tokens.estimatedCost = 0;
+      console.warn(`⚠️ [SessionMetrics] Pricing not available for model ${model}, defaulting to $0.00`);
+    }
     
     // Behavioral metrics
     if (interaction.behavioral) {
       interaction.behavioral.responseLength = responseText.length;
     }
     
-    console.log(`✅ [SessionMetrics] Model response complete for ${interactionId}: ${inputTokens}→${outputTokens} tokens, $${interaction.tokens.estimatedCost.toFixed(6)} cost`);
+    console.log(`✅ [SessionMetrics] Model response complete for ${interactionId}: ${inputTokens}→${outputTokens} tokens, $${(interaction.tokens.estimatedCost || 0).toFixed(6)} cost`);
   }
 
   /**
@@ -253,9 +269,9 @@ export class SessionMetricsComprehensiveTracker {
     
     // Calculate performance metrics
     if (!interaction.performance) interaction.performance = {} as any;
-    interaction.performance.tokensPerSecond = 
+    interaction.performance!.tokensPerSecond = 
       interaction.tokens.totalTokens / (interaction.timing.totalResponseTime / 1000);
-    interaction.performance.costEfficiency = 
+    interaction.performance!.costEfficiency = 
       interaction.tokens.totalTokens / Math.max(interaction.tokens.estimatedCost, 0.000001);
     
     const completedInteraction = interaction as ComprehensiveSessionMetrics;
@@ -272,7 +288,7 @@ export class SessionMetricsComprehensiveTracker {
     // Clean up active tracking
     this.activeInteractions.delete(interactionId);
     
-    console.log(`🎉 [SessionMetrics] Interaction completed: ${interactionId} | ${interaction.timing.totalResponseTime}ms | ${interaction.tokens.totalTokens} tokens | $${interaction.tokens.estimatedCost.toFixed(6)}`);
+    console.log(`🎉 [SessionMetrics] Interaction completed: ${interactionId} | ${interaction.timing.totalResponseTime}ms | ${interaction.tokens.totalTokens} tokens | $${(interaction.tokens.estimatedCost || 0).toFixed(6)}`);
     
     return completedInteraction;
   }
@@ -323,7 +339,7 @@ export class SessionMetricsComprehensiveTracker {
     
     // Calculate aggregates
     const totalTokens = userInteractions.reduce((sum, i) => sum + i.tokens.totalTokens, 0);
-    const totalCost = userInteractions.reduce((sum, i) => sum + i.tokens.estimatedCost, 0);
+    const totalCost = userInteractions.reduce((sum, i) => sum + (i.tokens.estimatedCost || 0), 0);
     const totalTime = userInteractions.reduce((sum, i) => sum + i.timing.totalResponseTime, 0);
     
     // Calculate preferences
@@ -373,7 +389,7 @@ export class SessionMetricsComprehensiveTracker {
     const sessionInteractions = this.interactions.get(sessionId) || [];
     
     const totalTokens = sessionInteractions.reduce((sum, i) => sum + i.tokens.totalTokens, 0);
-    const totalCost = sessionInteractions.reduce((sum, i) => sum + i.tokens.estimatedCost, 0);
+    const totalCost = sessionInteractions.reduce((sum, i) => sum + (i.tokens.estimatedCost || 0), 0);
     const totalTime = sessionInteractions.reduce((sum, i) => sum + i.timing.totalResponseTime, 0);
     
     // Agent preferences

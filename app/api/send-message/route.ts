@@ -18,8 +18,7 @@ export async function POST(request: NextRequest) {
       message: message.substring(0, 50) + '...',
       useStreaming,
       userId,
-      suggestedAgent,
-      sessionId
+      suggestedAgent
     })
     
     // Obtener el sistema de orquestación optimizado (singleton)

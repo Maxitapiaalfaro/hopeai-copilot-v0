@@ -2,21 +2,19 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { 
-  Search, 
   Plus, 
   Clock, 
   Brain, 
   BookOpen, 
   Stethoscope, 
-  ChevronLeft,
   MessageSquare,
   Trash2,
   RefreshCw,
-  Zap
+  Zap,
+  Menu
 } from "lucide-react"
 import { 
   AlertDialog,
@@ -35,6 +33,7 @@ import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import type { AgentType } from "@/types/clinical-types"
+import { getAgentVisualConfig } from "@/config/agent-visual-config"
 
 interface SidebarProps {
   isOpen: boolean
@@ -52,13 +51,6 @@ const agentIcons = {
   'orquestador': Zap,
 }
 
-const agentColors = {
-  'socratico': "text-blue-600",
-  'clinico': "text-green-600",
-  'academico': "text-purple-600",
-  'orquestador': "text-orange-600",
-}
-
 const agentLabels = {
   'socratico': 'Socrático',
   'clinico': 'Clínico',
@@ -67,7 +59,6 @@ const agentLabels = {
 }
 
 export function Sidebar({ isOpen, onToggle, userId, createSession: createSessionProp, onConversationSelect }: SidebarProps) {
-  const [searchQuery, setSearchQuery] = useState("")
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
   
   // Hooks para gestión de conversaciones
@@ -109,13 +100,8 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
     }
   }, [hasNextPage, isLoadingMore, loadMoreConversations])
   
-  // Filtrar conversaciones basado en la búsqueda
-  const filteredConversations = searchQuery.trim() 
-    ? conversations.filter(conv => 
-        conv.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        conv.preview.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : conversations
+  // Usar todas las conversaciones sin filtrado
+  const filteredConversations = conversations
   
   // Manejar selección de conversación
   const handleConversationSelect = async (sessionId: string) => {
@@ -200,93 +186,62 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
   return (
     <div
       className={cn(
-        "bg-white border-r border-gray-200 flex flex-col transition-all duration-300 shadow-lg relative",
+        "flex flex-col transition-all duration-300 relative bg-gray-50/50",
         isOpen ? "w-80" : "w-0 overflow-hidden md:w-16",
       )}
     >
-      {/* Toggle button */}
-      <Button 
-        variant="ghost" 
-        size="sm" 
-        onClick={onToggle} 
-        className={cn(
-          "absolute top-3 z-10 transition-all duration-300",
-          isOpen ? "right-3" : "right-2 md:right-1"
+      {/* Header estilo Gemini */}
+      <div className={cn("flex flex-col transition-all duration-300", isOpen ? "p-4 pb-2" : "justify-center p-2")}>
+        {!isOpen && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onToggle} 
+            className="h-10 w-10 p-0 hover:bg-gray-100 transition-colors"
+            title="Abrir panel lateral"
+          >
+            <Menu className="h-5 w-5 text-gray-600" />
+          </Button>
         )}
-      >
-        <ChevronLeft className={cn("h-5 w-5 transition-transform duration-300", !isOpen && "rotate-180")} />
-      </Button>
-
-      <div className={cn("border-b border-gray-100 transition-all duration-300", isOpen ? "p-4" : "p-2")}>
-        <Button 
-          onClick={handleNewConversation}
-          className={cn(
-            "bg-blue-600 hover:bg-blue-700 transition-all duration-300",
-            isOpen ? "w-full justify-start gap-2" : "w-full justify-center p-2"
-          )}
-        >
-          <Plus className="h-4 w-4" />
-          {isOpen && "Nueva Conversación"}
-        </Button>
-      </div>
-
-      {isOpen && (
-        <div className="p-4 border-b border-gray-100">
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar conversaciones..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            {/* Controles adicionales */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-xs">
-                  {totalCount > 0 ? `${filteredConversations.length}/${totalCount}` : filteredConversations.length} conversaciones
-                </Badge>
-                {error && (
-                  <Badge variant="destructive" className="text-xs">
-                    Error
-                  </Badge>
-                )}
-              </div>
+        
+        {isOpen && (
+          <>
+            <div className="flex items-center justify-between mb-4">
               <Button 
-                onClick={refreshConversations} 
                 variant="ghost" 
-                size="sm"
-                disabled={isLoading}
-                className="h-6 w-6 p-0"
+                size="sm" 
+                onClick={onToggle} 
+                className="h-8 w-8 p-0 hover:bg-gray-100 transition-colors"
+                title="Cerrar panel lateral"
               >
-                <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
+                <Menu className="h-4 w-4 text-gray-600" />
               </Button>
             </div>
             
-            {/* Mostrar error si existe */}
-            {error && (
-              <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
-                {error}
-                <Button 
-                  onClick={clearError} 
-                  variant="ghost" 
-                  size="sm" 
-                  className="ml-2 h-4 text-xs"
-                >
-                  Cerrar
-                </Button>
-              </div>
-            )}
-          </div>
+            <Button 
+              onClick={handleNewConversation}
+              className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 hover:border-gray-300 transition-all duration-200 h-11 px-4 gap-3 justify-start shadow-sm"
+              disabled={isCreatingSession}
+            >
+              <Plus className="h-4 w-4" />
+              <span className="text-sm font-medium">Nuevo chat</span>
+            </Button>
+          </>
+        )}
+      </div>
+
+      {/* Hint de recientes estilo Gemini */}
+      {isOpen && filteredConversations.length > 0 && (
+        <div className="px-4 pb-2">
+          <span className="text-xs text-gray-600 font-medium">
+            Recientes
+          </span>
         </div>
       )}
 
       <ScrollArea className="flex-1">
         <div onScroll={handleScroll} className="h-full overflow-auto">
-        <div className="p-2">
+        <div className="px-4 pb-4">
           {isLoading && isOpen ? (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="h-4 w-4 animate-spin mr-2" />
@@ -306,62 +261,55 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
             )
           ) : (
             filteredConversations.map((conversation) => {
-              const IconComponent = agentIcons[conversation.activeAgent] || Brain
-              const agentColor = agentColors[conversation.activeAgent] || "text-gray-600"
+              const agentConfig = getAgentVisualConfig(conversation.activeAgent as AgentType)
               const agentLabel = agentLabels[conversation.activeAgent] || conversation.activeAgent
               
               return (
                 <div key={conversation.sessionId} className="relative group">
                   <Button
-                    variant={selectedConversation === conversation.sessionId ? "secondary" : "ghost"}
+                    variant="ghost"
                     className={cn(
-                      "w-full mb-2 transition-all duration-300",
+                      "w-full mb-1 transition-all duration-200 rounded-lg",
                       isOpen ? "justify-start p-3 h-auto text-left" : "justify-center p-2 h-10",
-                      selectedConversation === conversation.sessionId && "bg-blue-50 border-l-4 border-blue-600",
+                      selectedConversation === conversation.sessionId 
+                        ? "bg-gray-100 hover:bg-gray-100" 
+                        : "hover:bg-gray-50",
                     )}
                     onClick={() => handleConversationSelect(conversation.sessionId)}
                     title={!isOpen ? conversation.title : undefined}
                   >
                     {isOpen ? (
-                      <div className="flex items-start gap-3 w-full">
-                        <IconComponent className={cn("h-4 w-4 mt-1 flex-shrink-0", agentColor)} />
+                      <div className="flex items-center gap-3 w-full">
+                        <div className={cn("w-1 h-8 rounded-full flex-shrink-0", agentConfig.buttonBgColor)} />
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm text-gray-900 truncate">{conversation.title}</div>
-                          <div className="text-xs text-gray-500 mt-1 line-clamp-2">{conversation.preview}</div>
-                          <div className="flex items-center gap-2 mt-2">
-                            <div className="flex items-center gap-1 text-xs text-gray-400">
-                              <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(conversation.lastUpdated), { 
-                                addSuffix: true, 
-                                locale: es 
-                              })}
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {agentLabel}
-                            </Badge>
-                            <div className="flex items-center gap-1 text-xs text-gray-400">
-                              <MessageSquare className="h-3 w-3" />
-                              {conversation.messageCount}
-                            </div>
+                          <div className={cn("font-normal text-sm truncate leading-5", agentConfig.textColor)}>
+                            {conversation.title}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">
+                            {formatDistanceToNow(new Date(conversation.lastUpdated), { 
+                              addSuffix: true, 
+                              locale: es 
+                            })}
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <IconComponent className={cn("h-4 w-4", agentColor)} />
+                      // En estado colapsado, no mostrar iconos
+                      <div className="w-full h-full" />
                     )}
                   </Button>
                   
-                  {/* Botón de eliminar (solo visible en hover y cuando está abierto) */}
+                  {/* Botón de eliminar estilo Gemini */}
                   {isOpen && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          className="absolute top-1/2 -translate-y-1/2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -394,50 +342,15 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
             <div className="flex items-center justify-center py-4">
               <div className="flex items-center space-x-2 text-sm text-gray-500">
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Cargando más conversaciones...</span>
+                <span>Cargando más...</span>
               </div>
-            </div>
-          )}
-          
-          {/* Indicador de final de lista */}
-          {!hasNextPage && conversations.length > 0 && (
-            <div className="text-center py-4 text-sm text-gray-500">
-              {totalCount > 0 ? `${conversations.length} de ${totalCount} conversaciones cargadas` : 'Todas las conversaciones cargadas'}
             </div>
           )}
         </div>
         </div>
       </ScrollArea>
 
-      {isOpen && (
-        <div className="p-4 border-t border-gray-100">
-          <div className="text-xs text-gray-500 space-y-2">
-            <div className="font-medium text-gray-700 mb-2">Agentes HopeAI</div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span>Filósofo Socrático</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span>Archivista Clínico</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-              <span>Investigador Académico</span>
-            </div>
-            
-            {/* Estadísticas */}
-            <div className="pt-2 border-t border-gray-100 mt-3">
-              <div className="flex items-center justify-between">
-                <span>Total conversaciones:</span>
-                <Badge variant="secondary" className="text-xs">
-                  {conversations.length}
-                </Badge>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }

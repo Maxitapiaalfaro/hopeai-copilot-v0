@@ -84,6 +84,7 @@ export function FileUploadButton({
         onChange={handleFileSelect}
         className="hidden"
         disabled={disabled || isUploading}
+        aria-label="Seleccionar archivos para subir"
       />
       
       <Button
@@ -105,42 +106,9 @@ export function FileUploadButton({
       </Button>
       
       {/* Pending Files Indicator */}
-      {pendingFiles.length > 0 && (
+      {pendingFiles.length > 0 && !disabled && (
         <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
           {pendingFiles.length}
-        </div>
-      )}
-      
-      {/* Pending Files List */}
-      {pendingFiles.length > 0 && (
-        <div className="absolute bottom-full right-0 mb-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-10">
-          <div className="text-xs font-medium text-gray-700 mb-2">
-            Archivos listos para enviar:
-          </div>
-          <div className="space-y-2 max-h-32 overflow-y-auto">
-            {pendingFiles.map((file) => {
-              const FileIcon = getFileIcon(file.type)
-              return (
-                <div key={file.id} className="flex items-center gap-2 text-xs">
-                  <FileIcon className="h-3 w-3 text-gray-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="truncate font-medium">{file.name}</div>
-                    <div className="text-gray-500">{formatFileSize(file.size)}</div>
-                  </div>
-                  {onRemoveFile && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onRemoveFile(file.id)}
-                      className="h-4 w-4 p-0 hover:bg-red-100"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
         </div>
       )}
       

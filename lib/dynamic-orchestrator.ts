@@ -22,6 +22,7 @@ import { EntityExtractionEngine, ExtractedEntity } from './entity-extraction-eng
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
 import { UserPreferencesManager } from './user-preferences-manager';
 import { ai } from './google-genai-config';
+import type { ClinicalFile } from '@/types/clinical-types';
 
 /**
  * Tipo para el contenido de conversación
@@ -138,7 +139,8 @@ export class DynamicOrchestrator {
   async orchestrate(
     userInput: string,
     sessionId: string,
-    userId: string
+    userId: string,
+    sessionFiles?: ClinicalFile[]
   ): Promise<DynamicOrchestrationResult> {
     const startTime = Date.now();
     
@@ -151,8 +153,8 @@ export class DynamicOrchestrator {
       // 1. Obtener o crear contexto de sesión
       const sessionContext = await this.getOrCreateSession(sessionId, userId);
       
-      // 2. Actualizar historial de conversación
-      this.updateConversationHistory(sessionContext, userInput);
+      // 2. Actualizar historial de conversación con archivos adjuntos
+      this.updateConversationHistory(sessionContext, userInput, sessionFiles);
       
       // 3. Realizar orquestación inteligente
       const orchestrationResult = await this.intentRouter.orchestrateWithTools(
@@ -262,10 +264,22 @@ export class DynamicOrchestrator {
   /**
    * Actualiza el historial de conversación
    */
-  private updateConversationHistory(session: SessionContext, userInput: string): void {
+  private updateConversationHistory(session: SessionContext, userInput: string, sessionFiles?: ClinicalFile[]): void {
+    // ARCHITECTURAL FIX: Enrich user input with file attachment context for orchestration
+    let enrichedUserInput = userInput;
+    
+    if (sessionFiles && sessionFiles.length > 0) {
+      const fileNames = sessionFiles.map(f => f.name).join(', ');
+      enrichedUserInput = `${userInput}
+
+**CONTEXTO PARA ORQUESTACIÓN:** El usuario ha adjuntado ${sessionFiles.length} archivo(s): ${fileNames}. Esta información debe considerarse al seleccionar el agente y herramientas apropiados.`;
+      
+      console.log(`[DynamicOrchestrator] Context enriched with ${sessionFiles.length} files:`, fileNames);
+    }
+    
     session.conversationHistory.push({
       role: 'user',
-      parts: [{ text: userInput }]
+      parts: [{ text: enrichedUserInput }]
     });
     
     session.sessionMetadata.totalInteractions++;

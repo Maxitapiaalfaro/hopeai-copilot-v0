@@ -5,6 +5,9 @@ import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 
+// Estados de transición explícitos para HopeAI
+export type TransitionState = 'idle' | 'thinking' | 'selecting_agent' | 'specialist_responding'
+
 // Interfaz para el estado del sistema HopeAI
 interface HopeAISystemState {
   sessionId: string | null
@@ -15,6 +18,8 @@ interface HopeAISystemState {
   error: string | null
   isInitialized: boolean
   history: ChatMessage[]
+  // Nuevo estado de transición explícito
+  transitionState: TransitionState
   routingInfo?: {
     detectedIntent: string
     targetAgent: AgentType
@@ -32,7 +37,7 @@ interface UseHopeAISystemReturn {
   loadSession: (sessionId: string) => Promise<boolean>
   
   // Comunicación con enrutamiento inteligente
-  sendMessage: (message: string, useStreaming?: boolean) => Promise<any>
+  sendMessage: (message: string, useStreaming?: boolean, attachedFiles?: ClinicalFile[]) => Promise<any>
   switchAgent: (newAgent: AgentType) => Promise<boolean>
   
   // Acceso al historial
@@ -53,7 +58,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     isLoading: false,
     error: null,
     isInitialized: false,
-    history: []
+    history: [],
+    transitionState: 'idle'
   })
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
@@ -263,7 +269,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Enviar mensaje con enrutamiento inteligente
   const sendMessage = useCallback(async (
     message: string,
-    useStreaming = true
+    useStreaming = true,
+    attachedFiles?: ClinicalFile[]
   ): Promise<any> => {
     if (!hopeAISystem.current || !systemState.sessionId) {
       throw new Error('Sistema no inicializado o sesión no encontrada')
@@ -276,7 +283,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         role: 'user',
         content: message,
         timestamp: new Date(),
-        agent: systemState.activeAgent
+        agent: systemState.activeAgent,
+        // ARQUITECTURA OPTIMIZADA: Solo usar fileReferences con IDs
+        fileReferences: attachedFiles?.map(file => file.id) || []
       }
 
       // Actualizar el historial inmediatamente con el mensaje del usuario
@@ -284,10 +293,19 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         ...prev,
         history: [...prev.history, userMessage],
         isLoading: true,
-        error: null
+        error: null,
+        transitionState: 'thinking'
       }))
 
       console.log('📤 Enviando mensaje con enrutamiento inteligente:', message.substring(0, 50) + '...')
+      
+      // Simular estado de selección de agente
+      setTimeout(() => {
+        setSystemState(prev => ({
+          ...prev,
+          transitionState: 'selecting_agent'
+        }))
+      }, 500)
       
       const result = await hopeAISystem.current.sendMessage(
         systemState.sessionId,
@@ -295,6 +313,12 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         useStreaming,
         undefined // suggestedAgent
       )
+      
+      // Cambiar a estado de respuesta del especialista
+      setSystemState(prev => ({
+        ...prev,
+        transitionState: 'specialist_responding'
+      }))
 
       // Actualizar estado con la respuesta y información de enrutamiento
       // Mantener el historial actualizado sin sobrescribir
@@ -303,7 +327,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         history: result.updatedState.history,
         activeAgent: result.updatedState.activeAgent,
         routingInfo: result.response.routingInfo,
-        isLoading: false
+        isLoading: false,
+        transitionState: 'idle'
       }))
 
       console.log('✅ Mensaje enviado exitosamente')
@@ -315,7 +340,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       setSystemState(prev => ({
         ...prev,
         error: 'Error al enviar el mensaje',
-        isLoading: false
+        isLoading: false,
+        transitionState: 'idle'
       }))
       throw error
     }
@@ -368,7 +394,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       isLoading: false,
       error: null,
       isInitialized: systemState.isInitialized,
-      history: []
+      history: [],
+      transitionState: 'idle'
     })
   }, [systemState.isInitialized])
 

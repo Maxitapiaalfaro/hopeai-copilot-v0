@@ -110,11 +110,11 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
         throw new Error(`Configuración no encontrada para agente: ${agent}`)
       }
 
-      // Convertir historial al formato Gemini
-      const geminiHistory = history.map(msg => ({
-        role: msg.role,
-        parts: [{ text: msg.content }]
-      }))
+      // Convertir historial al formato Gemini usando la función optimizada del router clínico
+      // que maneja archivos eficientemente (solo procesa archivos del último mensaje)
+      const geminiHistory = history.length > 0 
+        ? await clinicalAgentRouter.convertHistoryToGeminiFormat(history, agent)
+        : []
 
       // Configuración optimizada con configuraciones específicas del agente
       const chatConfig = {

@@ -124,9 +124,9 @@ export function useMobileSpeechConfig() {
   return React.useMemo(() => {
     // Configuraciones específicas por plataforma para mejorar el speech-to-text
     const config = {
-      // Configuración de timeouts optimizada para móviles
-      silenceTimeout: detection.isMobile ? 2000 : 3000, // Más corto en móvil
-      maxRecordingTime: detection.isMobile ? 30000 : 60000, // Límite menor en móvil
+      // Configuración de timeouts: sin timeouts automáticos en móvil
+      silenceTimeout: detection.isMobile ? null : 3000, // Sin timeout en móvil
+      maxRecordingTime: detection.isMobile ? null : 60000, // Sin límite automático en móvil
       
       // Configuración de sensibilidad
       interimResults: true,

@@ -53,7 +53,7 @@ export const defaultOptimizationConfig: OptimizationConfig = {
   // Persistencia optimizada
   persistence: {
     enableClientPersistence: true,
-    maxStoredSessions: 10,
+    maxStoredSessions: 50,
     compressionEnabled: true
   },
   
@@ -80,7 +80,7 @@ export const conservativeOptimizationConfig: OptimizationConfig = {
   
   persistence: {
     enableClientPersistence: false,
-    maxStoredSessions: 5,
+    maxStoredSessions: 25,
     compressionEnabled: false
   },
   
