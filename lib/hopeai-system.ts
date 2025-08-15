@@ -5,9 +5,11 @@ import { createIntelligentIntentRouter, type EnrichedContext } from "./intellige
 import { DynamicOrchestrator } from "./dynamic-orchestrator"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 import { trackAgentSwitch } from "./sentry-metrics-tracker"
+import { getPatientPersistence } from "./patient-persistence"
+import { PatientSummaryBuilder } from "./patient-summary-builder"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta } from "@/types/clinical-types"
 
 export class HopeAISystem {
   private _initialized = false
@@ -98,6 +100,7 @@ export class HopeAISystem {
     mode: ClinicalMode,
     agent: AgentType,
     sessionId?: string,
+    patientSessionMeta?: PatientSessionMeta
   ): Promise<{ sessionId: string; chatState: ChatState }> {
     if (!this._initialized) await this.initialize()
 
@@ -142,7 +145,7 @@ export class HopeAISystem {
     // Create chat session with agent router
     await clinicalAgentRouter.createChatSession(finalSessionId, agent, chatHistory)
 
-    // Create initial chat state
+    // Create initial chat state with optional patient context
     const chatState: ChatState = {
       sessionId: finalSessionId,
       userId,
@@ -156,8 +159,9 @@ export class HopeAISystem {
         fileReferences: [],
       },
       clinicalContext: {
+        patientId: patientSessionMeta?.patient?.reference,
         sessionType: mode,
-        confidentialityLevel: "high",
+        confidentialityLevel: patientSessionMeta?.patient?.confidentialityLevel || "high",
       },
     }
 
@@ -171,7 +175,8 @@ export class HopeAISystem {
     sessionId: string,
     message: string,
     useStreaming = true,
-    suggestedAgent?: string
+    suggestedAgent?: string,
+    sessionMeta?: PatientSessionMeta
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -213,23 +218,58 @@ export class HopeAISystem {
         parts: [{ text: msg.content }]
       }))
 
-      // ARCHITECTURAL FIX: Create enriched context with current message files for intent detection
-      let enrichedSessionContext = [...sessionContext]
+      // ARQUITECTURA OPTIMIZADA: Crear contexto enriquecido para detección de intención
+      // Incluir archivos de la sesión actual para análisis contextual
+      console.log(`🏥 [HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`);
       
-      // Add current message with files to context for intent detection
-      if (sessionFiles && sessionFiles.length > 0) {
-        const fileNames = sessionFiles.map(f => f.name).join(', ')
-        const currentMessageWithFiles = {
-          role: 'user' as const,
-          parts: [{ 
-            text: `${message}
-
-**CONTEXTO PARA DETECCIÓN DE INTENCIÓN:** El usuario ha adjuntado ${sessionFiles.length} archivo(s): ${fileNames}. Esta información debe considerarse al detectar la intención del mensaje.`
-          }]
+      // PATIENT CONTEXT: Retrieve full patient summary if available
+      let patientSummary: string | undefined = undefined;
+      const patientReference = sessionMeta?.patient?.reference || currentState.clinicalContext?.patientId;
+      
+      if (patientReference) {
+        try {
+          const patientPersistence = getPatientPersistence();
+          const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
+          
+          if (patientRecord) {
+            // Use cached summary if available and valid, otherwise build new one
+            if (patientRecord.summaryCache && PatientSummaryBuilder.isCacheValid(patientRecord)) {
+              patientSummary = patientRecord.summaryCache.text;
+              console.log(`🏥 [HopeAI] Using cached patient summary (${patientRecord.summaryCache.tokenCount || 'unknown'} tokens)`);
+            } else {
+              patientSummary = PatientSummaryBuilder.buildSummary(patientRecord);
+              console.log(`🏥 [HopeAI] Built fresh patient summary for ${patientRecord.displayName}`);
+            }
+          }
+        } catch (error) {
+          console.error(`🏥 [HopeAI] Error retrieving patient summary for ${patientReference}:`, error);
         }
-        enrichedSessionContext.push(currentMessageWithFiles)
-        
-        console.log(`[HopeAI] Context enriched with ${sessionFiles.length} files for intent detection:`, fileNames)
+      }
+      
+      const enrichedSessionContext: EnrichedContext = {
+        sessionFiles: sessionFiles || [],
+        currentMessage: message,
+        conversationHistory: currentState.history.slice(-5), // Últimos 5 mensajes para contexto
+        activeAgent: currentState.activeAgent,
+        clinicalMode: currentState.mode,
+        sessionMetadata: currentState.metadata,
+        // PATIENT CONTEXT: Inject patient reference and full summary if available
+        patient_reference: patientReference,
+        patient_summary: patientSummary,
+        // Required fields for EnrichedContext interface
+        originalQuery: message,
+        detectedIntent: '',
+        extractedEntities: [],
+        entityExtractionResult: { 
+          entities: [], 
+          primaryEntities: [],
+          secondaryEntities: [],
+          confidence: 0,
+          processingTime: 0
+        },
+        sessionHistory: [],
+        transitionReason: '',
+        confidence: 0
       }
 
       // Determinar si usar orquestación avanzada o routing directo
@@ -277,7 +317,10 @@ export class HopeAISystem {
             // 🎯 Información adicional del orchestrator
             recommendations: orchestrationResult.recommendations,
             contextualTools: orchestrationResult.contextualTools,
-            sessionContext: orchestrationResult.sessionContext
+            sessionContext: orchestrationResult.sessionContext,
+            // 🏥 PATIENT CONTEXT: Preserve patient context from enrichedSessionContext
+            patient_reference: enrichedSessionContext.patient_reference,
+            patient_summary: enrichedSessionContext.patient_summary
           }
         }
         
@@ -293,7 +336,8 @@ export class HopeAISystem {
         routingResult = await this.intentRouter.routeUserInput(
           message,
           enrichedSessionContext,
-          currentState.activeAgent
+          currentState.activeAgent,
+          enrichedSessionContext
         )
       }
 
@@ -339,14 +383,19 @@ export class HopeAISystem {
         const confirmationPrompt = this.createAgentConfirmationPrompt(routingResult.targetAgent, message)
         
         // Enviar el prompt de confirmación al agente correspondiente con streaming
+        // 🏥 PATIENT CONTEXT: Include patient context in confirmation context
+        const confirmationContext = {
+          ...routingResult.enrichedContext,
+          isConfirmationRequest: true,
+          patient_reference: patientReference,
+          patient_summary: patientSummary
+        }
+        
         const confirmationResponse = await clinicalAgentRouter.sendMessage(
           sessionId, 
           confirmationPrompt, 
           useStreaming, // Usar streaming también para confirmaciones
-          {
-            ...routingResult.enrichedContext,
-            isConfirmationRequest: true
-          }
+          confirmationContext
         )
 
         // Manejar respuesta según si es streaming o no
@@ -446,11 +495,20 @@ export class HopeAISystem {
 
       // Send message through agent router with enriched context
       // Session files are handled through conversation history, not as attachments
+      // 🏥 PATIENT CONTEXT: Include patient context from sessionMeta
+      const enrichedAgentContext = {
+        ...routingResult.enrichedContext,
+        patient_reference: patientReference,
+        patient_summary: patientSummary
+      }
+      
+      console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
+      
       const response = await clinicalAgentRouter.sendMessage(
         sessionId, 
         message, 
         useStreaming,
-        routingResult.enrichedContext,
+        enrichedAgentContext,
         interactionId  // 📊 Pass interaction ID for metrics tracking
       )
 

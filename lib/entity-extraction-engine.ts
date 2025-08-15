@@ -535,10 +535,26 @@ export class EntityExtractionEngine {
       if (sessionContext.previousEntities) {
         prompt += `- Entidades previas: ${sessionContext.previousEntities.join(', ')}\n`
       }
+      // Patient context biasing for enhanced extraction
+      if (sessionContext.patient_reference) {
+        prompt += `- Paciente de referencia: ${sessionContext.patient_reference}\n`
+        prompt += `- IMPORTANTE: Prioriza entidades relacionadas con el contexto específico de este paciente\n`
+      }
+      if (sessionContext.clinicalMode) {
+        prompt += `- Modo clínico: ${sessionContext.clinicalMode}\n`
+      }
+      if (sessionContext.activeAgent) {
+        prompt += `- Especialista activo: ${sessionContext.activeAgent}\n`
+      }
       prompt += `\n`
     }
     
     prompt += `Extrae y clasifica todas las entidades relevantes con alta precisión. Prioriza entidades específicas y técnicas sobre conceptos generales.`
+    
+    // Enhanced instruction for patient-scoped conversations
+    if (sessionContext?.patient_reference) {
+      prompt += ` Cuando hay un paciente de referencia, enfócate especialmente en entidades que puedan ser relevantes para el contexto clínico específico de ese paciente.`
+    }
     
     return prompt
   }

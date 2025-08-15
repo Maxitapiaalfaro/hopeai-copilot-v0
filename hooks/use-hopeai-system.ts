@@ -20,6 +20,8 @@ interface HopeAISystemState {
   history: ChatMessage[]
   // Nuevo estado de transición explícito
   transitionState: TransitionState
+  // Contexto del paciente para sesiones clínicas
+  sessionMeta?: any
   routingInfo?: {
     detectedIntent: string
     targetAgent: AgentType
@@ -37,7 +39,7 @@ interface UseHopeAISystemReturn {
   loadSession: (sessionId: string) => Promise<boolean>
   
   // Comunicación con enrutamiento inteligente
-  sendMessage: (message: string, useStreaming?: boolean, attachedFiles?: ClinicalFile[]) => Promise<any>
+  sendMessage: (message: string, useStreaming?: boolean, attachedFiles?: ClinicalFile[], sessionMeta?: any) => Promise<any>
   switchAgent: (newAgent: AgentType) => Promise<boolean>
   
   // Acceso al historial
@@ -47,6 +49,7 @@ interface UseHopeAISystemReturn {
   clearError: () => void
   resetSystem: () => void
   addStreamingResponseToHistory: (responseContent: string, agent: AgentType) => Promise<void>
+  setSessionMeta: (sessionMeta: any) => void
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
@@ -270,7 +273,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   const sendMessage = useCallback(async (
     message: string,
     useStreaming = true,
-    attachedFiles?: ClinicalFile[]
+    attachedFiles?: ClinicalFile[],
+    sessionMeta?: any
   ): Promise<any> => {
     if (!hopeAISystem.current || !systemState.sessionId) {
       throw new Error('Sistema no inicializado o sesión no encontrada')
@@ -311,7 +315,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         systemState.sessionId,
         message,
         useStreaming,
-        undefined // suggestedAgent
+        undefined, // suggestedAgent
+        sessionMeta || systemState.sessionMeta // patient context metadata
       )
       
       // Cambiar a estado de respuesta del especialista
@@ -434,6 +439,15 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     }
   }, [systemState.sessionId])
 
+  // Establecer contexto del paciente
+  const setSessionMeta = useCallback((sessionMeta: any) => {
+    console.log('🏥 Estableciendo contexto del paciente:', sessionMeta?.patient?.reference || 'None')
+    setSystemState(prev => ({
+      ...prev,
+      sessionMeta
+    }))
+  }, [])
+
   return {
     systemState,
     createSession,
@@ -443,6 +457,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     getHistory,
     clearError,
     resetSystem,
-    addStreamingResponseToHistory
+    addStreamingResponseToHistory,
+    setSessionMeta
   }
 }

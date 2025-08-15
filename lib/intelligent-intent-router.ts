@@ -55,6 +55,16 @@ export interface EnrichedContext {
   confidence: number;
   isExplicitRequest?: boolean;
   isConfirmationRequest?: boolean;
+
+  // PATIENT CONTEXT: Support for patient-scoped conversations
+  patient_reference?: string;
+  patient_summary?: string; // Full patient context summary content
+  sessionFiles?: any[];
+  currentMessage?: string;
+  conversationHistory?: any[];
+  activeAgent?: string;
+  clinicalMode?: string;
+  sessionMetadata?: any;
 }
 
 // Tipos para las respuestas de clasificación
@@ -293,7 +303,8 @@ export class IntelligentIntentRouter {
   async routeUserInput(
     userInput: string,
     sessionContext: Content[],
-    currentAgent?: string
+    currentAgent?: string,
+    enrichedSessionContext?: any
   ): Promise<{
     success: boolean;
     targetAgent: string;
@@ -324,7 +335,7 @@ export class IntelligentIntentRouter {
         // Extracción básica de entidades para contexto
         const entityExtractionResult = await this.entityExtractor.extractEntities(
           userInput,
-          optimizedContext
+          enrichedSessionContext
         );
         
         const enrichedContext = this.createEnrichedContext(
@@ -352,7 +363,7 @@ export class IntelligentIntentRouter {
       }
       
       // Paso 2: Análisis de intención con Function Calling (solo para solicitudes no explícitas)
-      const classificationResult = await this.classifyIntent(userInput, optimizedContext);
+      const classificationResult = await this.classifyIntent(userInput, optimizedContext, enrichedSessionContext);
       
       if (!classificationResult) {
         return this.handleFallback(userInput, optimizedContext, 'No se pudo clasificar la intención');
@@ -361,7 +372,7 @@ export class IntelligentIntentRouter {
       // Paso 3: Extracción semántica de entidades
       const entityExtractionResult = await this.entityExtractor.extractEntities(
         userInput,
-        optimizedContext
+        enrichedSessionContext
       );
 
       if (this.config.enableLogging) {
@@ -484,11 +495,12 @@ export class IntelligentIntentRouter {
    */
   private async classifyIntent(
     userInput: string,
-    sessionContext: Content[]
+    sessionContext: Content[],
+    enrichedSessionContext?: any
   ): Promise<IntentClassificationResult | null> {
     try {
       // Construir prompt con contexto
-      const contextPrompt = this.buildContextualPrompt(userInput, sessionContext);
+      const contextPrompt = this.buildContextualPrompt(userInput, sessionContext, enrichedSessionContext);
       
       const result = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash-lite',
@@ -562,11 +574,25 @@ export class IntelligentIntentRouter {
   /**
    * Construye un prompt optimizado con Chain-of-Thought y Few-Shot examples
    * Ahora utiliza Context Window Manager para manejo inteligente del contexto
+   * Incluye contexto de paciente para sesgo de clasificación cuando está disponible
    */
-  private buildContextualPrompt(userInput: string, sessionContext: Content[]): string {
+  private buildContextualPrompt(userInput: string, sessionContext: Content[], enrichedSessionContext?: any): string {
     // Procesar contexto con Context Window Manager
     const contextResult = this.contextWindowManager.processContext(sessionContext, userInput);
     const optimizedContext = this.formatContextForPrompt(contextResult);
+
+    // Construir contexto de paciente si está disponible
+    let patientContextSection = '';
+    if (enrichedSessionContext?.patient_reference) {
+      patientContextSection = `
+**CONTEXTO DE PACIENTE ACTIVO:**
+Paciente ID: ${enrichedSessionContext.patient_reference}
+Modo Clínico: ${enrichedSessionContext.clinicalMode || 'Estándar'}
+Agente Activo: ${enrichedSessionContext.activeAgent || 'No especificado'}
+
+⚠️ PRIORIDAD: Considera el contexto del paciente específico al clasificar intenciones. Las consultas relacionadas con este paciente deben priorizarse según su historial y necesidades terapéuticas.
+`;
+    }
 
     return `Eres el Orquestador Inteligente de HopeAI, especializado en clasificación semántica de intenciones para profesionales de psicología.
 
@@ -588,7 +614,7 @@ export class IntelligentIntentRouter {
 • EJEMPLOS: "¿Qué estudios avalan EMDR?", "Busca evidencia sobre TCC", "Necesito investigación sobre trauma", "el investigador académico?", "investigador?"
 
 **CONTEXTO CONVERSACIONAL OPTIMIZADO:**
-${optimizedContext}
+${optimizedContext}${patientContextSection}
 
 **MENSAJE A CLASIFICAR:**
 "${userInput}"

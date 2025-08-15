@@ -11,14 +11,15 @@ export async function POST(request: NextRequest) {
   
   try {
     requestBody = await request.json()
-    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent } = requestBody
+    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta } = requestBody
     
     console.log('🔄 API: Enviando mensaje con sistema optimizado...', {
       sessionId,
       message: message.substring(0, 50) + '...',
       useStreaming,
       userId,
-      suggestedAgent
+      suggestedAgent,
+      patientReference: sessionMeta?.patient?.reference || 'None'
     })
     
     // Obtener el sistema de orquestación optimizado (singleton)
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
       message,
       useStreaming,
       suggestedAgent,
-      // Files are now loaded from session automatically
+      sessionMeta // Pass patient context metadata
     )
     
     console.log('🎯 Orquestación optimizada completada:', {

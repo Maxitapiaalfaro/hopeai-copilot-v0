@@ -14,7 +14,8 @@ import {
   Trash2,
   RefreshCw,
   Zap,
-  Menu
+  Menu,
+  Users
 } from "lucide-react"
 import { 
   AlertDialog,
@@ -32,8 +33,9 @@ import { useConversationHistory } from "@/hooks/use-conversation-history"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
-import type { AgentType } from "@/types/clinical-types"
+import type { AgentType, PatientRecord } from "@/types/clinical-types"
 import { getAgentVisualConfig } from "@/config/agent-visual-config"
+import { PatientLibrarySection } from "@/components/patient-library-section"
 
 interface SidebarProps {
   isOpen: boolean
@@ -41,6 +43,7 @@ interface SidebarProps {
   userId?: string
   createSession?: (userId: string, mode: any, agent: any) => Promise<string | null>
   onConversationSelect?: (sessionId: string) => void
+  onPatientConversationStart?: (patient: PatientRecord) => void
 }
 
 // Mapeo de agentes para compatibilidad con el sistema anterior
@@ -58,8 +61,9 @@ const agentLabels = {
   'orquestador': 'Orquestador',
 }
 
-export function Sidebar({ isOpen, onToggle, userId, createSession: createSessionProp, onConversationSelect }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, userId, createSession: createSessionProp, onConversationSelect, onPatientConversationStart }: SidebarProps) {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'conversations' | 'patients'>('conversations')
   
   // Hooks para gestión de conversaciones
   const {
@@ -239,117 +243,164 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
         </div>
       )}
 
-      <ScrollArea className="flex-1">
-        <div onScroll={handleScroll} className="h-full overflow-auto">
-        <div className="px-4 pb-4">
-          {isLoading && isOpen ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm text-gray-500">Cargando...</span>
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            isOpen && (
-              <div className="text-center py-8 text-gray-500">
-                <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">
-                  {conversations.length === 0 
-                    ? 'No hay conversaciones'
-                    : 'No se encontraron conversaciones'
-                  }
-                </p>
-              </div>
-            )
-          ) : (
-            filteredConversations.map((conversation) => {
-              const agentConfig = getAgentVisualConfig(conversation.activeAgent as AgentType)
-              const agentLabel = agentLabels[conversation.activeAgent] || conversation.activeAgent
-              
-              return (
-                <div key={conversation.sessionId} className="relative group">
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      "w-full mb-1 transition-all duration-200 rounded-lg",
-                      isOpen ? "justify-start p-3 h-auto text-left" : "justify-center p-2 h-10",
-                      selectedConversation === conversation.sessionId 
-                        ? "bg-gray-100 hover:bg-gray-100" 
-                        : "hover:bg-gray-50",
-                    )}
-                    onClick={() => handleConversationSelect(conversation.sessionId)}
-                    title={!isOpen ? conversation.title : undefined}
-                  >
-                    {isOpen ? (
-                      <div className="flex items-center gap-3 w-full">
-                        <div className={cn("w-1 h-8 rounded-full flex-shrink-0", agentConfig.buttonBgColor)} />
-                        <div className="flex-1 min-w-0">
-                          <div className={cn("font-normal text-sm truncate leading-5", agentConfig.textColor)}>
-                            {conversation.title}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5 truncate">
-                            {formatDistanceToNow(new Date(conversation.lastUpdated), { 
-                              addSuffix: true, 
-                              locale: es 
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      // En estado colapsado, no mostrar iconos
-                      <div className="w-full h-full" />
-                    )}
-                  </Button>
-                  
-                  {/* Botón de eliminar estilo Gemini */}
-                  {isOpen && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="absolute top-1/2 -translate-y-1/2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>¿Eliminar conversación?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta acción no se puede deshacer. La conversación "{conversation.title}" 
-                            será eliminada permanentemente.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction 
-                            onClick={(e) => handleDeleteConversation(conversation.sessionId, e)}
-                            className="bg-red-600 hover:bg-red-700"
-                          >
-                            Eliminar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </div>
-              )
-            })
-          )}
-          
-          {/* Indicador de carga para más conversaciones */}
-          {isLoadingMore && (
-            <div className="flex items-center justify-center py-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Cargando más...</span>
-              </div>
-            </div>
-          )}
+      {/* Tab Navigation */}
+      {isOpen && (
+        <div className="flex border-b border-gray-200">
+          <Button
+            variant="ghost"
+            className={cn(
+              "flex-1 rounded-none border-b-2 transition-colors",
+              activeTab === 'conversations'
+                ? "border-blue-500 text-blue-600 bg-blue-50"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            )}
+            onClick={() => setActiveTab('conversations')}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Conversaciones
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "flex-1 rounded-none border-b-2 transition-colors",
+              activeTab === 'patients'
+                ? "border-blue-500 text-blue-600 bg-blue-50"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            )}
+            onClick={() => setActiveTab('patients')}
+          >
+            <Users className="mr-2 h-4 w-4" />
+            Pacientes
+          </Button>
         </div>
-        </div>
-      </ScrollArea>
+      )}
 
+      {/* Tab Content */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'conversations' ? (
+          <ScrollArea className="h-full">
+            <div onScroll={handleScroll} className="h-full overflow-auto">
+            <div className="px-4 pb-4">
+              {isLoading && isOpen ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm text-gray-500">Cargando...</span>
+                </div>
+              ) : filteredConversations.length === 0 ? (
+                isOpen && (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">
+                      {conversations.length === 0 
+                        ? 'No hay conversaciones'
+                        : 'No se encontraron conversaciones'
+                      }
+                    </p>
+                  </div>
+                )
+              ) : (
+                filteredConversations.map((conversation) => {
+                  const agentConfig = getAgentVisualConfig(conversation.activeAgent as AgentType)
+                  const agentLabel = agentLabels[conversation.activeAgent] || conversation.activeAgent
+                  
+                  return (
+                    <div key={conversation.sessionId} className="relative group">
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "w-full mb-1 transition-all duration-200 rounded-lg",
+                          isOpen ? "justify-start p-3 h-auto text-left" : "justify-center p-2 h-10",
+                          selectedConversation === conversation.sessionId 
+                            ? "bg-gray-100 hover:bg-gray-100" 
+                            : "hover:bg-gray-50",
+                        )}
+                        onClick={() => handleConversationSelect(conversation.sessionId)}
+                        title={!isOpen ? conversation.title : undefined}
+                      >
+                        {isOpen ? (
+                          <div className="flex items-center gap-3 w-full">
+                            <div className={cn("w-1 h-8 rounded-full flex-shrink-0", agentConfig.buttonBgColor)} />
+                            <div className="flex-1 min-w-0">
+                              <div className={cn("font-normal text-sm truncate leading-5", agentConfig.textColor)}>
+                                {conversation.title}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                {formatDistanceToNow(new Date(conversation.lastUpdated), { 
+                                  addSuffix: true, 
+                                  locale: es 
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          // En estado colapsado, no mostrar iconos
+                          <div className="w-full h-full" />
+                        )}
+                      </Button>
+                      
+                      {/* Botón de eliminar estilo Gemini */}
+                      {isOpen && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="absolute top-1/2 -translate-y-1/2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar conversación?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta acción no se puede deshacer. La conversación "{conversation.title}" 
+                                será eliminada permanentemente.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={(e) => handleDeleteConversation(conversation.sessionId, e)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Eliminar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+              
+              {/* Indicador de carga para más conversaciones */}
+              {isLoadingMore && (
+                <div className="flex items-center justify-center py-4">
+                  <div className="flex items-center space-x-2 text-sm text-gray-500">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Cargando más...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            </div>
+          </ScrollArea>
+        ) : (
+          <PatientLibrarySection 
+            isOpen={isOpen}
+            onPatientSelect={(patient) => {
+              console.log('Patient selected:', patient.displayName)
+            }}
+            onStartConversation={(patient) => {
+              console.log('Starting conversation with patient:', patient.displayName)
+              onPatientConversationStart?.(patient)
+            }}
+          />
+        )}
+      </div>
 
     </div>
   )

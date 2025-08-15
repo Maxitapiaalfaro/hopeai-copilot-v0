@@ -1056,6 +1056,20 @@ Como especialista en evidencia científica, puedes utilizar este material para i
     
     let enhancedMessage = originalMessage
     
+    // PATIENT CONTEXT: Agregar contexto del paciente si está disponible
+    if (enrichedContext.patient_reference) {
+      console.log(`🏥 [ClinicalRouter] Adding patient context for: ${enrichedContext.patient_reference}`)
+      
+      if (enrichedContext.patient_summary) {
+        // Include full patient summary content
+        console.log(`🏥 [ClinicalRouter] Including full patient summary content`)
+        enhancedMessage += `\n\n[CONTEXTO DEL PACIENTE]\n${enrichedContext.patient_summary}\n\n[Considera toda esta información del paciente en tu respuesta clínica.]`
+      } else {
+        // Fallback to just patient ID if summary not available
+        enhancedMessage += `\n\n[CONTEXTO DEL PACIENTE: Esta conversación está relacionada con el paciente ID: ${enrichedContext.patient_reference}. Considera este contexto en tu respuesta.]`
+      }
+    }
+    
     // Agregar entidades extraídas si están disponibles
     if (enrichedContext.extractedEntities && enrichedContext.extractedEntities.length > 0) {
       const entitiesText = enrichedContext.extractedEntities.join(", ")

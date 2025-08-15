@@ -13,9 +13,11 @@ import { HopeAISystemSingleton } from "@/lib/hopeai-system"
 import { useSessionMetrics } from "@/hooks/use-session-metrics"
 import { useConversationHistory } from "@/hooks/use-conversation-history"
 import { usePioneerInvitation } from "@/hooks/use-pioneer-invitation"
+import { usePatientChatSession } from "@/hooks/use-patient-chat-session"
 import { PioneerCircleInvitation } from "@/components/pioneer-circle-invitation"
 import { DebugPioneerInvitation } from "@/components/debug-pioneer-invitation"
-import type { AgentType, ClinicalFile } from "@/types/clinical-types"
+import type { AgentType, ClinicalFile, PatientRecord } from "@/types/clinical-types"
+import { PatientContextComposer } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
 
 // Componente de métricas de rendimiento (opcional, para desarrollo)
@@ -52,7 +54,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     getHistory,
     clearError,
     addStreamingResponseToHistory,
-    loadSession
+    loadSession,
+    setSessionMeta
   } = useHopeAISystem()
 
   // Integración de métricas Sentry - Fase 1
@@ -93,6 +96,14 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     currentMessageCount: systemState.history?.length || 0, // Usar el count real
     totalConversations: totalConversationsCount || 0 // NUEVA: Pasar el conteo real de conversaciones
   })
+
+  // Hook para gestión de conversaciones con pacientes
+  const {
+    startPatientConversation,
+    isStartingConversation,
+    error: patientConversationError,
+    clearError: clearPatientError
+  } = usePatientChatSession()
 
   // Debug logging para Pioneer Circle
   useEffect(() => {
@@ -323,6 +334,54 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     console.log('📋 Invitación Pioneer Circle mostrada')
   }
 
+  // Manejar inicio de conversación con paciente
+  const handlePatientConversationStart = async (patient: PatientRecord, initialMessage?: string) => {
+    try {
+      console.log('🏥 Iniciando conversación con paciente:', patient.displayName)
+      
+      // Limpiar cualquier error previo
+      if (patientConversationError) {
+        clearPatientError()
+      }
+      
+      // Iniciar conversación con paciente usando el hook especializado
+      const sessionId = await startPatientConversation(patient, initialMessage)
+      
+      if (sessionId) {
+        console.log('✅ Conversación con paciente iniciada exitosamente:', sessionId)
+        
+        // CRÍTICO: Cargar la nueva sesión en el sistema principal
+        const loadSuccess = await loadSession(sessionId)
+        
+        if (loadSuccess) {
+          console.log('✅ Sesión del paciente cargada en el sistema principal:', sessionId)
+          
+          // Crear y establecer el contexto del paciente en el sistema
+          const composer = new PatientContextComposer()
+          const patientSessionMeta = composer.createSessionMetadata(
+            patient,
+            {
+              sessionId,
+              userId: systemState.userId || "demo_user",
+              clinicalMode: "clinical",
+              activeAgent: systemState.activeAgent
+            }
+          )
+          
+          // Establecer el contexto del paciente en el sistema
+          setSessionMeta(patientSessionMeta)
+          console.log('🏥 Contexto del paciente establecido en el sistema:', patient.displayName)
+        } else {
+          console.error('❌ Error cargando sesión del paciente en el sistema principal')
+        }
+      } else {
+        console.error('❌ Error iniciando conversación con paciente')
+      }
+    } catch (error) {
+      console.error('❌ Error en handlePatientConversationStart:', error)
+    }
+  }
+
   // Función de subida de documentos usando HopeAI System con estado reactivo
   const handleUploadDocument = async (file: File) => {
     if (!systemState.sessionId) {
@@ -527,6 +586,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         userId={systemState.userId || "demo_user"}
         createSession={createSession}
         onConversationSelect={handleConversationSelect}
+        onPatientConversationStart={handlePatientConversationStart}
       />
 
       {/* Main Content Area */}

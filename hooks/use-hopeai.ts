@@ -84,7 +84,7 @@ export function useHopeAI() {
 
   // Send message
   const sendMessage = useCallback(
-    async (message: string, useStreaming = true) => {
+    async (message: string, useStreaming = true, sessionMeta?: any) => {
       console.log('🔄 Hook: sendMessage llamado', {
         hasSession: !!currentSession,
         sessionId: currentSession?.sessionId,
@@ -101,16 +101,20 @@ export function useHopeAI() {
       setError(null)
 
       try {
-        console.log('📡 Hook: Enviando request a /api/send-message')
+        console.log('📡 Hook: Enviando request a /api/send-message', {
+          hasSessionMeta: !!sessionMeta,
+          patientReference: sessionMeta?.patient?.reference
+        })
         const response = await fetch('/api/send-message', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-                    body: JSON.stringify({ 
+          body: JSON.stringify({ 
             sessionId: currentSession.sessionId, 
             message, 
-            useStreaming
+            useStreaming,
+            sessionMeta
           }),
         })
 
