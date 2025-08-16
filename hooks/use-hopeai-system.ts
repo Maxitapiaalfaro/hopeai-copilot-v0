@@ -92,7 +92,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         mode: chatState.mode,
         activeAgent: chatState.activeAgent,
         history: chatState.history,
-        isLoading: false
+        isLoading: false,
+        // Limpiar sessionMeta si la sesión cargada no tiene contexto de paciente
+        sessionMeta: chatState.clinicalContext?.patientId ? prev.sessionMeta : undefined
       }))
 
       console.log('✅ Sesión HopeAI cargada:', sessionId)

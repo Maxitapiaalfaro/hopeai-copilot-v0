@@ -592,7 +592,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <Header onHistoryToggle={() => setMobileNavOpen(true)} />
+        <Header 
+              onHistoryToggle={() => setMobileNavOpen(true)} 
+              sessionMeta={systemState.sessionMeta}
+            />
 
         {/* Mobile Navigation */}
         {isMobile && (
