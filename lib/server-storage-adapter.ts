@@ -1,4 +1,4 @@
-import type { ChatState, ClinicalFile } from "@/types/clinical-types"
+import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinical-types"
 
 /**
  * Adaptador de almacenamiento para el servidor que simula el comportamiento
@@ -8,6 +8,7 @@ import type { ChatState, ClinicalFile } from "@/types/clinical-types"
 export class ServerStorageAdapter {
   private chatSessions = new Map<string, ChatState>()
   private clinicalFiles = new Map<string, ClinicalFile>()
+  private fichasClinicas = new Map<string, FichaClinicaState>()
   private userPreferences = new Map<string, any>()
   private initialized = false
 
@@ -151,11 +152,31 @@ export class ServerStorageAdapter {
     this.clinicalFiles.delete(fileId)
   }
 
+  // ---- Fichas Clínicas (in-memory) ----
+  async saveFichaClinica(ficha: FichaClinicaState): Promise<void> {
+    if (!this.initialized) throw new Error("Storage not initialized")
+    this.fichasClinicas.set(ficha.fichaId, {
+      ...ficha,
+      ultimaActualizacion: new Date(ficha.ultimaActualizacion)
+    })
+  }
+
+  async getFichaClinicaById(fichaId: string): Promise<FichaClinicaState | null> {
+    if (!this.initialized) throw new Error("Storage not initialized")
+    return this.fichasClinicas.get(fichaId) || null
+  }
+
+  async getFichasClinicasByPaciente(pacienteId: string): Promise<FichaClinicaState[]> {
+    if (!this.initialized) throw new Error("Storage not initialized")
+    return Array.from(this.fichasClinicas.values()).filter(f => f.pacienteId === pacienteId)
+  }
+
   async clearAllData(): Promise<void> {
     if (!this.initialized) throw new Error("Storage not initialized")
     
     this.chatSessions.clear()
     this.clinicalFiles.clear()
+    this.fichasClinicas.clear()
     this.userPreferences.clear()
   }
 }

@@ -48,9 +48,11 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePatientLibrary } from "@/hooks/use-patient-library"
+import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import type { PatientRecord } from "@/types/clinical-types"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
+import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
 
 interface PatientLibrarySectionProps {
   isOpen: boolean
@@ -77,8 +79,14 @@ export function PatientLibrarySection({
     searchPatients,
     selectPatient,
     getPatientCount,
-    clearError
+    clearError,
+    refreshPatientSummary,
+    generateFichaClinica,
+    loadFichasClinicas,
+    fichasClinicas
   } = usePatientLibrary()
+  const { systemState } = useHopeAISystem()
+  const [isFichaOpen, setIsFichaOpen] = useState(false)
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -192,6 +200,48 @@ export function PatientLibrarySection({
   const handleStartConversation = (patient: PatientRecord, event: React.MouseEvent) => {
     event.stopPropagation()
     onStartConversation?.(patient)
+  }
+
+  const handleOpenFicha = async (patient: PatientRecord) => {
+    await loadFichasClinicas(patient.id)
+    setIsFichaOpen(true)
+  }
+
+  const handleGenerateFicha = async (patient: PatientRecord) => {
+    try {
+      const sessionState = {
+        sessionId: systemState.sessionId || `temp_${Date.now()}`,
+        userId: systemState.userId,
+        mode: systemState.mode,
+        activeAgent: systemState.activeAgent,
+        history: systemState.history,
+        metadata: {
+          createdAt: new Date(),
+          lastUpdated: new Date(),
+          totalTokens: 0,
+          fileReferences: []
+        },
+        clinicalContext: {
+          patientId: patient.id,
+          supervisorId: undefined,
+          sessionType: 'standard',
+          confidentialityLevel: patient.confidentiality?.accessLevel || 'medium'
+        }
+      }
+      const patientForm = {
+        displayName: patient.displayName,
+        demographics: patient.demographics,
+        tags: patient.tags,
+        notes: patient.notes,
+        confidentiality: patient.confidentiality
+      }
+      const conversationSummary = systemState.history.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
+      const fichaId = `ficha_${patient.id}_${Date.now()}`
+      await generateFichaClinica(patient.id, fichaId, { ...sessionState, patientForm, conversationSummary } as any)
+      await loadFichasClinicas(patient.id)
+    } catch (err) {
+      console.error('Error generating ficha clínica:', err)
+    }
   }
 
   if (!isOpen) {
@@ -426,6 +476,24 @@ export function PatientLibrarySection({
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                    onClick={async (e) => { e.stopPropagation(); await handleOpenFicha(patient) }}
+                    title="Ver Ficha Clínica"
+                  >
+                    FC
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                    onClick={(e) => { e.stopPropagation(); handleGenerateFicha(patient) }}
+                    title="Generar Ficha Clínica"
+                  >
+                    FC
+                  </Button>
                   
                   <Button
                     variant="ghost"
@@ -604,6 +672,39 @@ export function PatientLibrarySection({
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Ficha Clínica Panel */}
+      {selectedPatient && (
+        <FichaClinicaPanel
+          open={isFichaOpen}
+          onOpenChange={(open) => setIsFichaOpen(open)}
+          patient={selectedPatient}
+          fichas={fichasClinicas as any}
+          onRefresh={async () => { await loadFichasClinicas(selectedPatient.id) }}
+          onGenerate={async () => {
+            const sessionState = {
+              sessionId: systemState.sessionId || `temp_${Date.now()}`,
+              userId: systemState.userId,
+              mode: systemState.mode,
+              activeAgent: systemState.activeAgent,
+              history: systemState.history,
+              metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
+              clinicalContext: { patientId: selectedPatient.id, supervisorId: undefined, sessionType: 'standard', confidentialityLevel: selectedPatient.confidentiality?.accessLevel || 'medium' }
+            }
+            const patientForm = {
+              displayName: selectedPatient.displayName,
+              demographics: selectedPatient.demographics,
+              tags: selectedPatient.tags,
+              notes: selectedPatient.notes,
+              confidentiality: selectedPatient.confidentiality
+            }
+            const conversationSummary = systemState.history.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
+            const fichaId = `ficha_${selectedPatient.id}_${Date.now()}`
+            await generateFichaClinica(selectedPatient.id, fichaId, { ...sessionState, patientForm, conversationSummary } as any)
+            await loadFichasClinicas(selectedPatient.id)
+          }}
+        />
       )}
     </div>
   )

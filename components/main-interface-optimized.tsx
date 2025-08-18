@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { ChatInterface } from "@/components/chat-interface"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
+import { Button } from "@/components/ui/button"
 
 
 import { MobileNav } from "@/components/mobile-nav"
@@ -17,6 +18,7 @@ import { usePatientChatSession } from "@/hooks/use-patient-chat-session"
 import { PioneerCircleInvitation } from "@/components/pioneer-circle-invitation"
 import { DebugPioneerInvitation } from "@/components/debug-pioneer-invitation"
 import type { AgentType, ClinicalFile, PatientRecord } from "@/types/clinical-types"
+import { usePatientRecord } from "@/hooks/use-patient-library"
 import { PatientContextComposer } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
 
@@ -57,6 +59,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     loadSession,
     setSessionMeta
   } = useHopeAISystem()
+
+  // Selected patient for current session (must be before any conditional returns)
+  const patientId = (systemState.sessionMeta && systemState.sessionMeta.patient?.reference) || null
+  const { patient } = usePatientRecord(patientId)
 
   // Integración de métricas Sentry - Fase 1
   const {
@@ -553,6 +559,47 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     )
   }
 
+  const handleGenerateFichaFromChat = async () => {
+    try {
+      if (!systemState.sessionId || !patient) return
+      const sessionState = {
+        sessionId: systemState.sessionId,
+        userId: systemState.userId,
+        mode: systemState.mode,
+        activeAgent: systemState.activeAgent,
+        history: systemState.history,
+        metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
+        clinicalContext: {
+          patientId: patient.id,
+          supervisorId: undefined,
+          sessionType: systemState.mode,
+          confidentialityLevel: patient.confidentiality?.accessLevel || 'medium'
+        }
+      }
+      const patientForm = {
+        displayName: patient.displayName,
+        demographics: patient.demographics,
+        tags: patient.tags,
+        notes: patient.notes,
+        confidentiality: patient.confidentiality
+      }
+      const conversationSummary = systemState.history.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
+      const fichaId = `ficha_${patient.id}_${Date.now()}`
+
+      const res = await fetch(`/api/patients/${encodeURIComponent(patient.id)}/ficha`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fichaId, sessionId: systemState.sessionId, sessionState, patientForm, conversationSummary })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Error generando ficha clínica')
+      }
+    } catch (err) {
+      console.error('❌ Error generando ficha clínica desde chat:', err)
+    }
+  }
+
   if (systemState.error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
@@ -626,6 +673,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               pendingFiles={pendingFiles}
               onRemoveFile={handleRemoveFile}
               transitionState={systemState.transitionState}
+              onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
             />
           </div>
 

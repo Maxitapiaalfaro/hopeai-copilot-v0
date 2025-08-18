@@ -48,6 +48,16 @@ export interface ChatState {
   }
 }
 
+export interface FichaClinicaState {
+  fichaId: string
+  pacienteId: string
+  estado: 'generando' | 'completado' | 'error' | 'actualizando'
+  contenido: string
+  version: number
+  ultimaActualizacion: Date
+  historialVersiones: { version: number, fecha: Date }[]
+}
+
 export interface AgentConfig {
   name: string
   systemInstruction: string
@@ -82,6 +92,10 @@ export interface StorageAdapter {
   deleteChatSession(sessionId: string): Promise<void>
   saveClinicalFile(file: ClinicalFile): Promise<void>
   getClinicalFiles(sessionId: string): Promise<ClinicalFile[]>
+  // Fichas clínicas
+  saveFichaClinica(ficha: FichaClinicaState): Promise<void>
+  getFichaClinicaById(fichaId: string): Promise<FichaClinicaState | null>
+  getFichasClinicasByPaciente(pacienteId: string): Promise<FichaClinicaState[]>
   clearAllData(): Promise<void>
 }
 

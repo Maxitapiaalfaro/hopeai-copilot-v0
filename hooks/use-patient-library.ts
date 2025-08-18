@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import type { PatientRecord } from "@/types/clinical-types"
+import { useState, useEffect, useCallback, useRef } from "react"
+import type { PatientRecord, FichaClinicaState } from "@/types/clinical-types"
 import { getPatientPersistence } from "@/lib/patient-persistence"
 import { PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 
@@ -22,6 +22,12 @@ export interface UsePatientLibraryReturn {
   searchPatients: (query: string) => void
   selectPatient: (patient: PatientRecord | null) => void
   refreshPatientSummary: (patientId: string) => Promise<void>
+  // Ficha clínica
+  generateFichaClinica: (patientId: string, fichaId: string, sessionState: any) => Promise<void>
+  loadFichasClinicas: (patientId: string) => Promise<FichaClinicaState[]>
+  fichasClinicas: FichaClinicaState[]
+  beginFichaPolling: (patientId: string, intervalMs?: number) => void
+  stopFichaPolling: () => void
   
   // Utilities
   getPatientCount: () => number
@@ -38,6 +44,8 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null)
+  const [fichasClinicas, setFichasClinicas] = useState<FichaClinicaState[]>([])
+  const fichaPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   
   const persistence = getPatientPersistence()
 
@@ -195,6 +203,70 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
     }
   }, [persistence, loadPatients])
 
+  // --- Ficha clínica API integration ---
+  const generateFichaClinica = useCallback(async (patientId: string, fichaId: string, sessionState: any) => {
+    try {
+      const { patientForm, conversationSummary, ...sessionStateCore } = sessionState || {}
+      const res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fichaId, sessionState: sessionStateCore, patientForm, conversationSummary })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Error generando ficha')
+      }
+    } catch (err) {
+      console.error('Failed to generate ficha clínica:', err)
+      setError('Failed to generate ficha clínica')
+      throw err
+    }
+  }, [])
+
+  const loadFichasClinicas = useCallback(async (patientId: string): Promise<FichaClinicaState[]> => {
+    try {
+      const res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`)
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Error cargando fichas')
+      }
+      const items: FichaClinicaState[] = Array.isArray(data.items) ? data.items : []
+      setFichasClinicas(items)
+      return items
+    } catch (err) {
+      console.error('Failed to load fichas clínicas:', err)
+      setError('Failed to load fichas clínicas')
+      return []
+    }
+  }, [])
+
+  const beginFichaPolling = useCallback((patientId: string, intervalMs = 3000) => {
+    if (fichaPollRef.current) return
+    fichaPollRef.current = setInterval(async () => {
+      const items = await loadFichasClinicas(patientId)
+      const pending = items.some(i => i.estado === 'generando' || i.estado === 'actualizando')
+      if (!pending && fichaPollRef.current) {
+        clearInterval(fichaPollRef.current)
+        fichaPollRef.current = null
+      }
+    }, intervalMs)
+  }, [loadFichasClinicas])
+
+  const stopFichaPolling = useCallback(() => {
+    if (fichaPollRef.current) {
+      clearInterval(fichaPollRef.current)
+      fichaPollRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (fichaPollRef.current) {
+        clearInterval(fichaPollRef.current)
+      }
+    }
+  }, [])
+
   /**
    * Get patient count
    */
@@ -226,6 +298,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
     patients,
     isLoading,
     error,
+    fichasClinicas,
     searchQuery,
     filteredPatients,
     selectedPatient,
@@ -238,6 +311,10 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
     searchPatients,
     selectPatient,
     refreshPatientSummary,
+    generateFichaClinica,
+    loadFichasClinicas,
+    beginFichaPolling,
+    stopFichaPolling,
     
     // Utilities
     getPatientCount,

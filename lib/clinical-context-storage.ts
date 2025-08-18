@@ -1,8 +1,8 @@
-import type { ChatState, ClinicalFile } from "@/types/clinical-types"
+import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinical-types"
 
 export class ClinicalContextStorage {
   private dbName = "hopeai_clinical_db"
-  private version = 1
+  private version = 2
   private db: IDBDatabase | null = null
 
   async initialize(): Promise<void> {
@@ -42,6 +42,16 @@ export class ClinicalContextStorage {
           const prefsStore = db.createObjectStore("user_preferences", {
             keyPath: "userId",
           })
+        }
+
+        // Store for fichas clínicas
+        if (!db.objectStoreNames.contains("fichas_clinicas")) {
+          const fichasStore = db.createObjectStore("fichas_clinicas", {
+            keyPath: "fichaId",
+          })
+          fichasStore.createIndex("pacienteId", "pacienteId", { unique: false })
+          fichasStore.createIndex("estado", "estado", { unique: false })
+          fichasStore.createIndex("ultimaActualizacion", "ultimaActualizacion", { unique: false })
         }
       }
     })
@@ -241,10 +251,55 @@ export class ClinicalContextStorage {
     })
   }
 
+  // ---- Fichas Clínicas ----
+
+  async saveFichaClinica(ficha: FichaClinicaState): Promise<void> {
+    if (!this.db) throw new Error("Database not initialized")
+
+    const transaction = this.db.transaction(["fichas_clinicas"], "readwrite")
+    const store = transaction.objectStore("fichas_clinicas")
+
+    return new Promise<void>((resolve, reject) => {
+      const request = store.put({
+        ...ficha,
+        ultimaActualizacion: new Date(ficha.ultimaActualizacion),
+      })
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getFichaClinicaById(fichaId: string): Promise<FichaClinicaState | null> {
+    if (!this.db) throw new Error("Database not initialized")
+
+    const transaction = this.db.transaction(["fichas_clinicas"], "readonly")
+    const store = transaction.objectStore("fichas_clinicas")
+
+    return new Promise((resolve, reject) => {
+      const request = store.get(fichaId)
+      request.onsuccess = () => resolve(request.result || null)
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getFichasClinicasByPaciente(pacienteId: string): Promise<FichaClinicaState[]> {
+    if (!this.db) throw new Error("Database not initialized")
+
+    const transaction = this.db.transaction(["fichas_clinicas"], "readonly")
+    const store = transaction.objectStore("fichas_clinicas")
+    const index = store.index("pacienteId")
+
+    return new Promise((resolve, reject) => {
+      const request = index.getAll(pacienteId)
+      request.onsuccess = () => resolve(request.result || [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
   async clearAllData(): Promise<void> {
     if (!this.db) throw new Error("Database not initialized")
 
-    const transaction = this.db.transaction(["chat_sessions", "clinical_files", "user_preferences"], "readwrite")
+    const transaction = this.db.transaction(["chat_sessions", "clinical_files", "user_preferences", "fichas_clinicas"], "readwrite")
 
     await Promise.all([
       new Promise<void>((resolve, reject) => {
@@ -259,6 +314,11 @@ export class ClinicalContextStorage {
       }),
       new Promise<void>((resolve, reject) => {
         const request = transaction.objectStore("user_preferences").clear()
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(request.error)
+      }),
+      new Promise<void>((resolve, reject) => {
+        const request = transaction.objectStore("fichas_clinicas").clear()
         request.onsuccess = () => resolve()
         request.onerror = () => reject(request.error)
       }),

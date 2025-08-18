@@ -31,11 +31,12 @@ interface ChatInterfaceProps {
   pendingFiles?: ClinicalFile[]
   onRemoveFile?: (fileId: string) => void
   transitionState?: TransitionState
+  onGenerateFichaClinica?: () => void
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle' }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', onGenerateFichaClinica }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -639,6 +640,13 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
       {/* Input Area */}
       <div className="p-6">
+        {onGenerateFichaClinica && (
+          <div className="max-w-4xl mx-auto mb-2 flex justify-end">
+            <Button size="sm" variant="outline" onClick={onGenerateFichaClinica}>
+              Generar Ficha Clínica
+            </Button>
+          </div>
+        )}
         <div className="max-w-4xl mx-auto">
           <div className="relative">
             {/* Input container con estilo Gemini adaptado al agente activo */}

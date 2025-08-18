@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+9#!/usr/bin/env node
 
 /**
  * Script de configuración automática para Sentry MCP
