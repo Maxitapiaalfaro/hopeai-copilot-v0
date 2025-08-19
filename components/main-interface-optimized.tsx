@@ -17,8 +17,9 @@ import { usePioneerInvitation } from "@/hooks/use-pioneer-invitation"
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session"
 import { PioneerCircleInvitation } from "@/components/pioneer-circle-invitation"
 import { DebugPioneerInvitation } from "@/components/debug-pioneer-invitation"
-import type { AgentType, ClinicalFile, PatientRecord } from "@/types/clinical-types"
+import type { AgentType, ClinicalFile, PatientRecord, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
+import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
 import { PatientContextComposer } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
 
@@ -45,6 +46,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
   const [pendingFiles, setPendingFiles] = useState<ClinicalFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [isFichaOpen, setIsFichaOpen] = useState(false)
+  const [fichasClinicasLocal, setFichasClinicasLocal] = useState<FichaClinicaState[]>([])
+  const [isFichaLoading, setIsFichaLoading] = useState(false)
+  const [isGenerateFichaLoading, setIsGenerateFichaLoading] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
 
   // Usar el sistema HopeAI
@@ -57,7 +62,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     clearError,
     addStreamingResponseToHistory,
     loadSession,
-    setSessionMeta
+    setSessionMeta,
+    resetSystem
   } = useHopeAISystem()
 
   // Selected patient for current session (must be before any conditional returns)
@@ -122,7 +128,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }, [totalConversationsCount, systemState.history?.length, shouldShowInvitation, eligibilityMetrics])
 
   // Estado para controlar la creación de sesión por defecto
-  const [sessionCreationAttempted, setSessionCreationAttempted] = useState(false)
+  // Eliminado: no crear sesión por defecto; se creará en el primer envío de mensaje
+  // const [sessionCreationAttempted, setSessionCreationAttempted] = useState(false)
 
   // Cargar archivos pendientes cuando cambie la sesión
   useEffect(() => {
@@ -143,49 +150,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }, [systemState.sessionId])
   
   // Crear sesión por defecto si no existe (optimizado para evitar condiciones de carrera)
-  useEffect(() => {
-    // Solo intentar crear sesión una vez cuando el sistema esté completamente inicializado
-    if (systemState.isInitialized && !systemState.sessionId && !systemState.isLoading && !sessionCreationAttempted) {
-      console.log('📝 MainInterfaceOptimized: Creando sesión HopeAI por defecto...')
-      setSessionCreationAttempted(true)
-      
-      // Instrumentación Sentry para creación de sesión
-      Sentry.startSpan(
-        {
-          op: "session.create",
-          name: "Create Default HopeAI Session",
-        },
-        async (span) => {
-          try {
-            span.setAttribute("user.id", "demo_user")
-            span.setAttribute("session.type", "clinical_supervision")
-            span.setAttribute("agent.initial", "socratico")
-            span.setAttribute("session.trigger", "no_session_found")
-            
-            const sessionId = await createSession("demo_user", "clinical_supervision", "socratico")
-            
-            if (sessionId) {
-              // Iniciar tracking de métricas de sesión
-              startMetricsSession("socratico")
-              
-              span.setAttribute("session.id", sessionId)
-              span.setStatus({ code: 1, message: "Session created successfully" })
-              console.log('✅ MainInterfaceOptimized: Nueva sesión HopeAI creada:', sessionId)
-            } else {
-              span.setStatus({ code: 2, message: "Session creation returned null" })
-              console.error('❌ MainInterfaceOptimized: Error - createSession retornó null')
-            }
-          } catch (err) {
-            span.setStatus({ code: 2, message: "Session creation failed" })
-            Sentry.captureException(err)
-            console.error('❌ MainInterfaceOptimized: Error creando sesión:', err)
-            // Resetear flag para permitir reintento
-            setSessionCreationAttempted(false)
-          }
-        }
-      )
-    }
-  }, [systemState.isInitialized, systemState.sessionId, systemState.isLoading, sessionCreationAttempted, createSession, startMetricsSession])
+  // Eliminado: la creación automática de sesión provocaba sesiones vacías
+  // useEffect(() => { ... }, [])
 
   // Responsive sidebar management
   useEffect(() => {
@@ -390,9 +356,20 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
   // Función de subida de documentos usando HopeAI System con estado reactivo
   const handleUploadDocument = async (file: File) => {
-    if (!systemState.sessionId) {
-      console.error('❌ No hay sesión activa para subir documento')
-      throw new Error('No hay sesión activa')
+    // Ensure we have a session ID to associate the upload with
+    let sessionIdForUpload: string | null = systemState.sessionId
+    if (!sessionIdForUpload) {
+      try {
+        const userId = systemState.userId || 'demo_user'
+        const mode = systemState.mode || 'clinical_supervision'
+        const agent = systemState.activeAgent || 'socratico'
+        const sid = await createSession(userId, mode, agent)
+        if (!sid) throw new Error('No se pudo crear la sesión para subir documento')
+        sessionIdForUpload = sid
+      } catch (e) {
+        console.error('❌ No se pudo crear sesión para subir documento', e)
+        throw e
+      }
     }
 
     setIsUploading(true) // ⭐ Bloquear chat mientras se sube archivo
@@ -402,7 +379,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       
       // Usar el sistema HopeAI para subir el documento
       const uploadedFile = await HopeAISystemSingleton.uploadDocument(
-        systemState.sessionId,
+        sessionIdForUpload as string,
         file,
         systemState.userId || 'demo_user'
       )
@@ -549,11 +526,11 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Estados de carga y error
   if (!systemState.isInitialized) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Inicializando HopeAI System...</p>
-          <p className="text-sm text-gray-500 mt-2">Cargando contexto y configuraciones avanzadas</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-foreground/80">Inicializando HopeAI System...</p>
+          <p className="text-sm text-foreground/60 mt-2">Cargando contexto y configuraciones avanzadas</p>
         </div>
       </div>
     )
@@ -561,6 +538,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
   const handleGenerateFichaFromChat = async () => {
     try {
+      setIsGenerateFichaLoading(true)
       if (!systemState.sessionId || !patient) return
       const sessionState = {
         sessionId: systemState.sessionId,
@@ -595,29 +573,55 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'Error generando ficha clínica')
       }
+      await refreshFichaList()
+      setIsFichaOpen(true)
     } catch (err) {
       console.error('❌ Error generando ficha clínica desde chat:', err)
+    } finally {
+      setIsGenerateFichaLoading(false)
+    }
+  }
+
+  const handleOpenFichaFromChat = async () => {
+    try {
+      setIsFichaLoading(true)
+      await refreshFichaList()
+      setIsFichaOpen(true)
+    } finally {
+      setIsFichaLoading(false)
+    }
+  }
+
+  const refreshFichaList = async () => {
+    if (!patient) return
+    try {
+      const res = await fetch(`/api/patients/${encodeURIComponent(patient.id)}/ficha`)
+      const data = await res.json()
+      if (res.ok && Array.isArray(data.items)) {
+        setFichasClinicasLocal(data.items)
+      }
+    } catch (e) {
+      console.error('Error loading fichas clínicas:', e)
     }
   }
 
   if (systemState.error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="text-center">
-          <div className="text-red-600 mb-4">Error: {systemState.error}</div>
+          <div className="text-destructive mb-4">Error: {systemState.error}</div>
           <div className="space-x-2">
-            <button
+            <Button
               onClick={clearError}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              variant="outline"
             >
               Limpiar Error
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Reiniciar
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -625,8 +629,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Sidebar - Conversation History */}
+    <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-background font-sans">
       <Sidebar 
         isOpen={sidebarOpen} 
         onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -634,17 +637,22 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         createSession={createSession}
         onConversationSelect={handleConversationSelect}
         onPatientConversationStart={handlePatientConversationStart}
+        onNewChat={() => {
+          // Reset local pending UI state and HopeAI system
+          setPendingFiles([])
+          // Clear HopeAI state so ChatInterface shows welcome and first send lazily creates a session
+          resetSystem()
+          // Optionally close sidebar on mobile
+          if (isMobile) setSidebarOpen(false)
+        }}
       />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <Header 
-              onHistoryToggle={() => setMobileNavOpen(true)} 
-              sessionMeta={systemState.sessionMeta}
-            />
+          onHistoryToggle={() => setMobileNavOpen(true)} 
+          sessionMeta={systemState.sessionMeta}
+        />
 
-        {/* Mobile Navigation */}
         {isMobile && (
           <MobileNav 
             userId={systemState.userId || "demo_user"}
@@ -652,16 +660,16 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
             onConversationSelect={handleConversationSelect}
             isOpen={mobileNavOpen}
             onOpenChange={setMobileNavOpen}
+            onPatientConversationStart={handlePatientConversationStart}
+            onNewChat={() => {
+              setPendingFiles([])
+              resetSystem()
+            }}
           />
         )}
 
-        {/* Main Content */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Central Chat Area */}
-          <div className="flex-1 flex flex-col overflow-hidden h-full">
-
-
-            {/* Chat Interface */}
+        <main className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden h-full min-h-0">
             <ChatInterface
               activeAgent={systemState.activeAgent}
               isProcessing={systemState.isLoading}
@@ -674,14 +682,25 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               onRemoveFile={handleRemoveFile}
               transitionState={systemState.transitionState}
               onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
+              onOpenFichaClinica={patient ? handleOpenFichaFromChat : undefined}
+              hasExistingFicha={(fichasClinicasLocal && fichasClinicasLocal.length > 0) || false}
+              fichaLoading={isFichaLoading}
+              generateLoading={isGenerateFichaLoading}
             />
+            {patient && (
+              <FichaClinicaPanel
+                open={isFichaOpen}
+                onOpenChange={setIsFichaOpen}
+                patient={patient}
+                fichas={fichasClinicasLocal}
+                onRefresh={refreshFichaList}
+                onGenerate={handleGenerateFichaFromChat}
+              />
+            )}
           </div>
-
-
-        </div>
+        </main>
       </div>
 
-      {/* Invitación al Círculo de Pioneros */}
       {shouldShowInvitation && (
         <PioneerCircleInvitation
           isOpen={shouldShowInvitation}
@@ -695,19 +714,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         />
       )}
 
-      {/* Debug Pioneer Invitation (development only) */}
       {systemState.sessionId && process.env.NODE_ENV === 'development' && showDebugElements && (
-        <DebugPioneerInvitation
-          userId={systemState.userId || "demo_user"}
-          sessionId={systemState.sessionId}
-          currentAgent={systemState.activeAgent}
-          currentMessageCount={systemState.history?.length || 0}
-        />
-      )}
-
-      {/* Performance Metrics (development only) */}
-       {systemState.sessionId && process.env.NODE_ENV === 'development' && showDebugElements && (
-         <div className="fixed bottom-4 right-4 bg-black/80 text-white p-2 rounded text-xs">
+        <div className="fixed bottom-4 right-4 bg-card text-card-foreground p-2 rounded-lg shadow-lg text-xs border border-border">
            <div>Sesión: {systemState.sessionId}</div>
            <div>Agente: {systemState.activeAgent}</div>
            <div>Mensajes: {systemState.history.length}</div>

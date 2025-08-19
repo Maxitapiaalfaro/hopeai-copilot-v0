@@ -116,14 +116,14 @@ export class ClinicalTaskOrchestrator {
         .join('\n')
     }
 
-    const header = '[Directiva] Genera una Ficha Clínica formal basada EXCLUSIVAMENTE en el material provisto.'
-    const source = '[Fuentes Internas] Historial de conversación y formulario/registro del paciente disponibles.'
-    const formBlock = patientFormBlock ? `\n\n[Formulario/Registro del Paciente]\n${patientFormBlock}` : ''
+    const header = 'Genera una Ficha Clínica formal basada exclusivamente en el material provisto.'
+    const source = 'Fuentes internas: historial de conversación y formulario/registro del paciente disponibles.'
+    const formBlock = patientFormBlock ? `\n\nFormulario/Registro del Paciente:\n${patientFormBlock}` : ''
     const autoSummary = !conversationSummary || conversationSummary.trim().length === 0
       ? conversation.split('\n').slice(-6).join('\n')
       : conversationSummary
-    const convoSummaryBlock = autoSummary ? `\n\n[Resumen de Conversación Actual]\n${autoSummary}` : ''
-    return `${header}\n${source}${formBlock}${convoSummaryBlock}\n\n[Historial]\n${conversation}`
+    const convoSummaryBlock = autoSummary ? `\n\nResumen de Conversación Actual:\n${autoSummary}` : ''
+    return `${header}\n${source}${formBlock}${convoSummaryBlock}\n\nHistorial:\n${conversation}`
   }
 
   private async composePartsForModel(
@@ -162,10 +162,9 @@ export class ClinicalTaskOrchestrator {
 
   private getArchivistaSystemInstruction(): string {
     return (
-      'Actúas como Archivista Clínico. Tu única tarea es sintetizar una ficha clínica formal ' +
-      'basada exclusivamente en la información proporcionada. No infieras ni añadas datos externos. ' +
-      'Cita únicamente hechos presentes en el historial y el formulario de admisión. ' +
-      'La precisión y la fidelidad a la fuente son prioritarias.'
+      'Actúas como Archivista Clínico. Tu única tarea es sintetizar una ficha clínica formal basada exclusivamente en la información proporcionada. ' +
+      'No infieras ni añadas datos externos. No incluyas marcadores de sistema, etiquetas entre corchetes ni referencias a instrucciones del sistema. ' +
+      'Escribe únicamente contenido clínico final, claro y profesional. Cita únicamente hechos presentes en el historial y el formulario de admisión. '
     )
   }
 

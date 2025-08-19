@@ -86,7 +86,7 @@ export function MessageFileAttachments({ files, variant = 'compact', isUserMessa
         {files.map((file) => (
           <div
             key={file.id}
-            className="inline-flex items-center gap-1.5 px-2 py-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 rounded-md border border-blue-200 dark:border-blue-800/50 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-2 py-1 bg-secondary/70 text-foreground rounded-md border border-border text-xs font-medium hover:bg-secondary/50 transition-colors paper-noise"
           >
             {getFileIcon(file.name)}
             <span className="truncate max-w-[120px]">
@@ -111,12 +111,12 @@ export function MessageFileAttachments({ files, variant = 'compact', isUserMessa
         {files.map((file) => (
           <div
             key={file.id}
-            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+            className="flex items-center justify-between p-3 bg-muted rounded-lg border border-border paper-noise hover:bg-secondary/50"
           >
             <div className="flex items-center gap-3 flex-1 min-w-0">
               {getFileIcon(file.name)}
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-gray-700 dark:text-gray-300 truncate">
+                <div className="font-medium text-foreground truncate">
                   {file.name}
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">

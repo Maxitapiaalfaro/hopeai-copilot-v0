@@ -76,13 +76,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       {!isUser && (
         <div
           className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1",
-            config?.bgColor || "bg-gray-100",
-            config?.borderColor || "border-gray-200",
-            "border",
+            "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
+            config?.bgColor || "bg-[hsl(var(--agent-orquestador-bg))]",
+            config?.borderColor || "border-[hsl(var(--agent-orquestador-border))]",
           )}
         >
-          <IconComponent className={cn("h-4 w-4", config?.color || "text-gray-600")} />
+          <IconComponent className={cn("h-4 w-4", config?.color || "text-[hsl(var(--agent-orquestador-text))]")} />
         </div>
       )}
 
@@ -91,9 +90,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
         <Card
           className={cn(
-            "p-4 shadow-sm",
-            isUser ? "bg-blue-600 text-white" : config?.bgColor || "bg-white",
-            !isUser && config?.borderColor && `border ${config.borderColor}`,
+            "p-4 shadow-sm paper-noise transition-colors ring-1 ring-transparent",
+            isUser
+              ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-0 shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
+              : config?.bgColor || "bg-[hsl(var(--agent-orquestador-bg))]",
+            !isUser && (config?.borderColor ? `${`border ${config.borderColor}`} brush-border color-fragment hover:bg-secondary/40` : "border border-[hsl(var(--agent-orquestador-border))] brush-border color-fragment hover:bg-secondary/40"),
           )}
         >
           <div className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</div>
@@ -131,8 +132,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0 mt-1">
-          <User className="h-4 w-4 text-white" />
+        <div className="w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] flex items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]">
+          <User className="h-4 w-4 text-[hsl(var(--user-bubble-text))]" />
         </div>
       )}
     </div>

@@ -53,6 +53,7 @@ import type { PatientRecord } from "@/types/clinical-types"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
+import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 
 interface PatientLibrarySectionProps {
   isOpen: boolean
@@ -195,6 +196,8 @@ export function PatientLibrarySection({
   const handlePatientClick = (patient: PatientRecord) => {
     selectPatient(patient)
     onPatientSelect?.(patient)
+    // Trigger starting a patient conversation (create/load session)
+    onStartConversation?.(patient)
   }
 
   const handleStartConversation = (patient: PatientRecord, event: React.MouseEvent) => {
@@ -250,23 +253,23 @@ export function PatientLibrarySection({
         <Button
           variant="ghost"
           size="sm"
-          className="h-10 w-10 p-0 hover:bg-gray-100 transition-colors"
+          className="h-10 w-10 p-0 hover:bg-secondary transition-colors"
           title="Biblioteca de Pacientes"
         >
-          <Users className="h-5 w-5 text-gray-600" />
+          <Users className="h-5 w-5 text-muted-foreground" />
         </Button>
       </div>
     )
   }
 
   return (
-    <div className="border-t border-gray-200 mt-4 pt-4">
+    <div className="border-t border-border/80 mt-4 pt-4">
       {/* Header */}
       <div className="px-4 mb-3">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Pacientes</span>
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground font-sans">Pacientes</span>
             <Badge variant="secondary" className="text-xs">
               {getPatientCount()}
             </Badge>
@@ -276,8 +279,8 @@ export function PatientLibrarySection({
             <DialogTrigger asChild>
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 hover:bg-gray-100 transition-colors"
+                size="icon"
+                className="h-8 w-8"
                 title="Agregar paciente"
               >
                 <Plus className="h-4 w-4" />
@@ -285,12 +288,12 @@ export function PatientLibrarySection({
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Agregar Paciente</DialogTitle>
-                <DialogDescription>
+                <DialogTitle className="font-serif">Agregar Paciente</DialogTitle>
+                <DialogDescription className="font-sans">
                   Crea un nuevo registro de paciente para conversaciones contextualizadas.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
+              <div className="grid gap-4 py-4 font-sans">
                 <div className="grid gap-2">
                   <Label htmlFor="displayName">Nombre de identificación *</Label>
                   <Input
@@ -395,7 +398,7 @@ export function PatientLibrarySection({
         
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar pacientes..."
             value={searchQuery}
@@ -410,13 +413,13 @@ export function PatientLibrarySection({
         <div className="px-4 space-y-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-              <span className="text-sm text-gray-500">Cargando...</span>
+              <RefreshCw className="h-4 w-4 animate-spin mr-2 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground font-sans">Cargando...</span>
             </div>
           ) : filteredPatients.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-muted-foreground">
               <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">
+              <p className="text-sm font-sans">
                 {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
               </p>
             </div>
@@ -428,34 +431,33 @@ export function PatientLibrarySection({
                   className={cn(
                     "w-full p-3 h-auto text-left transition-all duration-200 rounded-lg",
                     selectedPatient?.id === patient.id
-                      ? "bg-blue-50 hover:bg-blue-50 border border-blue-200"
-                      : "hover:bg-gray-50"
+                      ? "bg-primary/10"
+                      : "hover:bg-secondary"
                   )}
                   onClick={() => handlePatientClick(patient)}
                 >
                   <div className="flex items-start gap-3 w-full">
-                    <div className="w-1 h-8 rounded-full bg-blue-500 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-gray-900 truncate">
+                      <div className="font-serif text-sm text-foreground truncate">
                         {patient.displayName}
                       </div>
                       
                       {patient.tags && patient.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {patient.tags.slice(0, 2).map((tag, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0.5">
+                            <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0.5 font-sans">
                               {tag}
                             </Badge>
                           ))}
                           {patient.tags.length > 2 && (
-                            <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0.5 font-sans">
                               +{patient.tags.length - 2}
                             </Badge>
                           )}
                         </div>
                       )}
                       
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-muted-foreground mt-1 font-sans">
                         {formatDistanceToNow(patient.updatedAt, { 
                           addSuffix: true, 
                           locale: es 
@@ -465,40 +467,11 @@ export function PatientLibrarySection({
                   </div>
                 </Button>
                 
-                {/* Action buttons */}
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                    onClick={(e) => handleStartConversation(patient, e)}
-                    title="Iniciar conversación"
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                    onClick={async (e) => { e.stopPropagation(); await handleOpenFicha(patient) }}
-                    title="Ver Ficha Clínica"
-                  >
-                    FC
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                    onClick={(e) => { e.stopPropagation(); handleGenerateFicha(patient) }}
-                    title="Generar Ficha Clínica"
-                  >
-                    FC
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleEditPatient(patient)
@@ -512,8 +485,8 @@ export function PatientLibrarySection({
                     <AlertDialogTrigger asChild>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                        size="icon"
+                        className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
                         onClick={(e) => e.stopPropagation()}
                         title="Eliminar paciente"
                       >
@@ -532,7 +505,7 @@ export function PatientLibrarySection({
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => handleDeletePatient(patient.id)}
-                          className="bg-red-600 hover:bg-red-700"
+                          className="bg-destructive hover:bg-destructive/90"
                         >
                           Eliminar
                         </AlertDialogAction>
@@ -550,12 +523,12 @@ export function PatientLibrarySection({
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Editar Paciente</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="font-serif">Editar Paciente</DialogTitle>
+            <DialogDescription className="font-sans">
               Modifica la información del paciente.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 font-sans">
             <div className="grid gap-2">
               <Label htmlFor="edit-displayName">Nombre de identificación *</Label>
               <Input
@@ -660,12 +633,12 @@ export function PatientLibrarySection({
 
       {error && (
         <div className="px-4 mt-2">
-          <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+          <div className="text-xs text-destructive bg-destructive/10 p-2 rounded font-sans">
             {error}
             <Button
               variant="ghost"
               size="sm"
-              className="ml-2 h-auto p-0 text-red-600 hover:text-red-700"
+              className="ml-2 h-auto p-0 text-destructive hover:text-destructive/80"
               onClick={clearError}
             >
               Cerrar

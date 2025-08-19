@@ -8,8 +8,16 @@ const config: Config = {
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./config/**/*.{js,ts,jsx,tsx,mdx}",
     "*.{js,ts,jsx,tsx,mdx}"
   ],
+  safelist: [
+    'text-sky-800', 'bg-sky-50', 'border-sky-200', 'focus-within:border-sky-300', 'bg-sky-500', 'bg-sky-700', 'hover:bg-sky-800', 'text-sky-50', 'hover:bg-sky-100',
+    'text-emerald-800', 'bg-emerald-50', 'border-emerald-200', 'focus-within:border-emerald-300', 'bg-emerald-500', 'bg-emerald-700', 'hover:bg-emerald-800', 'text-emerald-50', 'hover:bg-emerald-100',
+    'text-amber-800', 'bg-amber-50', 'border-amber-200', 'focus-within:border-amber-300', 'bg-amber-500', 'bg-amber-700', 'hover:bg-amber-800', 'text-amber-50', 'hover:bg-amber-100',
+    'text-slate-800', 'bg-slate-100', 'border-slate-200', 'focus-within:border-slate-300', 'bg-slate-500', 'bg-slate-700', 'hover:bg-slate-800', 'text-slate-50', 'hover:bg-slate-200',
+  ],
+  prefix: "",
   theme: {
   	extend: {
   		colors: {

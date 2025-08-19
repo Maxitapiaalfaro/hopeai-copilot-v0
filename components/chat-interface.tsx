@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown, Brain, Search, Stethoscope, BookOpen, Maximize2, Minimize2 } from "lucide-react"
+import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown, Brain, Search, Stethoscope, BookOpen, Maximize2, Minimize2, FileText, Copy, Check, ThumbsUp, ThumbsDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { AgentType, ChatState, ClinicalFile } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
@@ -14,9 +14,12 @@ import { useSpeechToText } from "@/hooks/use-speech-to-text"
 import { MarkdownRenderer, StreamingMarkdownRenderer } from "@/components/markdown-renderer"
 import { getAgentVisualConfig, getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 import { trackMessage } from "@/lib/sentry-metrics-tracker"
+import { parseMarkdown } from "@/lib/markdown-parser"
+import { toast } from "@/hooks/use-toast"
 import { FileUploadButton } from "@/components/file-upload-button"
 import { MessageFileAttachments } from "@/components/message-file-attachments"
 import { getFilesByIds } from "@/lib/hopeai-system"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
 
@@ -32,11 +35,15 @@ interface ChatInterfaceProps {
   onRemoveFile?: (fileId: string) => void
   transitionState?: TransitionState
   onGenerateFichaClinica?: () => void
+  onOpenFichaClinica?: () => void
+  hasExistingFicha?: boolean
+  fichaLoading?: boolean
+  generateLoading?: boolean
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', onGenerateFichaClinica }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', onGenerateFichaClinica, onOpenFichaClinica, hasExistingFicha = false, fichaLoading = false, generateLoading = false }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -46,7 +53,13 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const [streamingGroundingUrls, setStreamingGroundingUrls] = useState<Array<{title: string, url: string, domain?: string}>>([])  
   const [messageFiles, setMessageFiles] = useState<Record<string, ClinicalFile[]>>({})
   const [isInputExpanded, setIsInputExpanded] = useState(false)
+  const [capabilityIndex, setCapabilityIndex] = useState(0)
+  const [typedHint, setTypedHint] = useState("")
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isInputFocused, setIsInputFocused] = useState(false)
+  const [viewportInset, setViewportInset] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
@@ -79,12 +92,17 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     loadMessageFiles()
   }, [currentSession?.history])
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll only when new content arrives (not on first render or welcome state)
+  const prevHistoryLenRef = useRef<number>(0)
   useEffect(() => {
-    if (autoScroll) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    const currentLen = currentSession?.history?.length || 0
+    const hasNewMessage = currentLen > prevHistoryLenRef.current
+    const hasStreaming = !!streamingResponse
+    if (autoScroll && (hasNewMessage || hasStreaming)) {
+      messagesEndRef.current?.scrollIntoView({ behavior: prevHistoryLenRef.current === 0 ? 'auto' : 'smooth' })
     }
-  }, [currentSession?.history, streamingResponse, autoScroll])
+    prevHistoryLenRef.current = currentLen
+  }, [currentSession?.history?.length, streamingResponse, autoScroll])
 
   // Auto-resize textarea when input value changes
   useEffect(() => {
@@ -96,6 +114,71 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       textarea.style.height = `${newHeight}px`
     }
   }, [inputValue, isInputExpanded])
+
+  // Detect on-screen keyboard via VisualViewport to adjust bottom padding precisely
+  useEffect(() => {
+    const vv: any = (window as any).visualViewport
+    if (!vv) return
+    const handler = () => {
+      const vh = window.innerHeight
+      const inset = Math.max(0, vh - vv.height - (vv.offsetTop || 0))
+      setViewportInset(inset)
+    }
+    handler()
+    vv.addEventListener('resize', handler)
+    vv.addEventListener('scroll', handler)
+    return () => {
+      vv.removeEventListener('resize', handler)
+      vv.removeEventListener('scroll', handler)
+    }
+  }, [])
+
+  // Minimal, unobtrusive rotating capability hint for new sessions
+  const capabilityHints = [
+    // Diálogo/clarificación
+    '"Ayúdame a clarificar mis ideas sobre este caso."',
+    '"Hazme preguntas para guiar el próximo paso."',
+    '"Quiero reflexionar sobre una decisión clínica."',
+    // Síntesis clínica/documentación
+    '"Resume estas notas en formato SOAP."',
+    '"Genera una ficha clínica estructurada."',
+    '"Organiza la evolución de la sesión de hoy."',
+    // Evidencia/Investigación
+    '"¿Qué evidencia respalda EMDR para TEPT? Incluye enlaces."',
+    '"Compara TCC y ACT para ansiedad con referencias."',
+    '"Resume la evidencia reciente sobre exposición prolongada."'
+  ]
+
+  useEffect(() => {
+    const isNewSession = !currentSession?.history || currentSession.history.length === 0
+    if (!isNewSession) return
+    if (inputValue.trim()) return
+
+    const fullText = capabilityHints[capabilityIndex]
+    let timeoutId: any
+
+    if (!isDeleting) {
+      if (typedHint.length < fullText.length) {
+        timeoutId = setTimeout(() => {
+          setTypedHint(fullText.slice(0, typedHint.length + 1))
+        }, 20)
+      } else {
+        // Calm pause: double the previous pulse total (~2.4s * 2 = ~4.8s)
+        timeoutId = setTimeout(() => setIsDeleting(true), 4800)
+      }
+    } else {
+      if (typedHint.length > 0) {
+        timeoutId = setTimeout(() => {
+          setTypedHint(fullText.slice(0, typedHint.length - 1))
+        }, 6)
+      } else {
+        setIsDeleting(false)
+        setCapabilityIndex((i) => (i + 1) % capabilityHints.length)
+      }
+    }
+
+    return () => clearTimeout(timeoutId)
+  }, [capabilityIndex, typedHint, isDeleting, currentSession?.history, inputValue])
 
   // Manejar scroll manual para detectar si el usuario está en el fondo
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -120,7 +203,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (explicitMessage?: string) => {
     console.log('🔄 Frontend: Iniciando envío de mensaje...', {
       hasInput: !!inputValue.trim(),
       hasSession: !!currentSession,
@@ -128,12 +211,13 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       pendingFilesCount: pendingFiles.length
     })
     
-    if (!inputValue.trim() || !currentSession) {
+    const messageToSend = (explicitMessage ?? inputValue).trim()
+    if (!messageToSend) {
       console.log('❌ Frontend: Envío cancelado - falta input o sesión')
       return
     }
 
-    const message = inputValue.trim()
+    const message = messageToSend
     
     // Limpiar input y preparar UI para streaming
     setInputValue("")
@@ -342,18 +426,96 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     })
   }
 
+  // (removed quick-start tips handler; capabilities are now informational only)
+
+  const handleSelectHint = () => {
+    const fullText = capabilityHints[capabilityIndex]
+    const cleaned = fullText.replace(/^"(.*)"$/, '$1')
+    setInputValue(cleaned)
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (textarea) {
+        textarea.focus()
+        const len = cleaned.length
+        textarea.setSelectionRange(len, len)
+      }
+    })
+  }
+
+  const copyMessageContent = async (markdownContent: string, messageId?: string) => {
+    const htmlContent = parseMarkdown(markdownContent)
+
+    const fallbackCopyPlainText = (text: string): boolean => {
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.top = '0'
+        textarea.style.left = '0'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        const successful = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        return successful
+      } catch {
+        return false
+      }
+    }
+
+    let copied = false
+    try {
+      const clipboard: any = (navigator as any).clipboard
+      const ClipboardItemCtor: any = (window as any).ClipboardItem
+      if (clipboard && typeof clipboard.write === 'function' && ClipboardItemCtor) {
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' })
+        const textBlob = new Blob([markdownContent], { type: 'text/plain' })
+        const item = new ClipboardItemCtor({ 'text/html': htmlBlob, 'text/plain': textBlob })
+        await clipboard.write([item])
+        copied = true
+      }
+    } catch {
+      // ignore and try next method
+    }
+
+    if (!copied) {
+      try {
+        await navigator.clipboard.writeText(markdownContent)
+        copied = true
+      } catch {
+        // fallback for iOS Safari and older browsers
+        copied = fallbackCopyPlainText(markdownContent)
+      }
+    }
+
+    if (copied && messageId) {
+      setCopiedMessageId(messageId)
+      setTimeout(() => setCopiedMessageId((id) => (id === messageId ? null : id)), 1500)
+    }
+  }
+
   const config = getAgentVisualConfig(activeAgent)
   const IconComponent = config.icon
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4 relative scrollbar-hide" onScrollCapture={handleScroll} style={{scrollbarWidth: 'none', msOverflowStyle: 'none'}}>
-        <div className="max-w-4xl mx-auto space-y-4">
+    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-serif paper-noise">
+      <ScrollArea
+        className={cn("flex-1 px-4 md:px-6 pt-0 overscroll-contain")}
+        style={{
+          paddingBottom:
+            (isInputFocused || viewportInset > 20)
+              ? `calc(env(safe-area-inset-bottom) + ${Math.min(120, viewportInset + 12)}px)`
+              : `calc(env(safe-area-inset-bottom) + 4px)`
+        }}
+        onScrollCapture={handleScroll}
+      >
+        <div className="w-full md:max-w-3xl md:mx-auto h-full flex flex-col space-y-4 md:space-y-8 pt-1 md:pt-2">
           {/* Indicador de mensajes anteriores */}
           {currentSession?.history && currentSession.history.length > visibleMessageCount && (
             <div className="text-center py-2">
-              <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-2">
+              <div className="text-sm text-muted-foreground bg-secondary/50 rounded-lg p-2">
                 Mostrando {visibleMessageCount} de {currentSession.history.length} mensajes
                 <br />
                 <span className="text-xs">Desplázate hacia arriba para cargar más</span>
@@ -361,78 +523,34 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             </div>
           )}
 
-          {/* Welcome suggestions if no history */}
+          {/* Welcome greeting with minimal rotating capability hint */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
-            <div className="space-y-8 animate-in fade-in duration-700 ease-out">
-              {/* Mensaje de bienvenida minimalista */}
-              <div className="text-center space-y-3">
-                <div className="space-y-1">
-                  <h2 className="text-lg font-medium text-gray-900">¿En qué puedo ayudarte hoy?</h2>
-                  <p className="text-sm text-gray-500">Explora estas opciones para comenzar</p>
-                </div>
-              </div>
-              
-              {/* Sugerencias predefinidas - Diseño minimalista */}
-              <div className="grid gap-3 max-w-xl mx-auto">
-                {/* Socrático suggestion */}
-                <button
-                  onClick={() => setInputValue("Ayúdame a explorar las emociones y pensamientos de mi paciente con ansiedad social")}
-                  className="animate-slide-up group relative overflow-hidden rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-blue-200 transition-all duration-300 ease-out hover:shadow-sm"
-                  style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
+            <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-2">
+              <h1 className="font-serif text-5xl md:text-6xl tracking-tight text-foreground">
+                Bienvenido a HopeAI
+              </h1>
+              <div className="mt-2 md:mt-3 flex items-center gap-2 text-sm font-sans max-w-xl animate-in fade-in duration-500 ease-out h-5">
+                <p
+                  className="text-muted-foreground cursor-pointer hover:underline underline-offset-4 decoration-muted-foreground/50 hover:text-foreground transition-colors duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-border rounded-sm px-0.5"
+                  role="button"
+                  tabIndex={0}
+                  onClick={handleSelectHint}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectHint() } }}
+                  title="Usar este ejemplo"
                 >
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 group-hover:scale-105 transition-all duration-300">
-                      <Brain className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <h3 className="font-medium text-gray-900 mb-1 group-hover:text-blue-900 transition-colors">Exploración Socrática</h3>
-                      <p className="text-xs text-gray-500 leading-relaxed">Explora emociones y pensamientos con técnicas socráticas</p>
-                    </div>
-                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <span className="text-xs text-gray-600">→</span>
-                    </div>
-                  </div>
-                </button>
-                
-                {/* Clínico suggestion */}
-                <button
-                  onClick={() => setInputValue("Genera un resumen clínico de la sesión con mi paciente que presenta síntomas de depresión")}
-                  className="animate-slide-up group relative overflow-hidden rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-green-200 transition-all duration-300 ease-out hover:shadow-sm"
-                  style={{ animationDelay: '0.2s', animationFillMode: 'both' }}
-                >
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="w-10 h-10 rounded-lg bg-green-50 border border-green-100 flex items-center justify-center flex-shrink-0 group-hover:bg-green-100 group-hover:scale-105 transition-all duration-300">
-                      <Stethoscope className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <h3 className="font-medium text-gray-900 mb-1 group-hover:text-green-900 transition-colors">Documentación Clínica</h3>
-                      <p className="text-xs text-gray-500 leading-relaxed">Genera resúmenes y documentación profesional</p>
-                    </div>
-                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <span className="text-xs text-gray-600">→</span>
-                    </div>
-                  </div>
-                </button>
-                
-                {/* Académico suggestion */}
-                <button
-                  onClick={() => setInputValue("Busca evidencia científica reciente sobre terapia cognitivo-conductual para trastorno de pánico")}
-                  className="animate-slide-up group relative overflow-hidden rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-purple-200 transition-all duration-300 ease-out hover:shadow-sm"
-                  style={{ animationDelay: '0.3s', animationFillMode: 'both' }}
-                >
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 group-hover:scale-105 transition-all duration-300">
-                      <BookOpen className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <h3 className="font-medium text-gray-900 mb-1 group-hover:text-purple-900 transition-colors">Investigación Académica</h3>
-                      <p className="text-xs text-gray-500 leading-relaxed">Busca evidencia científica y estudios recientes</p>
-                    </div>
-                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <span className="text-xs text-gray-600">→</span>
-                    </div>
-                  </div>
-                </button>
+                  {typedHint || '\u00A0'}
+                </p>
+                {typedHint && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none"
+                    onClick={handleSelectHint}
+                    aria-label="Usar este ejemplo"
+                    title="Usar este ejemplo"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -444,69 +562,104 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             const MessageIconComponent = messageAgentConfig.icon;
             
             return (
-              <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div key={message.id} className={`flex items-start gap-4 sm:px-0 px-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 {message.role === "model" && (
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
-                      messageAgentConfig.bgColor,
-                      messageAgentConfig.borderColor,
-                    )}
-                  >
+                  <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
                     <MessageIconComponent className={cn("h-4 w-4", messageAgentConfig.textColor)} />
                   </div>
                 )}
 
                 <div
                   className={cn(
-                    "max-w-[80%] mx-2 p-4 rounded-lg",
-                    message.role === "user" ? "bg-blue-600 text-white" : `${messageAgentConfig.bgColor} border ${messageAgentConfig.borderColor}`,
+                    "max-w-[90%] sm:max-w-[80%] rounded-lg border ring-1 ring-transparent",
+                    message.role === "user"
+                      ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-0 shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
+                      : `${messageAgentConfig.bgColor} ${messageAgentConfig.borderColor}`,
                   )}
                 >
-                  <MarkdownRenderer 
-                    content={message.content}
-                    className="text-sm"
-                    trusted={message.role === "model"}
-                  />
+                  <div className="p-3 md:p-4">
+                    <MarkdownRenderer 
+                      content={message.content}
+                      className="text-base leading-relaxed"
+                      trusted={message.role === "model"}
+                    />
+                  </div>
                   {/* Mostrar archivos adjuntos si existen */}
                   {messageFiles[message.id] && messageFiles[message.id].length > 0 && (
-                        <MessageFileAttachments 
-                          files={messageFiles[message.id]} 
-                          variant="compact"
-                          isUserMessage={message.role === 'user'}
-                        />
+                        <div className="p-3 md:p-4 border-t border-border/80">
+                          <MessageFileAttachments 
+                            files={messageFiles[message.id]} 
+                            variant="compact"
+                            isUserMessage={message.role === 'user'}
+                          />
+                        </div>
                       )}
                   {/* Mostrar referencias de grounding si existen */}
                   {message.groundingUrls && message.groundingUrls.length > 0 && (
-                    <div className="mt-3 pt-2 border-t border-gray-200">
-                      <div className="text-xs font-medium text-gray-600 mb-2">Referencias:</div>
+                    <div className="p-3 md:p-4 border-t border-border/80">
+                      <div className="text-xs font-sans font-medium text-muted-foreground mb-2">Referencias:</div>
                       <div className="space-y-1">
                         {message.groundingUrls.map((ref, index) => (
-                          <div key={index} className="text-xs">
+                          <div key={index} className="text-sm font-sans">
                             <a 
                               href={ref.url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 underline"
+                              className="text-primary hover:underline"
                             >
                               {ref.title}
                             </a>
                             {ref.domain && (
-                              <span className="text-gray-500 ml-1">({ref.domain})</span>
+                              <span className="text-muted-foreground ml-1">({ref.domain})</span>
                             )}
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                  <div className={cn("text-xs mt-1", message.role === "user" ? "text-blue-100" : "text-gray-500")}>
-                    {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </div>
+                  {/* Copy to clipboard for AI messages */}
+                  {message.role === 'model' && (
+                    <div className="p-2 md:p-3 border-t border-border/80">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => copyMessageContent(message.content, message.id)}
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          aria-label="Copiar contenido"
+                          title="Copiar contenido"
+                        >
+                          {copiedMessageId === message.id ? (
+                            <Check className="h-4 w-4 text-green-600 animate-in fade-in zoom-in-50 duration-150" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          aria-label="Me gusta"
+                          title="Me gusta"
+                        >
+                          <ThumbsUp className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          aria-label="No me gusta"
+                          title="No me gusta"
+                        >
+                          <ThumbsDown className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {message.role === "user" && (
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-1">
-                    <User className="h-4 w-4 text-white" />
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] flex items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]">
+                    <User className="h-4 w-4 text-[hsl(var(--user-bubble-text))]" />
                   </div>
                 )}
               </div>
@@ -515,108 +668,72 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
           {/* Streaming Response */}
           {isStreaming && streamingResponse && (
-            <div className="flex justify-start animate-in fade-in slide-in-from-left-2 duration-500 ease-out">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border transition-all duration-300 ease-out",
-                  config.bgColor,
-                  config.borderColor,
-                )}
-              >
-                <IconComponent className={cn("h-4 w-4 transition-all duration-300 ease-out", config.textColor)} />
+            <div className="flex items-start gap-4 sm:px-0 px-2 animate-in fade-in slide-in-from-left-2 duration-500 ease-out">
+              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
+                <IconComponent className={cn("h-4 w-4", config.textColor)} />
               </div>
-              <div className={cn("max-w-[80%] mx-2 p-4 rounded-lg transition-all duration-300 ease-out", config.bgColor, `border ${config.borderColor}`)}>                <StreamingMarkdownRenderer                   content={streamingResponse}                  className="text-sm"                  showTypingIndicator={true}                />                {/* Mostrar referencias de grounding durante streaming si existen */}
+              <div className={cn("max-w-[80%] rounded-lg p-4 border", config.bgColor, config.borderColor)}>
+                <StreamingMarkdownRenderer
+                  content={streamingResponse}
+                  className="text-base leading-relaxed"
+                  showTypingIndicator={true}
+                />
                 {streamingGroundingUrls && streamingGroundingUrls.length > 0 && (
-                  <div className="mt-3 pt-2 border-t border-gray-200 animate-in fade-in duration-300 ease-out">
-                    <div className="text-xs font-medium text-gray-600 mb-2">Referencias:</div>
+                  <div className="mt-3 pt-3 border-t border-border/80 animate-in fade-in duration-300 ease-out">
+                    <div className="text-xs font-sans font-medium text-muted-foreground mb-2">Referencias:</div>
                     <div className="space-y-1">
                       {streamingGroundingUrls.map((ref, index) => (
-                        <div key={index} className="text-xs animate-in fade-in duration-200 ease-out" style={{ animationDelay: `${index * 100}ms` }}>
+                        <div key={index} className="text-sm font-sans animate-in fade-in duration-200 ease-out" style={{ animationDelay: `${index * 100}ms` }}>
                           <a 
                             href={ref.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 underline transition-colors duration-200"
+                            className="text-primary hover:underline"
                           >
                             {ref.title}
                           </a>
                           {ref.domain && (
-                            <span className="text-gray-500 ml-1">({ref.domain})</span>
+                            <span className="text-muted-foreground ml-1">({ref.domain})</span>
                           )}
                         </div>
                       ))}
                     </div>
                   </div>
-                )}              </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* Typing Indicator with Transition States */}
           {(isProcessing || isStreaming) && !streamingResponse && (
-            <div className="flex justify-start">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border transition-all duration-500 ease-in-out",
-                  transitionState === 'thinking' ? "bg-blue-50 border-blue-200" :
-                  transitionState === 'selecting_agent' ? "bg-purple-50 border-purple-200" :
-                  transitionState === 'specialist_responding' ? config.bgColor : config.bgColor,
-                  transitionState === 'thinking' ? "border-blue-200" :
-                  transitionState === 'selecting_agent' ? "border-purple-200" :
-                  transitionState === 'specialist_responding' ? config.borderColor : config.borderColor,
-                )}
-              >
+            <div className="flex items-start gap-4 sm:px-0 px-2">
+              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
                 <div className="transition-all duration-700 ease-out">
-                  {transitionState === 'thinking' && <Brain className="h-4 w-4 text-blue-600" style={{ animation: 'gentle-pulse 2s ease-in-out infinite' }} />}
-                  {transitionState === 'selecting_agent' && <Search className="h-4 w-4 text-purple-600" style={{ animation: 'gentle-fade 1.5s ease-in-out infinite alternate' }} />}
+                  {transitionState === 'thinking' && <Brain className="h-4 w-4 text-primary" style={{ animation: 'gentle-pulse 2s ease-in-out infinite' }} />}
+                  {transitionState === 'selecting_agent' && <Search className="h-4 w-4 text-primary" style={{ animation: 'gentle-fade 1.5s ease-in-out infinite alternate' }} />}
                   {(transitionState === 'specialist_responding' || transitionState === 'idle') && <IconComponent className={cn("h-4 w-4", config.textColor)} />}
                 </div>
               </div>
-              <div className={cn(
-                "max-w-[80%] mx-2 p-4 rounded-lg transition-all duration-500 ease-in-out",
-                transitionState === 'thinking' ? "bg-blue-50 border border-blue-200" :
-                transitionState === 'selecting_agent' ? "bg-purple-50 border border-purple-200" :
-                transitionState === 'specialist_responding' ? `${config.bgColor} border ${config.borderColor}` :
-                `${config.bgColor} border ${config.borderColor}`
-              )}>
+              <div className={cn("max-w-[80%] rounded-lg p-4 border", config.bgColor, config.borderColor)}>
                 <div className="flex items-center gap-3">
                   <div className="flex gap-1">
                     <div 
-                      className={cn(
-                        "w-2 h-2 rounded-full transition-colors duration-500",
-                        transitionState === 'thinking' ? "bg-blue-400" :
-                        transitionState === 'selecting_agent' ? "bg-purple-400" :
-                        config.typingDotColor
-                      )}
+                      className="w-2 h-2 rounded-full bg-primary"
                       style={{ animation: 'gentle-bounce 2s ease-in-out infinite' }}
                     ></div>
                     <div
-                      className={cn(
-                        "w-2 h-2 rounded-full transition-colors duration-500",
-                        transitionState === 'thinking' ? "bg-blue-400" :
-                        transitionState === 'selecting_agent' ? "bg-purple-400" :
-                        config.typingDotColor
-                      )}
+                      className="w-2 h-2 rounded-full bg-primary"
                       style={{ animation: 'gentle-bounce 2s ease-in-out infinite', animationDelay: "0.4s" }}
                     ></div>
                     <div
-                      className={cn(
-                        "w-2 h-2 rounded-full transition-colors duration-500",
-                        transitionState === 'thinking' ? "bg-blue-400" :
-                        transitionState === 'selecting_agent' ? "bg-purple-400" :
-                        config.typingDotColor
-                      )}
+                      className="w-2 h-2 rounded-full bg-primary"
                       style={{ animation: 'gentle-bounce 2s ease-in-out infinite', animationDelay: "0.8s" }}
                     ></div>
                   </div>
-                  <span className={cn(
-                    "text-sm transition-all duration-300 ease-in-out",
-                    transitionState === 'thinking' ? "text-blue-600" :
-                    transitionState === 'selecting_agent' ? "text-purple-600" :
-                    config.textColor
-                  )}>
-                    {transitionState === 'thinking' && 'HopeAI analizando tu consulta...'}
-                    {transitionState === 'selecting_agent' && 'HopeAI activando capacidades especializadas...'}
-                    {(transitionState === 'specialist_responding' || transitionState === 'idle') && `HopeAI generando respuesta...`}
+                  <span className="text-sm font-sans text-muted-foreground">
+                    {transitionState === 'thinking' && 'Analizando...'}
+                    {transitionState === 'selecting_agent' && 'Activando especialista...'}
+                    {(transitionState === 'specialist_responding' || transitionState === 'idle') && `Generando respuesta...`}
                   </span>
                 </div>
               </div>
@@ -630,8 +747,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
         {!autoScroll && (
           <Button
             onClick={scrollToBottom}
-            className="absolute bottom-4 right-4 rounded-full w-12 h-12 bg-blue-600 hover:bg-blue-700 shadow-lg"
-            size="sm"
+            className="absolute bottom-32 right-8 rounded-full w-10 h-10 shadow-lg"
+            size="icon"
+            variant="default"
           >
             <ChevronDown className="h-5 w-5" />
           </Button>
@@ -639,52 +757,103 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-6">
-        {onGenerateFichaClinica && (
-          <div className="max-w-4xl mx-auto mb-2 flex justify-end">
-            <Button size="sm" variant="outline" onClick={onGenerateFichaClinica}>
-              Generar Ficha Clínica
-            </Button>
+      <div className="p-3 md:p-4 pt-1">
+        {/* Ficha Clínica controls moved into input toolbar */}
+        <div className="max-w-3xl mx-auto">
+          {/* Minimal active agent indicator */}
+          <div className="mb-1 flex items-center px-1 md:px-0">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1">
+              <IconComponent className={cn("h-3.5 w-3.5", config.textColor)} />
+              <span className="text-xs font-sans">
+                {activeAgent === "socratico" && "Socrático"}
+                {activeAgent === "clinico" && "Clínico"}
+                {activeAgent === "academico" && "Académico"}
+              </span>
+            </div>
           </div>
-        )}
-        <div className="max-w-4xl mx-auto">
           <div className="relative">
-            {/* Input container con estilo Gemini adaptado al agente activo */}
+            {/* Pending files compact bar (overlay above input, no extra bottom space) */}
+            {pendingFiles.length > 0 && !isStreaming && (
+              <div className="absolute -top-10 left-0 right-0 px-1 md:px-0">
+                <div className="max-w-full overflow-x-auto no-scrollbar">
+                  <div className="inline-flex items-center gap-2 bg-secondary/60 border border-border/80 rounded-lg px-2 py-1">
+                    {pendingFiles.map((file) => (
+                      <div key={file.id} className="flex items-center gap-1 text-[11px] font-sans bg-card/70 border border-border/70 rounded px-1.5 py-0.5 whitespace-nowrap">
+                        <Paperclip className="h-3 w-3 text-muted-foreground" />
+                        <span className="max-w-[140px] truncate">{file.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className={cn(
-              "relative bg-gray-50 rounded-3xl border transition-all duration-300 ease-in-out",
-              config.borderColor,
-              `hover:${config.borderColor.replace('border-', 'border-').replace('-200', '-300')}`,
-              `focus-within:${config.borderColor.replace('border-', 'border-').replace('-200', '-400')} focus-within:bg-white`,
-              isInputExpanded && "rounded-2xl"
-            )}>
+                "relative rounded-lg border bg-card transition-all",
+                "border-border",
+                config.focusWithinBorderColor
+              )}>
               <Textarea
                 ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Pregúntale a HopeAI"
-                className={cn(
-                  "w-full min-h-[60px] resize-none border-0 bg-transparent px-6 py-4 pr-32 pb-12 text-base placeholder:text-gray-500 focus:outline-none focus:ring-0 focus:border-transparent focus-visible:outline-none focus-visible:ring-0 overflow-y-auto transition-all duration-200 ease-out scrollbar-hide",
-                  isInputExpanded ? "max-h-[400px]" : "max-h-[200px]"
-                )}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
+                placeholder="Escribe tu mensaje o pregunta..."
+                className="w-full min-h-[52px] resize-none border-0 bg-transparent px-3 md:px-4 py-3 pr-28 md:pr-32 pb-11 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans"
                 rows={1}
                 disabled={isProcessing || isStreaming || isUploading}
                 style={{ 
-                  outline: 'none', 
                   boxShadow: 'none',
-                  height: 'auto',
-                  lineHeight: '1.5'
                 }}
               />
               
-              {/* Botones dentro del input - estilo Gemini */}
-              <div className="absolute bottom-2 right-2 flex items-center gap-2">
+              <div className="absolute bottom-2 md:bottom-3 right-2 md:right-3 flex items-center gap-1.5 md:gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className={cn("h-8 w-8 md:h-9 md:w-9", config.ghostButton.hoverBg, config.ghostButton.text)}
+                      disabled={!onOpenFichaClinica && !onGenerateFichaClinica}
+                      title="Ficha Clínica"
+                    >
+                      <FileText className="h-4 w-4" />
+                      {(fichaLoading || generateLoading) && (
+                        <span className="absolute -top-1 -right-1 inline-flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56 font-sans">
+                    <DropdownMenuItem
+                      disabled={!onOpenFichaClinica}
+                      onSelect={(e) => { e.preventDefault(); if (!fichaLoading) onOpenFichaClinica && onOpenFichaClinica() }}
+                    >
+                      {fichaLoading ? 'Abriendo…' : 'Ver Ficha Clínica'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={!onGenerateFichaClinica}
+                      onSelect={(e) => { e.preventDefault(); if (!generateLoading) onGenerateFichaClinica && onGenerateFichaClinica() }}
+                      className={hasExistingFicha ? 'text-amber-700 focus:text-amber-800' : ''}
+                    >
+                      {generateLoading ? 'Generando…' : hasExistingFicha ? 'Re-generar Ficha (sobrescribe)' : 'Generar Ficha Clínica'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 <FileUploadButton
-                  onFilesSelected={() => {}} // Los archivos se manejan automáticamente por uploadDocument
+                  onFilesSelected={(files) => {
+                    // Append to pendingFiles visual list via parent state already provided
+                    // No-op here; parent hook updates pendingFiles after uploadDocument
+                  }}
                   uploadDocument={uploadDocument}
                   disabled={isProcessing || isStreaming || isUploading}
                   pendingFiles={pendingFiles}
                   onRemoveFile={onRemoveFile}
+                  buttonClassName={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
                 />
                 <VoiceInputButton
                   onTranscriptUpdate={handleVoiceTranscript}
@@ -692,27 +861,11 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   size="sm"
                   variant="ghost"
                   language="es-ES"
+                  className={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
+                  iconClassName={cn(config.ghostButton.text, 'group-hover:opacity-90')}
                 />
                 <Button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('Expand button clicked, current state:', isInputExpanded);
-                    setIsInputExpanded(!isInputExpanded);
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  size="sm"
-                  variant="ghost"
-                  className="h-10 w-10 md:h-8 md:w-8 p-0 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 touch-manipulation select-none"
-                  title={isInputExpanded ? "Contraer input" : "Expandir input"}
-                >
-                  {isInputExpanded ? <Minimize2 className="h-5 w-5 md:h-4 md:w-4" /> : <Maximize2 className="h-5 w-5 md:h-4 md:w-4" />}
-                </Button>
-                <Button
-                  onClick={handleSendMessage}
+                  onClick={() => handleSendMessage()}
                   disabled={
                     !inputValue.trim() || 
                     isProcessing || 
@@ -720,86 +873,22 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     isUploading ||
                     pendingFiles.some(file => 
                       (file as any).processingStatus && 
-                      (file as any).processingStatus !== 'active'
+                      (file as any).processingStatus === 'processing'
                     )
                   }
-                  size="sm"
-                  className={cn(
-                    "h-10 w-10 md:h-8 md:w-8 p-0 rounded-full transition-all duration-300 ease-in-out text-white touch-manipulation",
-                    config.buttonBgColor,
-                    config.buttonHoverColor,
-                    // Estado disabled
-                    (!inputValue.trim() || isProcessing || isStreaming || isUploading) && "opacity-50 cursor-not-allowed"
-                  )}
+                  size="icon"
+                  className={cn("h-8 w-8 md:h-9 md:w-9", config.button.bg, config.button.hoverBg, config.button.text)}
                 >
-                  <Send className="h-5 w-5 md:h-4 md:w-4" />
+                  <Send className="h-4 w-4" />
                 </Button>
               </div>
             </div>
 
           </div>
 
-          {/* Indicador de estado de archivos */}
-          {pendingFiles.length > 0 && !isStreaming && (
-            <div className="mt-2 p-2 bg-gray-50 rounded-lg">
-              <div className="text-xs text-gray-600 mb-1">Archivos adjuntos:</div>
-              <div className="space-y-1">
-                {pendingFiles.map((file) => {
-                  const processingStatus = (file as any).processingStatus
-                  const isProcessing = processingStatus === 'processing'
-                  const isError = processingStatus === 'error' || processingStatus === 'timeout'
-                  const isActive = processingStatus === 'active'
-                  
-                  return (
-                    <div key={file.id} className="flex items-center gap-2 text-xs">
-                      <Paperclip className="h-3 w-3 text-gray-400" />
-                      <span className="flex-1 truncate">{file.name}</span>
-                      {isProcessing && (
-                        <div className="flex items-center gap-1 text-amber-600">
-                          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></div>
-                          <span>Procesando...</span>
-                        </div>
-                      )}
-                      {isActive && (
-                        <div className="flex items-center gap-1 text-green-600">
-                          <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                          <span>Listo</span>
-                        </div>
-                      )}
-                      {isError && (
-                        <div className="flex items-center gap-1 text-red-600">
-                          <div className="w-2 h-2 rounded-full bg-red-400"></div>
-                          <span>Error</span>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-              {pendingFiles.some(file => 
-                (file as any).processingStatus && 
-                (file as any).processingStatus !== 'active'
-              ) && (
-                <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                  ⏳ Esperando a que los archivos terminen de procesarse antes de enviar el mensaje
-                </div>
-              )}
-            </div>
-          )}
+          {/* Removed bottom pending files block to avoid extra space */}
 
-          <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-            <div className="flex items-center gap-4">
-              <span>Presiona Enter para enviar, Shift+Enter para nueva línea</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span>Agente activo:</span>
-              <span className={cn("font-medium", config.textColor)}>
-                {activeAgent === "socratico" && "Socrático"}
-                {activeAgent === "clinico" && "Clínico"}
-                {activeAgent === "academico" && "Académico"}
-              </span>
-            </div>
-          </div>
+          
         </div>
       </div>
       

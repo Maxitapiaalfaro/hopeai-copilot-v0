@@ -1,9 +1,10 @@
-import { genAI } from "./google-genai-config"
-import { clinicalStorage } from "./clinical-context-storage"
+import { ai } from "./google-genai-config"
+import { getStorageAdapter } from "./server-storage-adapter"
 import type { ClinicalFile } from "@/types/clinical-types"
 
 export class ClinicalFileManager {
   async uploadFile(file: File, sessionId: string, userId: string): Promise<ClinicalFile> {
+    const storage = await getStorageAdapter()
     const clinicalFile: ClinicalFile = {
       id: `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name: file.name,
@@ -14,7 +15,7 @@ export class ClinicalFileManager {
     }
 
     // Save initial file record
-    await clinicalStorage.saveClinicalFile({
+    await storage.saveClinicalFile({
       ...clinicalFile,
       sessionId,
     })
@@ -22,13 +23,13 @@ export class ClinicalFileManager {
     try {
       // Update status to processing
       clinicalFile.status = "processing"
-      await clinicalStorage.saveClinicalFile({
+      await storage.saveClinicalFile({
         ...clinicalFile,
         sessionId,
       })
 
       // Upload to Google AI Files API
-      const uploadResult = await genAI.files.upload({
+      const uploadResult = await ai.files.upload({
         file: file,
         config: {
           mimeType: file.type,
@@ -48,7 +49,7 @@ export class ClinicalFileManager {
       clinicalFile.geminiFileUri = uploadResult.uri   // URI real para createPartFromUri
       clinicalFile.status = "processing"
 
-      await clinicalStorage.saveClinicalFile({
+      await storage.saveClinicalFile({
         ...clinicalFile,
         sessionId,
       })
@@ -63,7 +64,7 @@ export class ClinicalFileManager {
         clinicalFile.status = "error"
       }
 
-      await clinicalStorage.saveClinicalFile({
+      await storage.saveClinicalFile({
         ...clinicalFile,
         sessionId,
       })
@@ -73,8 +74,9 @@ export class ClinicalFileManager {
       console.error("Error uploading file:", error)
 
       // Update status to error
+      const storage = await getStorageAdapter()
       clinicalFile.status = "error"
-      await clinicalStorage.saveClinicalFile({
+      await storage.saveClinicalFile({
         ...clinicalFile,
         sessionId,
       })
@@ -83,9 +85,33 @@ export class ClinicalFileManager {
     }
   }
 
+  /**
+   * Construye un índice ligero (resumen/outline/keywords) para uso de contexto
+   * sin tener que adjuntar el archivo completo en cada turno.
+   */
+  async buildLightweightIndex(file: ClinicalFile): Promise<ClinicalFile> {
+    try {
+      // Para un MVP: crear un índice mínimo a partir del nombre/tipo
+      // En producción: extraer primeras páginas o usar OCR/parseador
+      const summary = `Documento: ${file.name} (${file.type || 'desconocido'})`
+      const outline = `Resumen automático no intrusivo para ${file.name}`
+      const keywords = [
+        file.type?.split('/')?.[0] || 'documento',
+        (file.name || '').split('.')?.slice(0, -1).join('.')
+      ].filter(Boolean) as string[]
+
+      const storage = await getStorageAdapter()
+      const updated: ClinicalFile = { ...file, summary, outline, keywords }
+      await storage.saveClinicalFile(updated)
+      return updated
+    } catch {
+      return file
+    }
+  }
+
   async getFileInfo(geminiFileId: string): Promise<any> {
     try {
-      return await genAI.files.get({ name: geminiFileId })
+      return await ai.files.get({ name: geminiFileId })
     } catch (error) {
       console.error("Error getting file info:", error)
       throw error
@@ -124,11 +150,12 @@ export class ClinicalFileManager {
 
   async deleteFile(fileId: string): Promise<void> {
     try {
-      const files = await clinicalStorage.getClinicalFiles()
-      const file = files.find((f) => f.id === fileId)
+      const storage = await getStorageAdapter()
+      const files = await storage.getClinicalFiles()
+      const file = files.find((f: ClinicalFile) => f.id === fileId)
 
       if (file?.geminiFileId) {
-        await genAI.files.delete({ name: file.geminiFileId })
+        await ai.files.delete({ name: file.geminiFileId })
       }
 
       // Remove from IndexedDB (implement delete method)

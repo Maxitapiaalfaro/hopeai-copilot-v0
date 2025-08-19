@@ -66,6 +66,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   })
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
+  const lastSessionIdRef = useRef<string | null>(null)
 
   // Cargar sesión existente
   const loadSession = useCallback(async (sessionId: string, allowDuringInit = false): Promise<boolean> => {
@@ -96,6 +97,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         // Limpiar sessionMeta si la sesión cargada no tiene contexto de paciente
         sessionMeta: chatState.clinicalContext?.patientId ? prev.sessionMeta : undefined
       }))
+      lastSessionIdRef.current = chatState.sessionId
 
       console.log('✅ Sesión HopeAI cargada:', sessionId)
       console.log('📊 Historial cargado con', chatState.history.length, 'mensajes')
@@ -223,7 +225,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     mode: ClinicalMode,
     agent: AgentType
   ): Promise<string | null> => {
-    if (!hopeAISystem.current || !systemState.isInitialized) {
+    if (!hopeAISystem.current) {
       console.error('Sistema HopeAI no inicializado')
       return null
     }
@@ -253,6 +255,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         history: chatState.history,
         isLoading: false
       }))
+      lastSessionIdRef.current = sessionId
 
       console.log('✅ Sesión HopeAI creada:', sessionId)
       return sessionId
@@ -278,8 +281,22 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     attachedFiles?: ClinicalFile[],
     sessionMeta?: any
   ): Promise<any> => {
-    if (!hopeAISystem.current || !systemState.sessionId) {
-      throw new Error('Sistema no inicializado o sesión no encontrada')
+    if (!hopeAISystem.current) {
+      throw new Error('Sistema no inicializado')
+    }
+
+    // Lazy-create session on first message send
+    let sessionIdToUse = systemState.sessionId
+    if (!sessionIdToUse) {
+      const userId = systemState.userId || 'demo_user'
+      const mode = systemState.mode || 'clinical_supervision'
+      const agent = systemState.activeAgent || 'socratico'
+      const newSessionId = await createSession(userId, mode, agent)
+      if (!newSessionId) {
+        throw new Error('No se pudo crear la sesión')
+      }
+      sessionIdToUse = newSessionId
+      lastSessionIdRef.current = newSessionId
     }
 
     try {
@@ -314,7 +331,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       }, 500)
       
       const result = await hopeAISystem.current.sendMessage(
-        systemState.sessionId,
+        sessionIdToUse!,
         message,
         useStreaming,
         undefined, // suggestedAgent
@@ -337,6 +354,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         isLoading: false,
         transitionState: 'idle'
       }))
+      lastSessionIdRef.current = sessionIdToUse!
 
       console.log('✅ Mensaje enviado exitosamente')
       console.log('🧠 Información de enrutamiento:', result.response.routingInfo)
@@ -404,28 +422,47 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       history: [],
       transitionState: 'idle'
     })
+    lastSessionIdRef.current = null
   }, [systemState.isInitialized])
 
   // Agregar respuesta de streaming al historial
   const addStreamingResponseToHistory = useCallback(async (
     responseContent: string,
     agent: AgentType,
-    groundingUrls?: Array<{title: string, url: string, domain?: string}>
+    groundingUrls?: Array<{title: string, url: string, domain?: string}>,
+    sessionIdOverride?: string
   ): Promise<void> => {
-    if (!hopeAISystem.current || !systemState.sessionId) {
-      throw new Error('Sistema no inicializado o sesión no encontrada')
+    if (!hopeAISystem.current) {
+      throw new Error('Sistema no inicializado')
+    }
+
+    // Resolver sessionId objetivo de forma robusta
+    let targetSessionId: string | null = sessionIdOverride || systemState.sessionId || lastSessionIdRef.current
+    if (!targetSessionId) {
+      try {
+        const persistence = ClientContextPersistence.getInstance()
+        const recent = await persistence.getMostRecentSession()
+        targetSessionId = recent?.sessionId || null
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (!targetSessionId) {
+      console.warn('⚠️ addStreamingResponseToHistory: Sin sessionId, se omite la escritura del historial')
+      return
     }
 
     try {
       await hopeAISystem.current.addStreamingResponseToHistory(
-        systemState.sessionId,
+        targetSessionId,
         responseContent,
         agent,
         groundingUrls
       )
 
       // Actualizar el historial local inmediatamente
-      const updatedState = await hopeAISystem.current.getChatState(systemState.sessionId)
+      const updatedState = await hopeAISystem.current.getChatState(targetSessionId)
       setSystemState(prev => ({
         ...prev,
         history: updatedState.history,

@@ -8,6 +8,9 @@ import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types
 export class ClinicalAgentRouter {
   private agents: Map<AgentType, AgentConfig> = new Map()
   private activeChatSessions: Map<string, any> = new Map()
+  // Session-scoped caches to avoid re-fetching and re-verifying files each turn
+  private sessionFileCache: Map<string, Map<string, any>> = new Map()
+  private verifiedActiveMap: Map<string, Set<string>> = new Map()
 
   constructor() {
     this.initializeAgents()
@@ -580,7 +583,7 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
 
     try {
       // Convert history to Gemini format if provided - NOW AGENT-AWARE
-      let geminiHistory = history ? await this.convertHistoryToGeminiFormat(history, agent) : []
+      let geminiHistory = history ? await this.convertHistoryToGeminiFormat(sessionId, history, agent) : []
       
       // Add transition context if this is an agent switch to maintain conversational flow
       if (isAgentTransition && history && history.length > 0) {
@@ -603,6 +606,9 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
       })
 
       this.activeChatSessions.set(sessionId, { chat, agent })
+      // Prepare caches for this session
+      if (!this.sessionFileCache.has(sessionId)) this.sessionFileCache.set(sessionId, new Map())
+      if (!this.verifiedActiveMap.has(sessionId)) this.verifiedActiveMap.set(sessionId, new Set())
       return chat
     } catch (error) {
       console.error("Error creating chat session:", error)
@@ -610,37 +616,45 @@ Utiliza formato APA 7ª edición para todas las referencias. Incluye DOI cuando 
     }
   }
 
-  async convertHistoryToGeminiFormat(history: ChatMessage[], agentType: AgentType) {
-    return Promise.all(history.map(async (msg) => {
+  async convertHistoryToGeminiFormat(sessionId: string, history: ChatMessage[], agentType: AgentType) {
+    // Find the most recent message that actually has file references
+    const lastMsgWithFilesIdx = [...history].reverse().findIndex(m => m.fileReferences && m.fileReferences.length > 0)
+    const attachIndex = lastMsgWithFilesIdx === -1 ? -1 : history.length - 1 - lastMsgWithFilesIdx
+
+    return Promise.all(history.map(async (msg, idx) => {
       const parts: any[] = [{ text: msg.content }]
       
-      // OPTIMIZATION: Only process files for the LAST message to avoid repetitive processing
-      // Files from previous messages are already available in the conversation context
-      const isLastMessage = history.indexOf(msg) === history.length - 1
+      // OPTIMIZATION (FIXED): Attach files for the most recent message that included fileReferences
+      // This ensures agent switches recreate context with the actual file parts
+      const isAttachmentCarrier = idx === attachIndex
       
       // ARQUITECTURA OPTIMIZADA: Procesamiento dinámico de archivos por ID
-      if (isLastMessage && msg.fileReferences && msg.fileReferences.length > 0) {
+      if (isAttachmentCarrier && msg.fileReferences && msg.fileReferences.length > 0) {
         console.log(`[ClinicalRouter] Processing files for latest message only: ${msg.fileReferences.length} file IDs`)
         
         try {
-          // Obtener objetos de archivo completos usando IDs
-          const { getFilesByIds } = await import('./hopeai-system')
-          const fileObjects = await getFilesByIds(msg.fileReferences)
+          // Resolve file objects using session cache first
+          const cache = this.sessionFileCache.get(sessionId) || new Map<string, any>()
+          this.sessionFileCache.set(sessionId, cache)
+          const missing: string[] = []
+          const fileObjects: any[] = []
+          for (const id of msg.fileReferences) {
+            const cached = cache.get(id)
+            if (cached) fileObjects.push(cached)
+            else missing.push(id)
+          }
+          if (missing.length > 0) {
+            const { getFilesByIds } = await import('./hopeai-system')
+            const fetched = await getFilesByIds(missing)
+            fetched.forEach((f: any) => {
+              cache.set(f.id, f)
+              fileObjects.push(f)
+            })
+          }
           
           if (fileObjects.length > 0) {
-            // Add AGENT-SPECIFIC context enrichment instruction for file awareness
-            const fileNames = fileObjects.map(f => f.name).join(', ')
-            const enrichedContent = msg.role === 'user' 
-              ? `${msg.content}
-
-${this.buildAgentSpecificFileContext(agentType, fileObjects.length, fileNames)}`
-              : msg.content
-            
-            // Update the text part with enriched content
-            parts[0] = { text: enrichedContent }
-            
             for (const fileRef of fileObjects) {
-              if (fileRef.geminiFileId) {
+              if (fileRef.geminiFileUri || fileRef.geminiFileId) {
                 try {
                   // Usar geminiFileUri si está disponible, sino usar geminiFileId como fallback
                   const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/') 
@@ -654,16 +668,18 @@ ${this.buildAgentSpecificFileContext(agentType, fileObjects.length, fileNames)}`
                   
                   console.log(`[ClinicalRouter] Adding file to context: ${fileRef.name}, URI: ${fileUri}`)
                   
-                  // Verificar que el archivo existe y está en estado ACTIVE en Google AI antes de usarlo
-                  try {
-                    // Usar geminiFileId para la verificación de estado
-                    const fileIdForCheck = fileRef.geminiFileId || fileUri
-                    const fileInfo = await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
-                    console.log(`[ClinicalRouter] File verified as ACTIVE: ${fileIdForCheck}`)
-                  } catch (fileError) {
-                    console.error(`[ClinicalRouter] File not ready or not found: ${fileUri}`, fileError)
-                    // El archivo no está listo o no existe, omitirlo del mensaje
-                    continue
+                  // Verify ACTIVE only once per session
+                  const verifiedSet = this.verifiedActiveMap.get(sessionId) || new Set<string>()
+                  this.verifiedActiveMap.set(sessionId, verifiedSet)
+                  const fileIdForCheck = fileRef.geminiFileId || fileUri
+                  if (!verifiedSet.has(fileIdForCheck)) {
+                    try {
+                      await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
+                      verifiedSet.add(fileIdForCheck)
+                    } catch (fileError) {
+                      console.error(`[ClinicalRouter] File not ready or not found: ${fileUri}`, fileError)
+                      continue
+                    }
                   }
                   
                   // Usar createPartFromUri para crear la parte del archivo correctamente
@@ -722,9 +738,49 @@ ${this.buildAgentSpecificFileContext(agentType, fileObjects.length, fileNames)}`
 
       // Construir las partes del mensaje (texto + archivos adjuntos)
       const messageParts: any[] = [{ text: enhancedMessage }]
-      
-      // Files are now handled through conversation history, not as message attachments
-      // This eliminates the repetitive file processing issue
+
+      // CRITICAL: Adjuntar archivos procesados del contexto de sesión a ESTE mensaje
+      // para que el modelo pueda leerlos inmediatamente (especialmente en el primer envío)
+      if (enrichedContext?.sessionFiles && Array.isArray(enrichedContext.sessionFiles)) {
+        // Heurística: adjuntar solo los archivos más recientes o con índice
+        const files = (enrichedContext.sessionFiles as any[])
+          .slice(-2) // preferir los últimos 2
+          .sort((a, b) => (b.keywords?.length || 0) - (a.keywords?.length || 0)) // ligera priorización si tienen índice
+          .slice(0, 2)
+        for (const fileRef of files) {
+          try {
+            // Cache session-level
+            const cache = this.sessionFileCache.get(sessionId) || new Map<string, any>()
+            this.sessionFileCache.set(sessionId, cache)
+            if (fileRef?.id) cache.set(fileRef.id, fileRef)
+            if (!fileRef?.geminiFileId && !fileRef?.geminiFileUri) continue
+            const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/')
+              ? fileRef.geminiFileId
+              : `files/${fileRef.geminiFileId}`)
+            if (!fileUri) continue
+
+            // Verificar que esté ACTIVE antes de adjuntar
+            const verifiedSet = this.verifiedActiveMap.get(sessionId) || new Set<string>()
+            this.verifiedActiveMap.set(sessionId, verifiedSet)
+            const fileIdForCheck = fileRef.geminiFileId || fileUri
+            if (!verifiedSet.has(fileIdForCheck)) {
+              try {
+                await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
+                verifiedSet.add(fileIdForCheck)
+              } catch (e) {
+                console.warn(`[ClinicalRouter] Skipping non-active file: ${fileUri}`)
+                continue
+              }
+            }
+
+            const filePart = createPartFromUri(fileUri, fileRef.type)
+            messageParts.push(filePart)
+            console.log(`[ClinicalRouter] Attached file to message: ${fileRef.name}`)
+          } catch (err) {
+            console.error('[ClinicalRouter] Error attaching session file:', err)
+          }
+        }
+      }
 
       // Convert message to correct SDK format
       const messageParams = {

@@ -12,6 +12,7 @@ interface FileUploadButtonProps {
   disabled?: boolean
   pendingFiles?: ClinicalFile[]
   onRemoveFile?: (fileId: string) => void
+  buttonClassName?: string
 }
 
 export function FileUploadButton({ 
@@ -19,7 +20,8 @@ export function FileUploadButton({
   uploadDocument, 
   disabled = false,
   pendingFiles = [],
-  onRemoveFile
+  onRemoveFile,
+  buttonClassName
 }: FileUploadButtonProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -95,7 +97,8 @@ export function FileUploadButton({
         disabled={disabled || isUploading}
         className={cn(
           "h-8 w-8 p-0",
-          pendingFiles.length > 0 && "text-blue-600"
+          pendingFiles.length > 0 && "text-blue-600",
+          buttonClassName
         )}
       >
         {isUploading ? (

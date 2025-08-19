@@ -26,6 +26,10 @@ export interface ClinicalFile {
   geminiFileUri?: string  // URI real para createPartFromUri
   sessionId?: string
   processingStatus?: "processing" | "active" | "error" | "timeout"
+  // Índice ligero para optimizar referencias contextuales
+  summary?: string
+  outline?: string
+  keywords?: string[]
 }
 
 export interface ChatState {

@@ -211,6 +211,28 @@ export class HopeAISystem {
     // Get session files automatically - no longer passed as parameter
     const sessionFiles = await this.getPendingFilesForSession(sessionId)
 
+    // Fallback: if no pending files, reuse most recently referenced processed files from history
+    let resolvedSessionFiles = sessionFiles || []
+    if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && currentState?.history?.length) {
+      try {
+        const lastMsgWithFiles = [...currentState.history].reverse().find((m: any) => m.fileReferences && m.fileReferences.length > 0)
+        if (lastMsgWithFiles) {
+          let reuseFiles = await this.getFilesByIds(lastMsgWithFiles.fileReferences)
+          // Build lightweight indices for smarter referencing when needed
+          try {
+            const { clinicalFileManager } = await import('./clinical-file-manager')
+            reuseFiles = await Promise.all(reuseFiles.map(f => clinicalFileManager.buildLightweightIndex(f)))
+          } catch {}
+          if (reuseFiles && reuseFiles.length > 0) {
+            resolvedSessionFiles = reuseFiles
+            console.log(`📎 [HopeAI] Reusing last referenced files for context: ${reuseFiles.map((f: any) => f.name).join(', ')}`)
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ [HopeAI] Could not reuse last referenced files for context:', e)
+      }
+    }
+
     try {
       // Convertir historial al formato Content[] esperado por el router
       const sessionContext = currentState.history.map((msg: ChatMessage) => ({
@@ -247,7 +269,7 @@ export class HopeAISystem {
       }
       
       const enrichedSessionContext: EnrichedContext = {
-        sessionFiles: sessionFiles || [],
+        sessionFiles: resolvedSessionFiles || [],
         currentMessage: message,
         conversationHistory: currentState.history.slice(-5), // Últimos 5 mensajes para contexto
         activeAgent: currentState.activeAgent,
@@ -295,7 +317,7 @@ export class HopeAISystem {
           message,
           sessionId,
           currentState.userId || 'demo_user',
-          sessionFiles
+          resolvedSessionFiles
         )
         
         // 📊 RECORD ORCHESTRATION COMPLETION 
@@ -454,7 +476,7 @@ export class HopeAISystem {
         role: "user",
         timestamp: new Date(),
         // OPTIMIZACIÓN: Solo referenciar IDs de archivos, no objetos completos
-        fileReferences: sessionFiles?.map(file => file.id) || [],
+        fileReferences: resolvedSessionFiles?.map(file => file.id) || [],
         // ELIMINADO: attachments duplicados - usar solo fileReferences
       }
 
@@ -498,6 +520,8 @@ export class HopeAISystem {
       // 🏥 PATIENT CONTEXT: Include patient context from sessionMeta
       const enrichedAgentContext = {
         ...routingResult.enrichedContext,
+        // Ensure document context is available to the agent at generation time
+        sessionFiles: resolvedSessionFiles || [],
         patient_reference: patientReference,
         patient_summary: patientSummary
       }

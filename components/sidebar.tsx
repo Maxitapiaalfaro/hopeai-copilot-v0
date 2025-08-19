@@ -44,6 +44,7 @@ interface SidebarProps {
   createSession?: (userId: string, mode: any, agent: any) => Promise<string | null>
   onConversationSelect?: (sessionId: string) => void
   onPatientConversationStart?: (patient: PatientRecord) => void
+  onNewChat?: () => void
 }
 
 // Mapeo de agentes para compatibilidad con el sistema anterior
@@ -61,7 +62,7 @@ const agentLabels = {
   'orquestador': 'Orquestador',
 }
 
-export function Sidebar({ isOpen, onToggle, userId, createSession: createSessionProp, onConversationSelect, onPatientConversationStart }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, userId, createSession: createSessionProp, onConversationSelect, onPatientConversationStart, onNewChat }: SidebarProps) {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'conversations' | 'patients'>('conversations')
   
@@ -88,10 +89,9 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
   useEffect(() => {
     const effectiveUserId = userId || systemState.userId
     if (effectiveUserId && isOpen && conversations.length === 0 && !isLoading) {
-      console.log('🔄 Iniciando carga de conversaciones para:', effectiveUserId)
       loadConversations(effectiveUserId)
     }
-  }, [userId, systemState.userId, isOpen, loadConversations, isLoading])
+  }, [userId, systemState.userId, isOpen, loadConversations, isLoading, conversations.length])
 
   // Detectar scroll para lazy loading
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -119,10 +119,7 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
         // Fallback a la lógica anterior si no se proporciona la función
         const success = await loadSession(sessionId)
         
-        if (success) {
-          console.log('✅ Conversación cargada exitosamente:', sessionId)
-        } else {
-          console.error('❌ Error cargando la conversación')
+        if (!success) {
           setSelectedConversation(null)
         }
       }
@@ -135,11 +132,18 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
   // Estado para prevenir creación múltiple simultánea
   const [isCreatingSession, setIsCreatingSession] = useState(false)
 
+  // Abrir y navegar a una sección específica cuando el sidebar está colapsado
+  const handleCollapsedOpenTo = useCallback((tab: 'conversations' | 'patients') => {
+    setActiveTab(tab)
+    if (!isOpen) {
+      onToggle()
+    }
+  }, [isOpen, onToggle])
+
   // Manejar nueva conversación con patrón de transacción atómica
   const handleNewConversation = async () => {
     // Prevenir múltiples ejecuciones simultáneas
     if (isCreatingSession) {
-      console.log('⚠️ Sidebar: Creación de sesión ya en progreso, ignorando solicitud duplicada')
       return
     }
 
@@ -147,26 +151,9 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
       setIsCreatingSession(true)
       const effectiveUserId = userId || systemState.userId
       
-      if (createSessionProp && effectiveUserId) {
-        console.log('📝 Sidebar: Iniciando transacción de nueva conversación...')
-        
-        // Transacción atómica: crear sesión y actualizar estado
-        const newSessionId = await createSessionProp(effectiveUserId, 'clinical_supervision', 'socratico')
-        
-        if (newSessionId) {
-          // Solo proceder si la sesión se creó exitosamente
-          setSelectedConversation(null)
-          
-          // Debounced refresh para evitar múltiples llamadas
-          setTimeout(async () => {
-            await refreshConversations()
-          }, 300)
-          
-          console.log('✅ Sidebar: Transacción de nueva conversación completada:', newSessionId)
-        } else {
-          throw new Error('No se pudo crear la sesión')
-        }
-      }
+      // No crear sesión aquí. Limpiar selección y delegar al padre para resetear estado.
+      setSelectedConversation(null)
+      onNewChat?.()
     } catch (err) {
       console.error('❌ Sidebar: Error en transacción de nueva conversación:', err)
     } finally {
@@ -190,54 +177,76 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
   return (
     <div
       className={cn(
-        "flex flex-col transition-all duration-300 relative bg-gray-50/50",
+        "flex flex-col transition-all duration-300 relative bg-secondary/30 border-r border-border/80 paper-noise",
         isOpen ? "w-80" : "w-0 overflow-hidden md:w-16",
       )}
     >
       {/* Header estilo Gemini */}
-      <div className={cn("flex flex-col transition-all duration-300", isOpen ? "p-4 pb-2" : "justify-center p-2")}>
+      <div className={cn("flex flex-col transition-all duration-300", isOpen ? "p-4 pb-2" : "items-center p-2")}> 
         {!isOpen && (
           <Button 
             variant="ghost" 
-            size="sm" 
+            size="icon"
             onClick={onToggle} 
-            className="h-10 w-10 p-0 hover:bg-gray-100 transition-colors"
+            className="h-10 w-10"
             title="Abrir panel lateral"
           >
-            <Menu className="h-5 w-5 text-gray-600" />
+            <Menu className="h-5 w-5" />
           </Button>
         )}
         
-        {isOpen && (
+        {isOpen ? (
           <>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-end mb-4">
               <Button 
                 variant="ghost" 
-                size="sm" 
+                size="icon"
                 onClick={onToggle} 
-                className="h-8 w-8 p-0 hover:bg-gray-100 transition-colors"
+                className="h-8 w-8"
                 title="Cerrar panel lateral"
               >
-                <Menu className="h-4 w-4 text-gray-600" />
+                <Menu className="h-4 w-4" />
               </Button>
             </div>
             
             <Button 
+              variant="secondary"
               onClick={handleNewConversation}
-              className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 hover:border-gray-300 transition-all duration-200 h-11 px-4 gap-3 justify-start shadow-sm"
+              className="w-full h-11 px-4 gap-3 justify-start"
               disabled={isCreatingSession}
             >
               <Plus className="h-4 w-4" />
               <span className="text-sm font-medium">Nuevo chat</span>
             </Button>
           </>
+        ) : (
+          <div className="flex flex-col items-center gap-3 py-2"> 
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Historial"
+              onClick={() => handleCollapsedOpenTo('conversations')}
+              className={cn(activeTab === 'conversations' ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
+            >
+              <Clock className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Pacientes"
+              onClick={() => handleCollapsedOpenTo('patients')}
+              className={cn(activeTab === 'patients' ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
+            >
+              <Users className="h-5 w-5" />
+            </Button>
+          </div>
         )}
       </div>
 
       {/* Hint de recientes estilo Gemini */}
       {isOpen && filteredConversations.length > 0 && (
         <div className="px-4 pb-2">
-          <span className="text-xs text-gray-600 font-medium">
+          <span className="text-xs text-muted-foreground font-medium">
             Recientes
           </span>
         </div>
@@ -245,14 +254,14 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
 
       {/* Tab Navigation */}
       {isOpen && (
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-border/80 mx-4 brush-border">
           <Button
             variant="ghost"
             className={cn(
-              "flex-1 rounded-none border-b-2 transition-colors",
+              "flex-1 rounded-none border-b-2 h-9",
               activeTab === 'conversations'
-                ? "border-blue-500 text-blue-600 bg-blue-50"
-                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary"
             )}
             onClick={() => setActiveTab('conversations')}
           >
@@ -262,10 +271,10 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
           <Button
             variant="ghost"
             className={cn(
-              "flex-1 rounded-none border-b-2 transition-colors",
+              "flex-1 rounded-none border-b-2 h-9",
               activeTab === 'patients'
-                ? "border-blue-500 text-blue-600 bg-blue-50"
-                : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary"
             )}
             onClick={() => setActiveTab('patients')}
           >
@@ -276,131 +285,123 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
       )}
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
-        {activeTab === 'conversations' ? (
-          <ScrollArea className="h-full">
-            <div onScroll={handleScroll} className="h-full overflow-auto">
-            <div className="px-4 pb-4">
-              {isLoading && isOpen ? (
-                <div className="flex items-center justify-center py-8">
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  <span className="text-sm text-gray-500">Cargando...</span>
-                </div>
-              ) : filteredConversations.length === 0 ? (
-                isOpen && (
-                  <div className="text-center py-8 text-gray-500">
-                    <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">
-                      {conversations.length === 0 
-                        ? 'No hay conversaciones'
-                        : 'No se encontraron conversaciones'
-                      }
-                    </p>
+      {isOpen ? (
+        <div className="flex-1 overflow-hidden">
+          {activeTab === 'conversations' ? (
+            <ScrollArea className="h-full">
+              <div onScroll={handleScroll} className="h-full overflow-auto">
+              <div className="p-4 space-y-2">
+                {isLoading && isOpen ? (
+                  <div className="flex items-center justify-center py-8">
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Cargando...</span>
                   </div>
-                )
-              ) : (
-                filteredConversations.map((conversation) => {
-                  const agentConfig = getAgentVisualConfig(conversation.activeAgent as AgentType)
-                  const agentLabel = agentLabels[conversation.activeAgent] || conversation.activeAgent
-                  
-                  return (
-                    <div key={conversation.sessionId} className="relative group">
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "w-full mb-1 transition-all duration-200 rounded-lg",
-                          isOpen ? "justify-start p-3 h-auto text-left" : "justify-center p-2 h-10",
-                          selectedConversation === conversation.sessionId 
-                            ? "bg-gray-100 hover:bg-gray-100" 
-                            : "hover:bg-gray-50",
-                        )}
-                        onClick={() => handleConversationSelect(conversation.sessionId)}
-                        title={!isOpen ? conversation.title : undefined}
-                      >
-                        {isOpen ? (
-                          <div className="flex items-center gap-3 w-full">
-                            <div className={cn("w-1 h-8 rounded-full flex-shrink-0", agentConfig.buttonBgColor)} />
-                            <div className="flex-1 min-w-0">
-                              <div className={cn("font-normal text-sm truncate leading-5", agentConfig.textColor)}>
-                                {conversation.title}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-0.5 truncate">
-                                {formatDistanceToNow(new Date(conversation.lastUpdated), { 
-                                  addSuffix: true, 
-                                  locale: es 
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          // En estado colapsado, no mostrar iconos
-                          <div className="w-full h-full" />
-                        )}
-                      </Button>
-                      
-                      {/* Botón de eliminar estilo Gemini */}
-                      {isOpen && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="absolute top-1/2 -translate-y-1/2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar conversación?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Esta acción no se puede deshacer. La conversación "{conversation.title}" 
-                                será eliminada permanentemente.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction 
-                                onClick={(e) => handleDeleteConversation(conversation.sessionId, e)}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Eliminar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
+                ) : filteredConversations.length === 0 ? (
+                  isOpen && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">
+                        No hay conversaciones
+                      </p>
                     </div>
                   )
-                })
-              )}
-              
-              {/* Indicador de carga para más conversaciones */}
-              {isLoadingMore && (
-                <div className="flex items-center justify-center py-4">
-                  <div className="flex items-center space-x-2 text-sm text-gray-500">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Cargando más...</span>
+                ) : (
+                  filteredConversations.map((conversation) => {
+                    const agentConfig = getAgentVisualConfig(conversation.activeAgent as AgentType)
+                    
+                    return (
+                      <div key={conversation.sessionId} className="relative group">
+                        <Button
+                          variant="ghost"
+                          className={cn(
+                            "w-full mb-1 transition-all duration-200 rounded-lg",
+                            isOpen ? "justify-start p-3 h-auto text-left" : "justify-center p-2 h-10",
+                            selectedConversation === conversation.sessionId 
+                              ? "bg-primary/10 hover:bg-primary/10" 
+                              : "hover:bg-secondary",
+                          )}
+                          onClick={() => handleConversationSelect(conversation.sessionId)}
+                          title={!isOpen ? conversation.title : undefined}
+                        >
+                          {isOpen ? (
+                            <div className="flex items-center gap-3 w-full">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-serif text-sm truncate leading-5 text-foreground">
+                                  {conversation.title}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                                  {formatDistanceToNow(new Date(conversation.lastUpdated), { 
+                                    addSuffix: true, 
+                                    locale: es 
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className={cn("w-2 h-2 rounded-full", agentConfig.button.bg)} />
+                          )}
+                        </Button>
+                        
+                        {isOpen && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="absolute top-1/2 -translate-y-1/2 right-2 opacity-0 group-hover:opacity-100 h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Eliminar conversación?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta acción no se puede deshacer. La conversación "{conversation.title}" 
+                                  será eliminada permanentemente.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={(e) => handleDeleteConversation(conversation.sessionId, e)}
+                                  className="bg-destructive hover:bg-destructive/90"
+                                >
+                                  Eliminar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+                
+                {isLoadingMore && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Cargando más...</span>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-            </div>
-          </ScrollArea>
-        ) : (
-          <PatientLibrarySection 
-            isOpen={isOpen}
-            onPatientSelect={(patient) => {
-              console.log('Patient selected:', patient.displayName)
-            }}
-            onStartConversation={(patient) => {
-              console.log('Starting conversation with patient:', patient.displayName)
-              onPatientConversationStart?.(patient)
-            }}
-          />
-        )}
-      </div>
+                )}
+              </div>
+              </div>
+            </ScrollArea>
+          ) : (
+            <PatientLibrarySection 
+              isOpen={isOpen}
+              onStartConversation={(patient) => {
+                onPatientConversationStart?.(patient)
+              }}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="flex-1" />
+      )}
 
     </div>
   )

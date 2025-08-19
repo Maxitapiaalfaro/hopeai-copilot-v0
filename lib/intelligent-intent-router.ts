@@ -423,6 +423,32 @@ export class IntelligentIntentRouter {
         console.log(`   - Umbral Dinámico: ${dynamicThreshold.toFixed(3)}`);
       }
       
+      // FILE-AWARE OVERRIDE: if files are present in session context, and confidence is borderline
+      // prefer routing to clinical to ensure documents are processed even with vague inputs
+      const filesPresent = Array.isArray(enrichedSessionContext?.sessionFiles) && enrichedSessionContext.sessionFiles.length > 0;
+      const borderline = combinedConfidence >= (dynamicThreshold - 0.1) && combinedConfidence < dynamicThreshold;
+      if (filesPresent && borderline) {
+        const enrichedContext = this.createEnrichedContext(
+          userInput,
+          'activar_modo_clinico',
+          entityExtractionResult.entities,
+          entityExtractionResult,
+          optimizedContext,
+          currentAgent,
+          'Archivos presentes en sesión y confianza limítrofe: priorizar procesamiento clínico del material',
+          Math.max(combinedConfidence, dynamicThreshold)
+        );
+        if (this.config.enableLogging) {
+          console.log('📎 [IntentRouter] File-aware override → clinico');
+        }
+        return {
+          success: true,
+          targetAgent: 'clinico',
+          enrichedContext,
+          requiresUserClarification: false
+        };
+      }
+
       if (combinedConfidence < dynamicThreshold) {
         console.warn(`⚠️ Confianza insuficiente para enrutamiento automático: ${combinedConfidence.toFixed(3)} < ${dynamicThreshold.toFixed(3)}`);
         
@@ -615,6 +641,20 @@ Agente Activo: ${enrichedSessionContext.activeAgent || 'No especificado'}
 
 **CONTEXTO CONVERSACIONAL OPTIMIZADO:**
 ${optimizedContext}${patientContextSection}
+
+${(() => {
+  const files = enrichedSessionContext?.sessionFiles || [];
+  if (Array.isArray(files) && files.length > 0) {
+    const names = files.map((f: any) => f.name).join(', ');
+    const types = files.map((f: any) => f.type || 'unknown').join(', ');
+    return `\n**CONTEXTO DE ARCHIVOS EN SESIÓN (CRÍTICO):**\n` +
+           `Archivos presentes: ${files.length} → ${names}\n` +
+           `Tipos: ${types}\n` +
+           `\nREGLA: Si existen archivos en la sesión, prioriza el enrutamiento a HopeAI Clínico para procesar/sintetizar el material, salvo que el usuario pida explícitamente investigación académica.\n` +
+           `Incluso con entradas vagas o indirectas, asume que el usuario espera que trabajemos con el/los archivo(s).`;
+  }
+  return '';
+})()}
 
 **MENSAJE A CLASIFICAR:**
 "${userInput}"

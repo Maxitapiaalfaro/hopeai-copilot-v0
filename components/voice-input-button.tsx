@@ -36,6 +36,8 @@ interface VoiceInputButtonProps {
   language?: string
   /** Clase CSS adicional */
   className?: string
+  /** Clase para colorear el icono (permite color por agente y hover) */
+  iconClassName?: string
 }
 
 export function VoiceInputButton({
@@ -44,7 +46,8 @@ export function VoiceInputButton({
   size = 'md',
   variant = 'ghost',
   language = 'es-ES',
-  className
+  className,
+  iconClassName
 }: VoiceInputButtonProps) {
   
   // Configuración optimizada para móviles
@@ -196,17 +199,17 @@ export function VoiceInputButton({
               disabled={isButtonDisabled}
               className={cn(
                 sizeClasses[effectiveSize],
-                config.className,
                 'transition-all duration-200',
                 // Estilos adicionales para móviles
                 mobileDetection.isTouch && 'active:scale-95 touch-manipulation',
-                mobileDetection.isMobile && 'min-h-[44px] min-w-[44px]' // Tamaño mínimo táctil
+                mobileDetection.isMobile && 'min-h-[44px] min-w-[44px]', // Tamaño mínimo táctil
+                className
               )}
             >
               {isProcessing ? (
-                <Loader2 className={cn(iconSizes[effectiveSize], "animate-spin")} />
+                <Loader2 className={cn(iconSizes[effectiveSize], 'animate-spin', iconClassName)} />
               ) : (
-                <IconComponent className={iconSizes[effectiveSize]} />
+                <IconComponent className={cn(iconSizes[effectiveSize], iconClassName)} />
               )}
             </Button>
           </TooltipTrigger>
@@ -220,7 +223,7 @@ export function VoiceInputButton({
               transcript={transcript}
               interimTranscript={interimTranscript}
               error={error}
-              className="border-0 bg-white shadow-lg"
+              className="border-0 bg-card shadow-lg paper-noise"
             />
           </TooltipContent>
         </Tooltip>

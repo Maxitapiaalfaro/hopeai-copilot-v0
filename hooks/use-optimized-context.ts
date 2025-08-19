@@ -113,7 +113,7 @@ export function useOptimizedContext(): UseOptimizedContextReturn {
       // Convertir historial al formato Gemini usando la función optimizada del router clínico
       // que maneja archivos eficientemente (solo procesa archivos del último mensaje)
       const geminiHistory = history.length > 0 
-        ? await clinicalAgentRouter.convertHistoryToGeminiFormat(history, agent)
+        ? await clinicalAgentRouter.convertHistoryToGeminiFormat('optimized_context_session', history, agent)
         : []
 
       // Configuración optimizada con configuraciones específicas del agente

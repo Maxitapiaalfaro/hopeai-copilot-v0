@@ -1,5 +1,5 @@
 import MarkdownIt from 'markdown-it'
-import { AGENT_VISUAL_CONFIG } from '@/config/agent-visual-config'
+import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import type { AgentType } from '@/types/clinical-types'
 
 // Instancia singleton optimizada de markdown-it para mensajes clínicos
@@ -30,61 +30,61 @@ function configureCustomRules(md: MarkdownIt) {
     const token = tokens[idx]
     const level = token.tag.slice(1) // h1 -> 1, h2 -> 2, etc.
     const classes = {
-      '1': 'text-lg font-bold text-gray-900 mt-4 mb-2 border-b border-gray-200 pb-1 first:mt-0',
-      '2': 'text-base font-semibold text-gray-800 mt-3 mb-2 first:mt-0',
-      '3': 'text-sm font-medium text-gray-700 mt-3 mb-1 first:mt-0',
-      '4': 'text-sm font-medium text-gray-600 mt-2 mb-1 first:mt-0',
-      '5': 'text-xs font-medium text-gray-600 mt-2 mb-1 first:mt-0',
-      '6': 'text-xs font-normal text-gray-500 mt-1 mb-1 first:mt-0'
+      '1': 'text-xl font-serif font-semibold text-foreground mt-6 mb-3 border-b border-border pb-2 first:mt-0',
+      '2': 'text-lg font-serif font-semibold text-foreground mt-5 mb-2 first:mt-0',
+      '3': 'text-base font-serif font-semibold text-foreground mt-4 mb-1 first:mt-0',
+      '4': 'font-semibold text-foreground mt-3 mb-1 first:mt-0',
+      '5': 'font-medium text-muted-foreground mt-2 mb-1 first:mt-0',
+      '6': 'font-normal text-muted-foreground mt-1 mb-1 first:mt-0'
     }
     return `<${token.tag} class="${classes[level as keyof typeof classes] || classes['3']}">`
   }
 
   // Personalizar listas para mejor legibilidad clínica
   md.renderer.rules.bullet_list_open = () => {
-    return '<ul class="list-disc list-outside space-y-1 my-2 ml-6 pl-2">'
+    return '<ul class="list-disc list-outside space-y-2 my-4 ml-6 pl-2">'
   }
 
   md.renderer.rules.ordered_list_open = () => {
-    return '<ol class="list-decimal list-outside space-y-1 my-2 ml-6 pl-2">'
+    return '<ol class="list-decimal list-outside space-y-2 my-4 ml-6 pl-2">'
   }
 
   md.renderer.rules.list_item_open = () => {
-    return '<li class="text-sm leading-relaxed pl-1">'
+    return '<li class="leading-relaxed pl-1">'
   }
 
   // Personalizar párrafos
   md.renderer.rules.paragraph_open = () => {
-    return '<p class="text-sm leading-relaxed mb-3 last:mb-0">'
+    return '<p class="leading-relaxed mb-4 last:mb-0">'
   }
 
   // Personalizar código inline y bloques
   md.renderer.rules.code_inline = (tokens, idx) => {
     const token = tokens[idx]
-    return `<code class="bg-gray-100 text-gray-800 px-1 py-0.5 rounded text-xs font-mono">${md.utils.escapeHtml(token.content)}</code>`
+    return `<code class="bg-secondary text-foreground/80 px-1 py-0.5 rounded font-mono text-[0.9em]">${md.utils.escapeHtml(token.content)}</code>`
   }
 
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx]
     const langClass = token.info ? ` language-${md.utils.escapeHtml(token.info)}` : ''
-    return `<pre class="bg-gray-50 border border-gray-200 rounded-lg p-3 my-3 overflow-x-auto"><code class="text-xs font-mono${langClass}">${md.utils.escapeHtml(token.content)}</code></pre>`
+    return `<pre class="bg-secondary/50 border border-border/80 rounded-lg p-4 my-4 overflow-x-auto"><code class="font-mono text-[0.9em]${langClass}">${md.utils.escapeHtml(token.content)}</code></pre>`
   }
 
   // Personalizar blockquotes para citas clínicas
   md.renderer.rules.blockquote_open = () => {
-    return '<blockquote class="border-l-4 border-blue-200 bg-blue-50 pl-4 py-2 my-3 italic text-sm">'
+    return '<blockquote class="border-l-4 border-primary/50 bg-secondary/80 pl-4 py-2 my-4 italic">'
   }
 
   // Personalizar enlaces
   md.renderer.rules.link_open = (tokens, idx) => {
     const token = tokens[idx]
     const href = token.attrGet('href') || '#'
-    return `<a href="${href}" class="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">`
+    return `<a href="${href}" class="text-primary hover:underline" target="_blank" rel="noopener noreferrer">`
   }
 
   // Personalizar tablas para datos clínicos
   md.renderer.rules.table_open = () => {
-    return '<div class="overflow-x-auto my-3"><table class="min-w-full border border-gray-200 rounded-lg">'
+    return '<div class="overflow-x-auto my-4"><table class="min-w-full border border-border/80 rounded-lg">'
   }
 
   md.renderer.rules.table_close = () => {
@@ -92,15 +92,15 @@ function configureCustomRules(md: MarkdownIt) {
   }
 
   md.renderer.rules.thead_open = () => {
-    return '<thead class="bg-gray-50">'
+    return '<thead class="bg-secondary/50">'
   }
 
   md.renderer.rules.th_open = () => {
-    return '<th class="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b border-gray-200">'
+    return '<th class="px-4 py-2 text-left font-sans font-semibold text-foreground border-b border-border/80">'
   }
 
   md.renderer.rules.td_open = () => {
-    return '<td class="px-3 py-2 text-sm text-gray-900 border-b border-gray-100">'
+    return '<td class="px-4 py-3 border-b border-border/50">'
   }
 }
 
@@ -201,13 +201,14 @@ export function highlightAgentMentions(content: string): string {
     { pattern: /\bInvestigador Académico\b/g, type: 'academico' as AgentType }
   ]
 
-  // Procesar cada tipo de agente
+  // Procesar cada tipo de agente (solo color de texto, sin fondo destacado)
   agentPatterns.forEach(({ pattern, type }) => {
-    const config = AGENT_VISUAL_CONFIG[type]
+    const config = getAgentVisualConfig(type)
     if (!config) return
 
     processedContent = processedContent.replace(pattern, (match) => {
-      return `<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${config.bgColor} ${config.textColor} ${config.borderColor} border">${match}</span>`
+      // Keep agent color and bold; inherit parent font size for consistency
+      return `<span class="font-semibold ${config.textColor}">${match}</span>`
     })
   })
 

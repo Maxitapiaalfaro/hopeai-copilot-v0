@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Lora:wght@400;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,45 +8,112 @@
   .text-balance {
     text-wrap: balance;
   }
+  /* Expressionist surface: subtle noise + soft vignette */
+  .paper-noise {
+    background-image:
+      radial-gradient(1200px 600px at 50% 0%, rgba(0,0,0,0.02), rgba(0,0,0,0) 60%),
+      radial-gradient(800px 400px at 100% 100%, rgba(0,0,0,0.02), rgba(0,0,0,0) 60%),
+      linear-gradient(0deg, transparent 0%, rgba(255,255,255,0.04) 100%);
+    background-blend-mode: soft-light, soft-light, normal;
+  }
+  /* Fragmented living color: faint gradients to avoid flat color planes */
+  .color-fragment {
+    background-image:
+      radial-gradient(1200px 800px at 10% 10%, rgba(255, 170, 125, 0.06), transparent 60%),
+      radial-gradient(900px 700px at 90% 20%, rgba(120, 180, 210, 0.05), transparent 60%),
+      radial-gradient(700px 600px at 50% 90%, rgba(160, 215, 155, 0.05), transparent 60%);
+    background-blend-mode: overlay;
+  }
+  /* Brush-styled border via border-image */
+  .brush-border {
+    border-width: 1px;
+    border-style: solid;
+    -o-border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M1 8 C3 7, 5 9, 8 8 C11 7, 13 9, 15 8' fill='none' stroke='rgba(0,0,0,0.35)' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E") 2 stretch;
+    border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M1 8 C3 7, 5 9, 8 8 C11 7, 13 9, 15 8' fill='none' stroke='rgba(0,0,0,0.35)' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E") 2 stretch;
+  }
+  /* Gentle flicker for thinking/generating */
+  @keyframes gentle-flicker {
+    0% { opacity: 0.95; transform: translateY(0px); }
+    50% { opacity: 1; transform: translateY(-0.5px); }
+    100% { opacity: 0.97; transform: translateY(0px); }
+  }
+  .animate-gentle-flicker { animation: gentle-flicker 2.4s ease-in-out infinite; }
 }
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --background: 40 33% 96%; /* Crema/Beige claro con textura */
+    --foreground: 30 20% 25%; /* Sepia oscuro / Gris carbón */
+    
+    --card: 40 50% 98%; /* Papel Principal - Blanco Roto */
+    --card-foreground: 30 20% 25%;
+    
+    --card-subtle: 40 33% 94%; /* Un beige ligeramente más oscuro para fondos de UI */
+    --card-highlight: 40 50% 99%; /* Un blanco casi puro para resaltar */
+
+    --popover: 40 50% 98%;
+    --popover-foreground: 30 20% 25%;
+    --primary: 83 15% 56%; /* Verde Salvia */
+    --primary-foreground: 30 20% 20%;
+    --secondary: 40 33% 92%;
+    --secondary-foreground: 30 20% 25%;
+    --muted: 40 33% 92%;
+    --muted-foreground: 30 20% 45%;
+
+    --accent: 83 15% 56%; /* Verde Salvia */
+    --accent-foreground: 30 20% 20%;
+    --accent-beige: 40 30% 90%; /* Beige de acento para mensajes de usuario */
+
+    /* User message bubble tokens (neutral parchment aligned with palette) */
+    /* More prominent user bubble shade */
+    --user-bubble-bg: 40 26% 84%;
+    --user-bubble-border: 40 22% 76%;
+    --user-bubble-text: 30 22% 25%;
+
+    /* Expressionist palette extensions */
+    --ink: 24 12% 18%;
+    --sepia: 30 24% 26%;
+    --oxide: 13 20% 38%;
+    --bruise: 212 22% 28%;
+    --flush: 2 47% 46%;
+
+    /* Agent palette aligned to core cream/sage scheme */
+    --agent-socratico-bg: 90 22% 88%;
+    --agent-socratico-border: 90 25% 70%;
+    --agent-socratico-text: 90 26% 24%;
+    --agent-socratico-dot: 90 36% 40%;
+
+    --agent-clinico-bg: 75 20% 88%;
+    --agent-clinico-border: 75 24% 70%;
+    --agent-clinico-text: 75 24% 24%;
+    --agent-clinico-dot: 75 34% 42%;
+
+    --agent-academico-bg: 38 35% 88%;
+    --agent-academico-border: 38 40% 70%;
+    --agent-academico-text: 38 36% 26%;
+    --agent-academico-dot: 38 46% 40%;
+
+    --agent-orquestador-bg: 28 18% 88%;
+    --agent-orquestador-border: 28 20% 70%;
+    --agent-orquestador-text: 28 22% 28%;
+    --agent-orquestador-dot: 28 30% 40%;
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --border: 40 20% 88%;
+    --input: 40 20% 88%;
+    --ring: 83 15% 56%;
+    --chart-1: 83 15% 56%;
+    --chart-2: 83 15% 46%;
+    --chart-3: 83 15% 36%;
+    --chart-4: 83 15% 66%;
+    --chart-5: 83 15% 76%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --font-serif: 'Lora', serif;
+    --font-sans: 'Lato', sans-serif;
   }
   .dark {
+    /* Manteniendo el modo oscuro existente como placeholder, se puede refinar más tarde. */
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
     --card: 0 0% 3.9%;
@@ -69,14 +138,8 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --font-serif: 'Lora', serif;
+    --font-sans: 'Lato', sans-serif;
   }
 }
 
@@ -86,5 +149,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-serif);
+    background-image: url('/paper-texture.png'); /* Sutil textura de papel */
+    background-repeat: repeat;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
   }
 }

@@ -72,9 +72,9 @@ export function DocumentUpload({ onUpload, onClose }: DocumentUploadProps) {
   }
 
   return (
-    <Card className="p-6 bg-gray-50 border-2 border-dashed border-gray-300">
+    <Card className="p-6 bg-muted border-2 border-dashed border-border paper-noise">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Subir Documentos Clínicos</h3>
+        <h3 className="text-lg font-semibold text-foreground">Subir Documentos Clínicos</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
@@ -92,7 +92,7 @@ export function DocumentUpload({ onUpload, onClose }: DocumentUploadProps) {
       >
         <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <div className="space-y-2">
-          <p className="text-lg font-medium text-gray-900">Arrastra archivos aquí o haz clic para seleccionar</p>
+          <p className="text-lg font-medium text-foreground">Arrastra archivos aquí o haz clic para seleccionar</p>
           <p className="text-sm text-gray-500">Soporta PDF, Word, imágenes (máx. 10MB por archivo)</p>
         </div>
 
@@ -108,7 +108,7 @@ export function DocumentUpload({ onUpload, onClose }: DocumentUploadProps) {
 
       {selectedFiles.length > 0 && (
         <div className="mt-4 space-y-2">
-          <h4 className="font-medium text-gray-900">Archivos seleccionados:</h4>
+          <h4 className="font-medium text-foreground">Archivos seleccionados:</h4>
           {selectedFiles.map((file, index) => {
             const FileIcon = getFileIcon(file.type)
             const isLarge = file.size > 10 * 1024 * 1024 // 10MB
@@ -117,13 +117,13 @@ export function DocumentUpload({ onUpload, onClose }: DocumentUploadProps) {
               <div
                 key={index}
                 className={cn(
-                  "flex items-center gap-3 p-3 bg-white rounded-lg border",
+                  "flex items-center gap-3 bg-card p-3 rounded-lg border paper-noise",
                   isLarge && "border-red-200 bg-red-50",
                 )}
               >
                 <FileIcon className="h-5 w-5 text-gray-500 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">{file.name}</div>
+                  <div className="text-sm font-medium text-foreground truncate">{file.name}</div>
                   <div className="text-xs text-gray-500">{formatFileSize(file.size)}</div>
                 </div>
                 {isLarge && <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}

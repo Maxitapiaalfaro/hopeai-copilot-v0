@@ -131,7 +131,7 @@ export function VoiceStatusIndicator({
   // Versión completa
   return (
     <div className={cn(
-      "p-3 rounded-lg border transition-all duration-200",
+      "p-3 rounded-lg border transition-all duration-200 paper-noise",
       config.bgColor,
       config.borderColor,
       className
@@ -184,7 +184,7 @@ export function VoiceStatusIndicator({
           {transcript && (
             <div className="text-xs">
               <span className="text-gray-500">Final:</span>
-              <p className="text-gray-800 font-medium mt-1 p-2 bg-white rounded border">
+              <p className="text-foreground font-medium mt-1 p-2 bg-card rounded border">
                 "{transcript}"
               </p>
             </div>
@@ -193,7 +193,7 @@ export function VoiceStatusIndicator({
           {interimTranscript && interimTranscript !== transcript && (
             <div className="text-xs">
               <span className="text-gray-500">Procesando:</span>
-              <p className="text-gray-600 italic mt-1 p-2 bg-gray-50 rounded border border-dashed">
+              <p className="text-muted-foreground italic mt-1 p-2 bg-muted rounded border border-dashed">
                 "{interimTranscript}"
               </p>
             </div>

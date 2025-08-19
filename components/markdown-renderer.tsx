@@ -50,7 +50,7 @@ const MarkdownRendererComponent = ({
   // Si no es contenido confiable, mostrar como texto plano
   if (!trusted) {
     return (
-      <div className={cn('text-sm leading-relaxed whitespace-pre-wrap', className)}>
+      <div className={cn('text-base leading-relaxed whitespace-pre-wrap', className)}>
         {content}
       </div>
     )
@@ -59,16 +59,19 @@ const MarkdownRendererComponent = ({
   return (
     <div 
       className={cn(
-        'markdown-content text-sm leading-relaxed',
+        'markdown-content text-base leading-relaxed',
         // Estilos base optimizados
-        'prose prose-sm max-w-none',
+        'prose max-w-none paper-noise',
         // Personalización de colores para el tema clínico
-        'prose-headings:text-gray-900 prose-p:text-gray-700',
-        'prose-strong:text-gray-900 prose-em:text-gray-600',
-        'prose-code:text-gray-800 prose-code:bg-gray-100',
-        'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200',
-        'prose-blockquote:border-blue-200 prose-blockquote:bg-blue-50',
-        'prose-a:text-blue-600 hover:prose-a:text-blue-800',
+        'dark:prose-invert',
+        'prose-headings:text-foreground prose-p:text-foreground/90',
+        'prose-strong:text-foreground prose-em:text-muted-foreground',
+        'prose-code:text-foreground prose-code:bg-muted',
+        'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
+        'prose-blockquote:border-blue-200 dark:prose-blockquote:border-blue-900/40 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-950/30',
+        'prose-a:text-primary hover:prose-a:underline',
+        // Prevent cutting/overflow on mobile (long links, words)
+        'break-words prose-a:break-words prose-li:break-words',
         // Espaciado optimizado
         'prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-3',
         'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
@@ -126,21 +129,21 @@ const StreamingMarkdownRendererComponent = ({
       {renderedContent ? (
         <div 
           className={cn(
-            'markdown-content text-sm leading-relaxed prose prose-sm max-w-none',
+            'markdown-content text-base leading-relaxed prose max-w-none dark:prose-invert',
             // Estilos optimizados para streaming
-            'prose-headings:text-gray-900 prose-p:text-gray-700',
-            'prose-strong:text-gray-900 prose-em:text-gray-600',
-            'prose-code:text-gray-800 prose-code:bg-gray-100',
-            'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200',
-            'prose-blockquote:border-blue-200 prose-blockquote:bg-blue-50',
-            'prose-a:text-blue-600 hover:prose-a:text-blue-800',
+            'prose-headings:text-foreground prose-p:text-foreground/90',
+            'prose-strong:text-foreground prose-em:text-muted-foreground',
+            'prose-code:text-foreground prose-code:bg-muted',
+            'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
+            'prose-blockquote:border-blue-200 dark:prose-blockquote:border-blue-900/40 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-950/30',
+            'prose-a:text-primary hover:prose-a:underline break-words',
             'prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-3',
             'prose-ul:my-2 prose-ol:my-2 prose-li:my-1'
           )}
           dangerouslySetInnerHTML={{ __html: renderedContent }}
         />
       ) : (
-        <div className="text-sm text-gray-500 italic">
+        <div className="text-base text-gray-500 italic">
           Escribiendo...
         </div>
       )}
