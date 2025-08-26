@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { History, User, BookText, Sun, Moon } from "lucide-react"
+import { Menu, User, BookText, Sun, Moon } from "lucide-react"
 import { useTheme } from "next-themes"
 import type { PatientSessionMeta } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
@@ -29,7 +29,7 @@ export function Header({ onHistoryToggle, sessionMeta }: HeaderProps) {
           className="md:hidden h-8 w-8"
           onClick={onHistoryToggle}
         >
-          <History className="h-4 w-4" />
+          <Menu className="h-4 w-4" />
         </Button>
         
         <div className="flex items-center gap-3">

@@ -135,18 +135,18 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
   // Minimal, unobtrusive rotating capability hint for new sessions
   const capabilityHints = [
-    // Diálogo/clarificación
-    '"Ayúdame a clarificar mis ideas sobre este caso."',
-    '"Hazme preguntas para guiar el próximo paso."',
-    '"Quiero reflexionar sobre una decisión clínica."',
-    // Síntesis clínica/documentación
-    '"Resume estas notas en formato SOAP."',
-    '"Genera una ficha clínica estructurada."',
-    '"Organiza la evolución de la sesión de hoy."',
-    // Evidencia/Investigación
-    '"¿Qué evidencia respalda EMDR para TEPT? Incluye enlaces."',
-    '"Compara TCC y ACT para ansiedad con referencias."',
-    '"Resume la evidencia reciente sobre exposición prolongada."'
+    // Documentación clínica estructurada - Muestra organización y síntesis profesional
+    '"Sintetiza: sesión inicial, ansiedad, 25 años."',
+    '"Crea una nota SOAP: progreso depresión."',
+    '"Estructura plan de tratamiento para TEPT."',
+    // Investigación académica basada en evidencia - Demuestra búsqueda y validación científica
+    '"Investigación: EMDR vs exposición para trauma."',
+    '"Meta-análisis sobre mindfulness en depresión."',
+    '"Estudios recientes: TCC para trastorno bipolar."',
+    // Exploración socrática reflexiva - Demuestra análisis profundo y preguntas reflexivas
+    '"Analiza este patrón: paciente evita hablar."',
+    '"¿Qué revela mi frustración mi paciente?"',
+    '"Explora hipótesis: apego ansioso en adolescente."'
   ]
 
   useEffect(() => {
@@ -529,7 +529,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               <h1 className="font-serif text-5xl md:text-6xl tracking-tight text-foreground">
                 Bienvenido a HopeAI
               </h1>
-              <div className="mt-2 md:mt-3 flex items-center gap-2 text-sm font-sans max-w-xl animate-in fade-in duration-500 ease-out h-5">
+              <div className="mt-8 md:mt-12 flex items-center gap-2 text-sm font-sans max-w-xl animate-in fade-in duration-500 ease-out h-5">
                 <p
                   className="text-muted-foreground cursor-pointer hover:underline underline-offset-4 decoration-muted-foreground/50 hover:text-foreground transition-colors duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-border rounded-sm px-0.5"
                   role="button"
@@ -556,27 +556,63 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           )}
 
           {/* Chat History - Solo mensajes visibles */}
-          {currentSession?.history?.slice(-visibleMessageCount).map((message) => {
+          {currentSession?.history?.slice(-visibleMessageCount).map((message, index) => {
             // Usar la configuración del agente que generó el mensaje, no el agente activo
             const messageAgentConfig = getAgentVisualConfigSafe(message.agent);
             const MessageIconComponent = messageAgentConfig.icon;
+            const isFirstMessage = index === 0;
             
             return (
-              <div key={message.id} className={`flex items-start gap-4 sm:px-0 px-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div key={message.id} className={`flex items-start sm:gap-4 gap-0 sm:px-0 px-2 ${message.role === "user" ? "justify-end" : "justify-start"} ${isFirstMessage ? "pt-6" : "pt-4"}`}>
+                {/* Desktop: Icon outside message, Mobile: Icon inside message corner */}
                 {message.role === "model" && (
-                  <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
+                  <div className={cn("hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 mt-1 border", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
                     <MessageIconComponent className={cn("h-4 w-4", messageAgentConfig.textColor)} />
                   </div>
                 )}
 
                 <div
                   className={cn(
-                    "max-w-[90%] sm:max-w-[80%] rounded-lg border ring-1 ring-transparent",
+                    "relative max-w-[95%] sm:max-w-[80%] rounded-lg border ring-1 ring-transparent",
                     message.role === "user"
-                      ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-0 shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
+                      ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-[hsl(var(--user-bubble-bg))] shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
                       : `${messageAgentConfig.bgColor} ${messageAgentConfig.borderColor}`,
                   )}
                 >
+                  {/* Mobile: Agent icon in corner */}
+                  {message.role === "model" && (
+                    <div className={cn("absolute -top-2 -left-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
+                      <MessageIconComponent className={cn("h-3 w-3", messageAgentConfig.textColor)} />
+                    </div>
+                  )}
+                  
+                  {/* Mobile: User icon in corner */}
+                  {message.role === "user" && (
+                    <div className="absolute -top-2 -right-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background bg-white shadow-sm">
+                      <User className="h-3 w-3 text-gray-600" />
+                    </div>
+                  )}
+                  {/* Agent Context Header for AI responses */}
+                  {message.role === "model" && (
+                    <div className="px-3 md:px-4 pt-3 pb-2 border-b border-border/50">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={cn("text-sm font-bold font-sans", messageAgentConfig.textColor)}>
+                          {message.agent === 'socratico' && 'Filósofo Socrático'}
+                          {message.agent === 'clinico' && 'Archivista Clínico'}
+                          {message.agent === 'academico' && 'Investigador Académico'}
+                          {message.agent === 'orquestador' && 'Orquestador'}
+                          {!message.agent && 'HopeAI'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground font-sans">
+                        {message.agent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
+                        {message.agent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
+                        {message.agent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
+                        {message.agent === 'orquestador' && 'Coordinando respuesta entre especialistas'}
+                        {!message.agent && 'Respuesta del sistema'}
+                      </p>
+                    </div>
+                  )}
                   <div className="p-3 md:p-4">
                     <MarkdownRenderer 
                       content={message.content}
@@ -658,7 +694,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 </div>
 
                 {message.role === "user" && (
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] flex items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]">
+                  <div className="hidden sm:flex w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]">
                     <User className="h-4 w-4 text-[hsl(var(--user-bubble-text))]" />
                   </div>
                 )}
@@ -668,18 +704,42 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
           {/* Streaming Response */}
           {isStreaming && streamingResponse && (
-            <div className="flex items-start gap-4 sm:px-0 px-2 animate-in fade-in slide-in-from-left-2 duration-500 ease-out">
-              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
+            <div className="flex items-start sm:gap-4 gap-0 sm:px-0 px-2 pt-4 animate-in fade-in slide-in-from-left-2 duration-500 ease-out">
+              {/* Desktop: Icon outside message */}
+              <div className={cn("hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
                 <IconComponent className={cn("h-4 w-4", config.textColor)} />
               </div>
-              <div className={cn("max-w-[80%] rounded-lg p-4 border", config.bgColor, config.borderColor)}>
-                <StreamingMarkdownRenderer
-                  content={streamingResponse}
-                  className="text-base leading-relaxed"
-                  showTypingIndicator={true}
-                />
+              <div className={cn("relative max-w-[95%] sm:max-w-[80%] rounded-lg border", config.bgColor, config.borderColor)}>
+                {/* Mobile: Agent icon in corner */}
+                <div className={cn("absolute -top-2 -left-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background", config.bgColor, config.borderColor)}>
+                  <IconComponent className={cn("h-3 w-3", config.textColor)} />
+                </div>
+                {/* Agent Context Header */}
+                <div className="px-4 pt-3 pb-2 border-b border-border/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium font-sans">
+                      {activeAgent === 'socratico' && 'Filósofo Socrático'}
+                      {activeAgent === 'clinico' && 'Archivista Clínico'}
+                      {activeAgent === 'academico' && 'Investigador Académico'}
+                      {activeAgent === 'orquestador' && 'Orquestador'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-sans">
+                    {activeAgent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
+                    {activeAgent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
+                    {activeAgent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
+                    {activeAgent === 'orquestador' && 'Coordinando respuesta entre especialistas'}
+                  </p>
+                </div>
+                <div className="p-4">
+                  <StreamingMarkdownRenderer
+                    content={streamingResponse}
+                    className="text-base leading-relaxed"
+                    showTypingIndicator={true}
+                  />
+                </div>
                 {streamingGroundingUrls && streamingGroundingUrls.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-border/80 animate-in fade-in duration-300 ease-out">
+                  <div className="mx-4 mb-4 pt-3 border-t border-border/80 animate-in fade-in duration-300 ease-out">
                     <div className="text-xs font-sans font-medium text-muted-foreground mb-2">Referencias:</div>
                     <div className="space-y-1">
                       {streamingGroundingUrls.map((ref, index) => (
@@ -730,11 +790,18 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       style={{ animation: 'gentle-bounce 2s ease-in-out infinite', animationDelay: "0.8s" }}
                     ></div>
                   </div>
-                  <span className="text-sm font-sans text-muted-foreground">
-                    {transitionState === 'thinking' && 'Analizando...'}
-                    {transitionState === 'selecting_agent' && 'Activando especialista...'}
-                    {(transitionState === 'specialist_responding' || transitionState === 'idle') && `Generando respuesta...`}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-sans text-muted-foreground">
+                      {transitionState === 'thinking' && 'HopeAI está analizando tu consulta...'}
+                      {transitionState === 'selecting_agent' && 'Eligiendo el especialista más adecuado...'}
+                      {(transitionState === 'specialist_responding' || transitionState === 'idle') && `${config.name} generando respuesta especializada...`}
+                    </span>
+                    <span className="text-xs font-sans text-muted-foreground/70 mt-1">
+                      {transitionState === 'thinking' && 'Identificando el tipo de consulta y contexto necesario'}
+                      {transitionState === 'selecting_agent' && ''}
+                      {(transitionState === 'specialist_responding' || transitionState === 'idle') && `Aplicando conocimiento especializado en ${activeAgent === 'socratico' ? 'diálogo terapéutico' : activeAgent === 'clinico' ? 'documentación clínica' : 'investigación académica'}`}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -760,15 +827,43 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       <div className="p-3 md:p-4 pt-1">
         {/* Ficha Clínica controls moved into input toolbar */}
         <div className="max-w-3xl mx-auto">
-          {/* Minimal active agent indicator */}
-          <div className="mb-1 flex items-center px-1 md:px-0">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1">
-              <IconComponent className={cn("h-3.5 w-3.5", config.textColor)} />
-              <span className="text-xs font-sans">
-                {activeAgent === "socratico" && "Socrático"}
-                {activeAgent === "clinico" && "Clínico"}
-                {activeAgent === "academico" && "Académico"}
-              </span>
+          {/* Minimal active agent indicator with tooltip */}
+          <div className="mb-1 flex items-center justify-end px-1 md:px-0">
+            <div className="relative group">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 cursor-help select-none touch-manipulation" 
+                   onTouchStart={(e) => e.preventDefault()}
+                   onMouseDown={(e) => e.preventDefault()}>
+                <IconComponent className={cn("h-3.5 w-3.5", config.textColor)} />
+                <span className="text-xs font-sans select-none pointer-events-none">
+                  {activeAgent === "socratico" && "Socrático"}
+                  {activeAgent === "clinico" && "Clínico"}
+                  {activeAgent === "academico" && "Académico"}
+                </span>
+              </div>
+              
+              {/* Elegant minimalistic tooltip */}
+              <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                <div className="bg-popover border border-border rounded-lg shadow-lg p-3 min-w-[280px] max-w-[320px] sm:max-w-[380px]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <IconComponent className={cn("h-4 w-4", config.textColor)} />
+                    <span className="text-sm font-medium font-sans">
+                      {activeAgent === 'socratico' && 'Filósofo Socrático'}
+                      {activeAgent === 'clinico' && 'Archivista Clínico'}
+                      {activeAgent === 'academico' && 'Investigador Académico'}
+                      {activeAgent === 'orquestador' && 'Orquestador'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-sans leading-relaxed">
+                    {activeAgent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
+                    {activeAgent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
+                    {activeAgent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
+                    {activeAgent === 'orquestador' && 'Coordinando respuesta entre especialistas'}
+                  </p>
+                  {/* Tooltip arrow */}
+                  <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-border"></div>
+                  <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-popover translate-y-[-1px]"></div>
+                </div>
+              </div>
             </div>
           </div>
           <div className="relative">
