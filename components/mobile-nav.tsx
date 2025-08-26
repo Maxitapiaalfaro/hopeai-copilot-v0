@@ -38,6 +38,7 @@ interface MobileNavProps {
   onOpenChange?: (open: boolean) => void
   onPatientConversationStart?: (patient: PatientRecord) => void
   onNewChat?: () => void
+  initialTab?: 'conversations' | 'patients'
 }
 
 // Mapeo de agentes para etiquetas legibles
@@ -47,10 +48,10 @@ const agentLabels: Record<string, string> = {
   investigador: 'Investigador'
 }
 
-export function MobileNav({ userId, createSession, onConversationSelect, isOpen: externalIsOpen, onOpenChange: externalOnOpenChange, onPatientConversationStart, onNewChat }: MobileNavProps) {
+export function MobileNav({ userId, createSession, onConversationSelect, isOpen: externalIsOpen, onOpenChange: externalOnOpenChange, onPatientConversationStart, onNewChat, initialTab = 'conversations' }: MobileNavProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
-  const [activeTab, setActiveTab] = useState<'conversations' | 'patients'>('conversations')
+  const [activeTab, setActiveTab] = useState<'conversations' | 'patients'>(initialTab)
   
   // Usar estado externo si está disponible, sino usar estado interno
   const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen
@@ -83,6 +84,11 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
       loadConversations(userId)
     }
   }, [isOpen, conversations.length, loadConversations, userId])
+
+  // Efecto para actualizar tab cuando cambia initialTab
+  useEffect(() => {
+    setActiveTab(initialTab)
+  }, [initialTab])
 
   // Manejar nueva conversación
   const handleNewConversation = async () => {

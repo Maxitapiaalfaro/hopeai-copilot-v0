@@ -286,7 +286,7 @@ export function PatientLibrarySection({
                 <Plus className="h-4 w-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="w-[95vw] max-w-[425px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="font-serif">Agregar Paciente</DialogTitle>
                 <DialogDescription className="font-sans">
@@ -304,7 +304,7 @@ export function PatientLibrarySection({
                   />
                 </div>
                 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="grid gap-2">
                     <Label htmlFor="ageRange">Rango de edad</Label>
                     <Input
@@ -375,19 +375,21 @@ export function PatientLibrarySection({
                   />
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setIsCreateDialogOpen(false)
                     resetForm()
                   }}
+                  className="w-full sm:w-auto"
                 >
                   Cancelar
                 </Button>
                 <Button
                   onClick={handleCreatePatient}
                   disabled={!formData.displayName.trim()}
+                  className="w-full sm:w-auto"
                 >
                   Crear Paciente
                 </Button>
@@ -521,7 +523,7 @@ export function PatientLibrarySection({
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="w-[95vw] max-w-[425px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-serif">Editar Paciente</DialogTitle>
             <DialogDescription className="font-sans">
@@ -539,7 +541,7 @@ export function PatientLibrarySection({
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="grid gap-2">
                 <Label htmlFor="edit-ageRange">Rango de edad</Label>
                 <Input
@@ -610,7 +612,7 @@ export function PatientLibrarySection({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -618,12 +620,14 @@ export function PatientLibrarySection({
                 setEditingPatient(null)
                 resetForm()
               }}
+              className="w-full sm:w-auto"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleUpdatePatient}
               disabled={!formData.displayName.trim()}
+              className="w-full sm:w-auto"
             >
               Guardar Cambios
             </Button>

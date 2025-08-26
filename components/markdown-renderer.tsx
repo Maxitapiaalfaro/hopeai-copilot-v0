@@ -71,12 +71,18 @@ const MarkdownRendererComponent = ({
         'prose-blockquote:border-blue-200 dark:prose-blockquote:border-blue-900/40 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-950/30',
         'prose-a:text-primary hover:prose-a:underline',
         // Prevent cutting/overflow on mobile (long links, words)
-        'break-words prose-a:break-words prose-li:break-words',
+        'break-words prose-a:break-words prose-li:break-words prose-code:break-words',
+        'overflow-wrap-anywhere hyphens-auto',
         // Espaciado optimizado
         'prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-3',
         'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
         className
       )}
+      style={{ 
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere',
+        hyphens: 'auto'
+      }}
       dangerouslySetInnerHTML={{ __html: renderedContent }}
     />
   )
@@ -136,10 +142,18 @@ const StreamingMarkdownRendererComponent = ({
             'prose-code:text-foreground prose-code:bg-muted',
             'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
             'prose-blockquote:border-blue-200 dark:prose-blockquote:border-blue-900/40 prose-blockquote:bg-blue-50 dark:prose-blockquote:bg-blue-950/30',
-            'prose-a:text-primary hover:prose-a:underline break-words',
+            'prose-a:text-primary hover:prose-a:underline',
+            // Prevent cutting/overflow on mobile (long links, words)
+            'break-words prose-a:break-words prose-li:break-words prose-code:break-words',
+            'overflow-wrap-anywhere hyphens-auto',
             'prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-3',
             'prose-ul:my-2 prose-ol:my-2 prose-li:my-1'
           )}
+          style={{ 
+            wordBreak: 'break-word',
+            overflowWrap: 'anywhere',
+            hyphens: 'auto'
+          }}
           dangerouslySetInnerHTML={{ __html: renderedContent }}
         />
       ) : (

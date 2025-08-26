@@ -43,6 +43,7 @@ function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
 export function MainInterfaceOptimized({ showDebugElements = true }: { showDebugElements?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [mobileNavInitialTab, setMobileNavInitialTab] = useState<'conversations' | 'patients'>('conversations')
 
   const [pendingFiles, setPendingFiles] = useState<ClinicalFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -659,12 +660,19 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
             createSession={createSession}
             onConversationSelect={handleConversationSelect}
             isOpen={mobileNavOpen}
-            onOpenChange={setMobileNavOpen}
+            onOpenChange={(open) => {
+              setMobileNavOpen(open)
+              if (!open) {
+                // Reset to conversations tab when closing
+                setMobileNavInitialTab('conversations')
+              }
+            }}
             onPatientConversationStart={handlePatientConversationStart}
             onNewChat={() => {
               setPendingFiles([])
               resetSystem()
             }}
+            initialTab={mobileNavInitialTab}
           />
         )}
 
@@ -683,6 +691,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               transitionState={systemState.transitionState}
               onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
               onOpenFichaClinica={patient ? handleOpenFichaFromChat : undefined}
+              onOpenPatientLibrary={() => {
+                setMobileNavInitialTab('patients')
+                setMobileNavOpen(true)
+              }}
               hasExistingFicha={(fichasClinicasLocal && fichasClinicasLocal.length > 0) || false}
               fichaLoading={isFichaLoading}
               generateLoading={isGenerateFichaLoading}

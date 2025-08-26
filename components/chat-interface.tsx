@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown, Brain, Search, Stethoscope, BookOpen, Maximize2, Minimize2, FileText, Copy, Check, ThumbsUp, ThumbsDown } from "lucide-react"
+import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown, Brain, Search, Stethoscope, BookOpen, Maximize2, Minimize2, FileText, Copy, Check, ThumbsUp, ThumbsDown, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { AgentType, ChatState, ClinicalFile } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
@@ -36,6 +36,7 @@ interface ChatInterfaceProps {
   transitionState?: TransitionState
   onGenerateFichaClinica?: () => void
   onOpenFichaClinica?: () => void
+  onOpenPatientLibrary?: () => void
   hasExistingFicha?: boolean
   fichaLoading?: boolean
   generateLoading?: boolean
@@ -43,7 +44,7 @@ interface ChatInterfaceProps {
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', onGenerateFichaClinica, onOpenFichaClinica, hasExistingFicha = false, fichaLoading = false, generateLoading = false }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', onGenerateFichaClinica, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -62,6 +63,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [previewAgent, setPreviewAgent] = useState<AgentType | null>(null)
   
   // Hook para speech-to-text
   const { isListening, interimTranscript, error: speechError } = useSpeechToText({
@@ -496,8 +498,29 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     }
   }
 
+  // Available agents for cycling
+  const availableAgents: AgentType[] = ["socratico", "clinico", "academico", "orquestador"]
+  
+  // Cycle to next agent for preview
+  const cycleToNextAgent = () => {
+    const currentIndex = availableAgents.indexOf(previewAgent || activeAgent)
+    const nextIndex = (currentIndex + 1) % availableAgents.length
+    setPreviewAgent(availableAgents[nextIndex])
+  }
+
+  // Reset preview when tooltip is hidden
+  const resetPreview = () => {
+    setPreviewAgent(null)
+  }
+
+  // Badge always shows active agent, only tooltip shows preview
   const config = getAgentVisualConfig(activeAgent)
   const IconComponent = config.icon
+  
+  // Tooltip shows preview agent or active agent
+  const tooltipAgent = previewAgent || activeAgent
+  const tooltipConfig = getAgentVisualConfig(tooltipAgent)
+  const TooltipIconComponent = tooltipConfig.icon
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-serif paper-noise">
@@ -573,7 +596,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
                 <div
                   className={cn(
-                    "relative max-w-[95%] sm:max-w-[80%] rounded-lg border ring-1 ring-transparent",
+                    "relative max-w-[95%] sm:max-w-[80%] rounded-lg border ring-1 ring-transparent overflow-visible",
                     message.role === "user"
                       ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-[hsl(var(--user-bubble-bg))] shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
                       : `${messageAgentConfig.bgColor} ${messageAgentConfig.borderColor}`,
@@ -581,15 +604,15 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 >
                   {/* Mobile: Agent icon in corner */}
                   {message.role === "model" && (
-                    <div className={cn("absolute -top-2 -left-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
-                      <MessageIconComponent className={cn("h-3 w-3", messageAgentConfig.textColor)} />
+                    <div className={cn("absolute -top-2.5 -left-2.5 sm:hidden w-5 h-5 rounded-full flex items-center justify-center border-2 border-background shadow-sm z-10", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
+                      <MessageIconComponent className={cn("h-2.5 w-2.5", messageAgentConfig.textColor)} />
                     </div>
                   )}
                   
                   {/* Mobile: User icon in corner */}
                   {message.role === "user" && (
-                    <div className="absolute -top-2 -right-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background bg-white shadow-sm">
-                      <User className="h-3 w-3 text-gray-600" />
+                    <div className="absolute -top-2.5 -right-2.5 sm:hidden w-5 h-5 rounded-full flex items-center justify-center border-2 border-background bg-primary dark:bg-emerald-600 shadow-sm z-10">
+                      <User className="h-2.5 w-2.5 text-white" />
                     </div>
                   )}
                   {/* Agent Context Header for AI responses */}
@@ -600,7 +623,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           {message.agent === 'socratico' && 'Filósofo Socrático'}
                           {message.agent === 'clinico' && 'Archivista Clínico'}
                           {message.agent === 'academico' && 'Investigador Académico'}
-                          {message.agent === 'orquestador' && 'Orquestador'}
+                          {message.agent === 'orquestador' && 'HopeAI'}
                           {!message.agent && 'HopeAI'}
                         </span>
                       </div>
@@ -608,7 +631,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         {message.agent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
                         {message.agent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
                         {message.agent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
-                        {message.agent === 'orquestador' && 'Coordinando respuesta entre especialistas'}
+                        {message.agent === 'orquestador' && 'Asistente principal coordinando respuesta'}
                         {!message.agent && 'Respuesta del sistema'}
                       </p>
                     </div>
@@ -636,17 +659,18 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       <div className="text-xs font-sans font-medium text-muted-foreground mb-2">Referencias:</div>
                       <div className="space-y-1">
                         {message.groundingUrls.map((ref, index) => (
-                          <div key={index} className="text-sm font-sans">
+                          <div key={index} className="text-sm font-sans break-words overflow-hidden">
                             <a 
                               href={ref.url} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="text-primary hover:underline"
+                              className="text-primary hover:underline break-words hyphens-auto"
+                              style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                             >
                               {ref.title}
                             </a>
                             {ref.domain && (
-                              <span className="text-muted-foreground ml-1">({ref.domain})</span>
+                              <span className="text-muted-foreground ml-1 break-words">({ref.domain})</span>
                             )}
                           </div>
                         ))}
@@ -830,7 +854,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {/* Minimal active agent indicator with tooltip */}
           <div className="mb-1 flex items-center justify-end px-1 md:px-0">
             <div className="relative group">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 cursor-help select-none touch-manipulation" 
+              {/* Expanded hover area that covers badge + bridge + tooltip */}
+              <div className="absolute -inset-2 -top-[120px] opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto z-30"></div>
+              
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 cursor-help select-none touch-manipulation relative z-40" 
                    onTouchStart={(e) => e.preventDefault()}
                    onMouseDown={(e) => e.preventDefault()}>
                 <IconComponent className={cn("h-3.5 w-3.5", config.textColor)} />
@@ -838,27 +865,45 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   {activeAgent === "socratico" && "Socrático"}
                   {activeAgent === "clinico" && "Clínico"}
                   {activeAgent === "academico" && "Académico"}
+                  {activeAgent === "orquestador" && "HopeAI"}
                 </span>
               </div>
               
-              {/* Elegant minimalistic tooltip */}
-              <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              {/* Enhanced tooltip with agent cycling */}
+              <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto z-50">
                 <div className="bg-popover border border-border rounded-lg shadow-lg p-3 min-w-[280px] max-w-[320px] sm:max-w-[380px]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <IconComponent className={cn("h-4 w-4", config.textColor)} />
-                    <span className="text-sm font-medium font-sans">
-                      {activeAgent === 'socratico' && 'Filósofo Socrático'}
-                      {activeAgent === 'clinico' && 'Archivista Clínico'}
-                      {activeAgent === 'academico' && 'Investigador Académico'}
-                      {activeAgent === 'orquestador' && 'Orquestador'}
-                    </span>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <TooltipIconComponent className={cn("h-4 w-4", tooltipConfig.textColor)} />
+                      <span className="text-sm font-medium font-sans">
+                        {tooltipAgent === 'socratico' && 'Filósofo Socrático'}
+                        {tooltipAgent === 'clinico' && 'Archivista Clínico'}
+                        {tooltipAgent === 'academico' && 'Investigador Académico'}
+                        {tooltipAgent === 'orquestador' && 'HopeAI'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={cycleToNextAgent}
+                      className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors select-none"
+                      title="Ver siguiente agente"
+                      aria-label="Ver siguiente agente"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                   <p className="text-xs text-muted-foreground font-sans leading-relaxed">
-                    {activeAgent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
-                    {activeAgent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
-                    {activeAgent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
-                    {activeAgent === 'orquestador' && 'Coordinando respuesta entre especialistas'}
+                    {tooltipAgent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
+                    {tooltipAgent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
+                    {tooltipAgent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
+                    {tooltipAgent === 'orquestador' && 'Asistente principal que coordina las respuestas'}
                   </p>
+                  {previewAgent && (
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <p className="text-xs text-muted-foreground font-sans">
+                        {tooltipAgent === activeAgent ? 'Agente actual' : 'Vista previa - HopeAI selecciona automáticamente el mejor especialista'}
+                      </p>
+                    </div>
+                  )}
                   {/* Tooltip arrow */}
                   <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-border"></div>
                   <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-popover translate-y-[-1px]"></div>
@@ -883,99 +928,172 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               </div>
             )}
             <div className={cn(
-                "relative rounded-lg border bg-card transition-all",
+                "rounded-lg border bg-card transition-all",
                 "border-border",
                 config.focusWithinBorderColor
               )}>
-              <Textarea
-                ref={textareaRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                onFocus={() => setIsInputFocused(true)}
-                onBlur={() => setIsInputFocused(false)}
-                placeholder="Escribe tu mensaje o pregunta..."
-                className="w-full min-h-[52px] resize-none border-0 bg-transparent px-3 md:px-4 py-3 pr-28 md:pr-32 pb-11 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans"
-                rows={1}
-                disabled={isProcessing || isStreaming || isUploading}
-                style={{ 
-                  boxShadow: 'none',
-                }}
-              />
-              
-              <div className="absolute bottom-2 md:bottom-3 right-2 md:right-3 flex items-center gap-1.5 md:gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className={cn("h-8 w-8 md:h-9 md:w-9", config.ghostButton.hoverBg, config.ghostButton.text)}
-                      disabled={!onOpenFichaClinica && !onGenerateFichaClinica}
-                      title="Ficha Clínica"
-                    >
-                      <FileText className="h-4 w-4" />
-                      {(fichaLoading || generateLoading) && (
-                        <span className="absolute -top-1 -right-1 inline-flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                        </span>
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 font-sans">
-                    <DropdownMenuItem
-                      disabled={!onOpenFichaClinica}
-                      onSelect={(e) => { e.preventDefault(); if (!fichaLoading) onOpenFichaClinica && onOpenFichaClinica() }}
-                    >
-                      {fichaLoading ? 'Abriendo…' : 'Ver Ficha Clínica'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={!onGenerateFichaClinica}
-                      onSelect={(e) => { e.preventDefault(); if (!generateLoading) onGenerateFichaClinica && onGenerateFichaClinica() }}
-                      className={hasExistingFicha ? 'text-amber-700 focus:text-amber-800' : ''}
-                    >
-                      {generateLoading ? 'Generando…' : hasExistingFicha ? 'Re-generar Ficha (sobrescribe)' : 'Generar Ficha Clínica'}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <FileUploadButton
-                  onFilesSelected={(files) => {
-                    // Append to pendingFiles visual list via parent state already provided
-                    // No-op here; parent hook updates pendingFiles after uploadDocument
+              {/* Text Input Section */}
+              <div className="relative">
+                <Textarea
+                  ref={textareaRef}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
+                  placeholder="Escribe tu mensaje o pregunta..."
+                  className="w-full min-h-[52px] resize-none border-0 bg-transparent px-3 md:px-4 py-3 md:pr-32 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans"
+                  rows={1}
+                  disabled={isProcessing || isStreaming || isUploading}
+                  style={{ 
+                    boxShadow: 'none',
                   }}
-                  uploadDocument={uploadDocument}
-                  disabled={isProcessing || isStreaming || isUploading}
-                  pendingFiles={pendingFiles}
-                  onRemoveFile={onRemoveFile}
-                  buttonClassName={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
                 />
-                <VoiceInputButton
-                  onTranscriptUpdate={handleVoiceTranscript}
-                  disabled={isProcessing || isStreaming || isUploading}
-                  size="sm"
-                  variant="ghost"
-                  language="es-ES"
-                  className={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
-                  iconClassName={cn(config.ghostButton.text, 'group-hover:opacity-90')}
-                />
-                <Button
-                  onClick={() => handleSendMessage()}
-                  disabled={
-                    !inputValue.trim() || 
-                    isProcessing || 
-                    isStreaming ||
-                    isUploading ||
-                    pendingFiles.some(file => 
-                      (file as any).processingStatus && 
-                      (file as any).processingStatus === 'processing'
-                    )
-                  }
-                  size="icon"
-                  className={cn("h-8 w-8 md:h-9 md:w-9", config.button.bg, config.button.hoverBg, config.button.text)}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+              </div>
+              
+              {/* Buttons Section - Both mobile and desktop: Full width row below input */}
+              <div className="flex items-center justify-between gap-2 md:gap-3 px-3 pb-3 border-t border-border/50 pt-3">
+                {/* Left side buttons (mobile) / All buttons (desktop) */}
+                <div className="flex items-center gap-1.5 md:gap-2">
+                  <FileUploadButton
+                    onFilesSelected={(files) => {
+                      // Append to pendingFiles visual list via parent state already provided
+                      // No-op here; parent hook updates pendingFiles after uploadDocument
+                    }}
+                    uploadDocument={uploadDocument}
+                    disabled={isProcessing || isStreaming || isUploading}
+                    pendingFiles={pendingFiles}
+                    onRemoveFile={onRemoveFile}
+                    buttonClassName={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
+                  />
+
+                  {(onOpenFichaClinica || onGenerateFichaClinica) ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className={cn(
+                            "h-10 md:h-12 px-3 w-auto", 
+                            config.ghostButton.hoverBg, 
+                            config.ghostButton.text
+                          )}
+                          title="Ficha Clínica"
+                        >
+                          {/* Mobile: Show text, Desktop: Show icon */}
+                          <span className="md:hidden text-sm font-medium">Ficha Clínica</span>
+                          <FileText className="hidden md:block h-5 w-5" />
+                          {(fichaLoading || generateLoading) && (
+                            <span className="absolute -top-1 -right-1 inline-flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                            </span>
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 font-sans">
+                        <DropdownMenuItem
+                          disabled={!onOpenFichaClinica}
+                          onSelect={(e) => { e.preventDefault(); if (!fichaLoading) onOpenFichaClinica && onOpenFichaClinica() }}
+                        >
+                          {fichaLoading ? 'Abriendo…' : 'Ver Ficha Clínica'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={!onGenerateFichaClinica}
+                          onSelect={(e) => { e.preventDefault(); if (!generateLoading) onGenerateFichaClinica && onGenerateFichaClinica() }}
+                          className={hasExistingFicha ? 'text-amber-700 focus:text-amber-800' : ''}
+                        >
+                          {generateLoading ? 'Generando…' : hasExistingFicha ? 'Re-generar Ficha (sobrescribe)' : 'Generar Ficha Clínica'}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <div className="relative group">
+                      {/* Expanded hover area that covers button + tooltip */}
+                      <div className="absolute -inset-2 -top-[60px] opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto z-30"></div>
+                      
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn(
+                          "h-10 md:h-12 px-3 w-auto relative z-40", 
+                          config.ghostButton.hoverBg, 
+                          config.ghostButton.text,
+                          "opacity-50 cursor-not-allowed"
+                        )}
+                        disabled={true}
+                        title="Crea o selecciona un paciente para acceder a la Ficha Clínica"
+                      >
+                        {/* Mobile: Show text, Desktop: Show icon */}
+                        <span className="md:hidden text-sm font-medium">Ficha Clínica</span>
+                        <FileText className="hidden md:block h-5 w-5" />
+                      </Button>
+                      
+                      {/* Mobile tooltip for disabled state */}
+                      <div className="absolute bottom-full left-0 mb-2 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto group-active:pointer-events-auto z-50">
+                        <div className="bg-popover border border-border rounded-lg shadow-lg p-3 min-w-[280px] max-w-[320px] sm:max-w-[380px] select-none">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-muted-foreground">💡</span>
+                            <span className="text-sm font-medium font-sans">Ficha Clínica</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground font-sans leading-relaxed mb-3">
+                            Crea o selecciona un paciente para acceder a la documentación clínica
+                          </p>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => {
+                                console.log('Button clicked, onOpenPatientLibrary:', onOpenPatientLibrary);
+                                if (onOpenPatientLibrary) {
+                                  onOpenPatientLibrary();
+                                } else {
+                                  console.log('onOpenPatientLibrary is not available');
+                                }
+                              }}
+                              className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors", config.button.bg, config.button.text, config.button.hoverBg)}
+                            >
+                              <span>Ir a Pacientes</span>
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="absolute top-full left-4 border-4 border-transparent border-t-popover"></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                </div>
+
+                {/* Right side buttons (voice and send) */}
+                <div className="flex items-center gap-1.5">
+                  <VoiceInputButton
+                    onTranscriptUpdate={handleVoiceTranscript}
+                    disabled={isProcessing || isStreaming || isUploading}
+                    size="lg"
+                    variant="ghost"
+                    language="es-ES"
+                    className={cn("h-10 w-10 md:h-12 md:w-12", config.ghostButton.hoverBg, config.ghostButton.text)}
+                    iconClassName={cn(config.ghostButton.text, 'group-hover:opacity-90 h-5 w-5')}
+                  />
+                  <Button
+                    onClick={() => handleSendMessage()}
+                    disabled={
+                      !inputValue.trim() || 
+                      isProcessing || 
+                      isStreaming ||
+                      isUploading ||
+                      pendingFiles.some(file => 
+                        (file as any).processingStatus && 
+                        (file as any).processingStatus === 'processing'
+                      )
+                    }
+                    size="icon"
+                    className={cn("h-10 w-10 md:h-12 md:w-12", config.button.bg, config.button.hoverBg, config.button.text)}
+                  >
+                    <Send className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
             </div>
 

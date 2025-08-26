@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Paperclip, Upload, X, FileText, ImageIcon, AlertCircle } from 'lucide-react'
+import { Plus, Upload, X, FileText, ImageIcon, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ClinicalFile } from '@/types/clinical-types'
 
@@ -104,7 +104,7 @@ export function FileUploadButton({
         {isUploading ? (
           <Upload className="h-4 w-4 animate-pulse" />
         ) : (
-          <Paperclip className="h-4 w-4" />
+          <Plus className="h-4 w-4" />
         )}
       </Button>
       
