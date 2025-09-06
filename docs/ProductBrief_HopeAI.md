@@ -136,7 +136,7 @@ const res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`, 
 }} />
 ```
 
-- Ficha Clínica (Archivista Clínico)
+- Ficha Clínica (Especialista en Documentación)
   - API endpoint delega al orquestador de tareas clínicas:
 ```25:33:app/api/patients/[id]/ficha/route.ts
 await clinicalTaskOrchestrator.generateFichaClinica({ fichaId, pacienteId: id, sessionState: effectiveSessionState, patientForm, conversationSummary })

@@ -54,12 +54,12 @@ interface ConversationHistoryListProps {
 const agentConfig = {
   'socratico': {
     icon: Brain,
-    label: 'Filósofo Socrático',
+    label: 'Supervisor Clínico',
     color: 'bg-blue-100 text-blue-800 border-blue-200'
   },
   'clinico': {
     icon: FileText,
-    label: 'Archivista Clínico',
+    label: 'Especialista en Documentación',
     color: 'bg-green-100 text-green-800 border-green-200'
   },
   'academico': {
@@ -237,8 +237,8 @@ export function ConversationHistoryList({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los agentes</SelectItem>
-                <SelectItem value="socratico">Filósofo Socrático</SelectItem>
-                <SelectItem value="clinico">Archivista Clínico</SelectItem>
+                <SelectItem value="socratico">Supervisor Clínico</SelectItem>
+                <SelectItem value="clinico">Especialista en Documentación</SelectItem>
                 <SelectItem value="academico">Investigador Académico</SelectItem>
               </SelectContent>
             </Select>

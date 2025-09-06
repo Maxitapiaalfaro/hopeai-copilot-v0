@@ -17,14 +17,14 @@ const demoSections = [
   },
   {
     id: "socratico",
-    title: "HopeAI Socrático",
+    title: "Supervisor Clínico",
     icon: Brain,
     description: "Therapeutic dialogue and deep reflection",
     color: "blue",
   },
   {
     id: "clinico",
-    title: "HopeAI Clínico",
+    title: "Especialista en Documentación",
     icon: Stethoscope,
     description: "Clinical synthesis and documentation",
     color: "green",

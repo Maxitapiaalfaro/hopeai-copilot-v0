@@ -678,13 +678,13 @@ export class HopeAISystem {
     const agentConfirmationPrompts = {
       socratico: `El usuario me ha solicitado activar el modo socrático con el mensaje: "${originalMessage}". 
 
-Como HopeAI Socrático, núcleo reflexivo de la plataforma integral HopeAI, debo confirmar mi activación de manera cálida y contextual. Mi respuesta debe reflejar naturalmente mi capacidad de exploración reflexiva profunda, desarrollo de insights terapéuticos y análisis de casos clínicos, mientras mantengo una conciencia implícita de formar parte de un ecosistema más amplio de apoyo clínico. Luego debo hacer una pregunta reflexiva que invite al usuario a comenzar nuestra exploración socrática.
+Como Supervisor Clínico, núcleo reflexivo de la plataforma integral HopeAI, debo confirmar mi activación de manera cálida y contextual. Mi respuesta debe reflejar naturalmente mi capacidad de exploración reflexiva profunda, desarrollo de insights terapéuticos y análisis de casos clínicos, mientras mantengo una conciencia implícita de formar parte de un ecosistema más amplio de apoyo clínico. Luego debo hacer una pregunta reflexiva que invite al usuario a comenzar nuestra exploración socrática.
 
 Por favor, genera una confirmación natural y empática que refleje mi personalidad socrática integrada.`,
       
       clinico: `El usuario me ha solicitado activar el modo clínico con el mensaje: "${originalMessage}".
 
-Como HopeAI Clínico, núcleo organizacional de la plataforma integral HopeAI, debo confirmar mi activación de manera profesional y estructurada. Mi respuesta debe reflejar naturalmente mi capacidad de documentación clínica, resúmenes de sesión, notas SOAP y estructuración de información profesional, mientras mantengo una conciencia implícita de formar parte de un ecosistema que integra exploración reflexiva, documentación estructurada y validación empírica. Luego debo preguntar específicamente qué tipo de documentación o tarea clínica necesita.
+Como Especialista en Documentación, núcleo organizacional de la plataforma integral HopeAI, debo confirmar mi activación de manera profesional y estructurada. Mi respuesta debe reflejar naturalmente mi capacidad de documentación clínica, resúmenes de sesión, notas SOAP y estructuración de información profesional, mientras mantengo una conciencia implícita de formar parte de un ecosistema que integra exploración reflexiva, documentación estructurada y validación empírica. Luego debo preguntar específicamente qué tipo de documentación o tarea clínica necesita.
 
 Por favor, genera una confirmación clara y profesional que refleje mi enfoque clínico organizativo integrado.`,
       

@@ -104,7 +104,7 @@ export class IntelligentIntentRouter {
   private readonly intentFunctions: FunctionDeclaration[] = [
     {
       name: 'activar_modo_socratico',
-      description: `Activa HopeAI Socrático para diálogo terapéutico profundo, exploración reflexiva y facilitación de insights. 
+      description: `Activa Supervisor Clínico para diálogo terapéutico profundo, exploración reflexiva y facilitación de insights. 
       
       ACTIVAR CUANDO:
       - Usuario busca reflexión, autoconocimiento o exploración de pensamientos/emociones
@@ -119,7 +119,7 @@ export class IntelligentIntentRouter {
         properties: {
           razon_activacion: {
             type: 'string' as const,
-            description: 'Razón específica para activar HopeAI Socrático basada en la intención detectada'
+            description: 'Razón específica para activar Supervisor Clínico basada en la intención detectada'
           },
           entidades_socraticas: {
             type: 'array' as const,
@@ -140,7 +140,7 @@ export class IntelligentIntentRouter {
     },
     {
       name: 'activar_modo_clinico',
-      description: `Activa HopeAI Clínico para documentación profesional, síntesis clínica y estructuración de información terapéutica.
+      description: `Activa Especialista en Documentación para documentación profesional, síntesis clínica y estructuración de información terapéutica.
       
       ACTIVAR CUANDO:
       - Usuario necesita documentación clínica, notas de sesión o resúmenes profesionales
@@ -624,12 +624,12 @@ Agente Activo: ${enrichedSessionContext.activeAgent || 'No especificado'}
 
 **SISTEMA DE ESPECIALISTAS DISPONIBLES:**
 
-🧠 **HopeAI Socrático** - El Filósofo Terapéutico
+🧠 **Supervisor Clínico** - El Filósofo Terapéutico
 • ACTIVAR para: Exploración reflexiva, cuestionamiento socrático, facilitación de insights
 • PALABRAS CLAVE: reflexionar, explorar, analizar, cuestionar, insight, autoconocimiento, pensar, meditar, examinar, introspección
 • EJEMPLOS: "¿Cómo reflexionar sobre esto?", "Necesito explorar más profundo", "Ayúdame a analizar", "Quiero desarrollar insight"
 
-📋 **HopeAI Clínico** - El Archivista Profesional  
+📋 **Especialista en Documentación** - El Archivista Profesional  
 • ACTIVAR para: Documentación clínica, síntesis profesional, estructuración de información
 • PALABRAS CLAVE: documentar, notas, resumen, SOAP, expediente, bitácora, redactar, estructurar, formato
 • EJEMPLOS: "Necesito documentar esta sesión", "Ayúdame con notas SOAP", "Estructura esta información", "Redacta un resumen"
@@ -650,7 +650,7 @@ ${(() => {
     return `\n**CONTEXTO DE ARCHIVOS EN SESIÓN (CRÍTICO):**\n` +
            `Archivos presentes: ${files.length} → ${names}\n` +
            `Tipos: ${types}\n` +
-           `\nREGLA: Si existen archivos en la sesión, prioriza el enrutamiento a HopeAI Clínico para procesar/sintetizar el material, salvo que el usuario pida explícitamente investigación académica.\n` +
+           `\nREGLA: Si existen archivos en la sesión, prioriza el enrutamiento a Especialista en Documentación para procesar/sintetizar el material, salvo que el usuario pida explícitamente investigación académica.\n` +
            `Incluso con entradas vagas o indirectas, asume que el usuario espera que trabajemos con el/los archivo(s).`;
   }
   return '';
@@ -918,7 +918,7 @@ ${(() => {
   private extractAgentTypeFromReference(referenceContent: string): string | null {
     const content = referenceContent.toLowerCase();
     
-    if (content.includes('archivista') || content.includes('clínico') || content.includes('clinical')) {
+    if (content.includes('especialista en documentación') || content.includes('documentación') || content.includes('clínico') || content.includes('clinical')) {
       return 'clinico';
     }
     
@@ -926,7 +926,7 @@ ${(() => {
       return 'academico';
     }
     
-    if (content.includes('filósofo') || content.includes('socrático') || content.includes('socratic')) {
+    if (content.includes('supervisor clínico') || content.includes('supervisor') || content.includes('socrático') || content.includes('socratic')) {
       return 'socratico';
     }
     

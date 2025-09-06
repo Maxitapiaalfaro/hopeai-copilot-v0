@@ -20,7 +20,7 @@ La solicitud representa una evolución fundamental en la arquitectura del sistem
 
 2.  **Gestión de Estado y Persistencia del Artefacto:** La Ficha Clínica no es un mensaje de chat; es un documento persistente con su propio ciclo de vida y estado (ej. `generando`, `completado`, `error`, `actualizando`). El modelo de persistencia actual, centrado en `chat_sessions` en IndexedDB, es una base excelente pero insuficiente. Necesita una extensión para manejar estos nuevos artefactos de datos, su versionado y su estado de generación.
 
-3.  **Riesgo de Grounding Clínico:** El riesgo más significativo es que el "Archivista Clínico", al sintetizar un historial extenso, pueda **alucinar o inventar detalles** no presentes en los datos originales. En un contexto clínico, una alucinación no es un error trivial; es un riesgo ético y de seguridad grave. El proceso de generación debe estar rigurosamente "anclado" (grounded) a los datos de origen (formulario inicial e historial de conversaciones).
+3.  **Riesgo de Grounding Clínico:** El riesgo más significativo es que el "Especialista en Documentación", al sintetizar un historial extenso, pueda **alucinar o inventar detalles** no presentes en los datos originales. En un contexto clínico, una alucinación no es un error trivial; es un riesgo ético y de seguridad grave. El proceso de generación debe estar rigurosamente "anclado" (grounded) a los datos de origen (formulario inicial e historial de conversaciones).
 
 -----
 
@@ -54,9 +54,9 @@ Debemos ampliar nuestra estrategia de almacenamiento en el lado del cliente.
   * **Justificación:** Esto proporciona un modelo de datos robusto para rastrear no solo el contenido de la ficha, sino también su estado actual, lo cual es crucial para reflejar en la UI si una ficha "está siendo actualizada".
   * **Impacto Esperado:** Gestión de estado completa y persistente para las Fichas Clínicas, permitiendo a la UI reaccionar a su ciclo de vida y proporcionando un historial de versiones auditable.
 
-#### **c. Implementación del "Archivista Clínico" con `ai.models.generateContent`**
+#### **c. Implementación del "Especialista en Documentación" con `ai.models.generateContent`**
 
-Para la generación real del contenido de la ficha, el Orquestador de Tareas Asíncronas debe invocar al especialista "Archivista Clínico" utilizando el método más adecuado del SDK.
+Para la generación real del contenido de la ficha, el Orquestador de Tareas Asíncronas debe invocar al especialista "Especialista en Documentación" utilizando el método más adecuado del SDK.
 
   * **Componente del SDK:** **`ai.models.generateContent`**
   * **Justificación:** Esta es la elección crítica. A diferencia de `ai.chats.create`, que está diseñado para interacciones conversacionales con estado, `generateContent` es una llamada **sin estado (stateless)** y de un solo turno. Es perfecta para tareas de síntesis como esta, donde se proporciona un contexto completo de una vez y se espera una única salida estructurada. No necesitamos la sobrecarga de la gestión de historial de un objeto de chat.
@@ -72,8 +72,8 @@ Para la generación real del contenido de la ficha, el Orquestador de Tareas As�
 Para mitigar el riesgo de alucinaciones, debemos anclar rigurosamente la generación del modelo a los datos de origen.
 
   * **Componente del SDK:** Parámetro **`systemInstruction`** dentro de la llamada a `ai.models.generateContent`.
-  * **Justificación:** Esta es la herramienta más poderosa del SDK para dirigir el comportamiento del modelo a un alto nivel. Crearemos una `systemInstruction` muy estricta para el "Archivista Clínico" que le ordene explícitamente: "*Actúa como un archivista clínico. Tu única tarea es sintetizar una ficha clínica formal basada exclusivamente en la información proporcionada. No infieras, no añadas información externa y no completes datos faltantes. Cita únicamente los hechos presentes en el historial y el formulario de admisión. La precisión y la fidelidad a la fuente son tu máxima prioridad.*"
-  * **Impacto Esperado:** Reducción drástica del riesgo de alucinación. Aumenta la fiabilidad y seguridad clínica del contenido generado, convirtiendo al "Archivista Clínico" en una herramienta de síntesis y no de creación.
+  * **Justificación:** Esta es la herramienta más poderosa del SDK para dirigir el comportamiento del modelo a un alto nivel. Crearemos una `systemInstruction` muy estricta para el "Especialista en Documentación" que le ordene explícitamente: "*Actúa como un especialista en documentación clínica. Tu única tarea es sintetizar una ficha clínica formal basada exclusivamente en la información proporcionada. No infieras, no añadas información externa y no completes datos faltantes. Cita únicamente los hechos presentes en el historial y el formulario de admisión. La precisión y la fidelidad a la fuente son tu máxima prioridad.*"
+* **Impacto Esperado:** Reducción drástica del riesgo de alucinación. Aumenta la fiabilidad y seguridad clínica del contenido generado, convirtiendo al "Especialista en Documentación" en una herramienta de síntesis y no de creación.
 
 -----
 

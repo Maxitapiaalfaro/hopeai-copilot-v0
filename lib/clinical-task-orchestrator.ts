@@ -162,7 +162,7 @@ export class ClinicalTaskOrchestrator {
 
   private getArchivistaSystemInstruction(): string {
     return (
-      'Actúas como Archivista Clínico. Tu única tarea es sintetizar una ficha clínica formal basada exclusivamente en la información proporcionada. ' +
+      'Actúas como Especialista en Documentación. Tu única tarea es sintetizar una ficha clínica formal basada exclusivamente en la información proporcionada. ' +
       'No infieras ni añadas datos externos. No incluyas marcadores de sistema, etiquetas entre corchetes ni referencias a instrucciones del sistema. ' +
       'Escribe únicamente contenido clínico final, claro y profesional. Cita únicamente hechos presentes en el historial y el formulario de admisión. '
     )

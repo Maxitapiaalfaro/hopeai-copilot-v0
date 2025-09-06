@@ -7,7 +7,7 @@
 
 ## 1. Propósito y Realidad Arquitectónica
 
-HopeAI es una **plataforma de IA clínica implementada** que asiste a psicólogos mediante **tres especialistas coordinados dinámicamente**: el Filósofo Socrático, el Archivista Clínico y el Investigador Académico. 
+HopeAI es una **plataforma de IA clínica implementada** que asiste a psicólogos mediante **tres especialistas coordinados dinámicamente**: el Supervisor Clínico, el Especialista en Documentación y el Investigador Académico. 
 
 Este documento establece **los principios que gobiernan nuestra arquitectura verificada** y **cómo evolucionamos de forma sostenible** sobre una base sólida de componentes implementados.
 
@@ -293,8 +293,8 @@ La arquitectura actual demuestra que es posible combinar **inteligencia artifici
 ```
 
 ### 2.3 Especialistas Implementados
-- **🤔 Filósofo Socrático**: Exploración reflexiva y cuestionamiento
-- **📋 Archivista Clínico**: Documentación y análisis estructurado  
+- **🤔 Supervisor Clínico**: Exploración reflexiva y cuestionamiento
+- **📋 Especialista en Documentación**: Documentación y análisis estructurado  
 - **🔬 Investigador Académico**: Validación científica y evidencia
 - **🎯 Orquestador Dinámico**: Coordinación inteligente automática
 

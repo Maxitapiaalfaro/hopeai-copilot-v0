@@ -300,7 +300,7 @@ export class EntityExtractionEngine {
   }
 
   private initializeKnownEntities() {
-    // Técnicas terapéuticas conocidas - Alineadas con HopeAI Socrático
+    // Técnicas terapéuticas conocidas - Alineadas con Supervisor Clínico
     this.knownEntities.set('therapeutic_technique', new Set([
       'EMDR', 'TCC', 'Terapia Cognitivo-Conductual', 'DBT', 'ACT',
       'Mindfulness', 'Exposición', 'Reestructuración Cognitiva',
@@ -332,7 +332,7 @@ export class EntityExtractionEngine {
       'Trastorno del Espectro Autista', 'TDAH', 'Trastorno de Conducta'
     ]))
 
-    // Procesos de documentación conocidos - Alineados con HopeAI Clínico
+    // Procesos de documentación conocidos - Alineados con Especialista en Documentación
     this.knownEntities.set('documentation_process', new Set([
       'redacción de notas', 'notas clínicas', 'documentación SOAP',
       'resúmenes de sesión', 'planes de tratamiento', 'evaluación de progreso',
@@ -355,7 +355,7 @@ export class EntityExtractionEngine {
       'consenso científico', 'práctica basada en evidencia', 'guidelines clínicas', 'protocolos validados'
     ]))
 
-    // Consultas de exploración socrática conocidas - Alineadas con HopeAI Socrático
+    // Consultas de exploración socrática conocidas - Alineadas con Supervisor Clínico
     this.knownEntities.set('socratic_exploration', new Set([
       'reflexionar', 'explorar', 'analizar', 'cuestionar', 'insight', 'autoconocimiento',
       'desarrollo de conciencia', 'exploración profunda', 'cuestionamiento socrático', 'facilitación de insight',
@@ -416,7 +416,7 @@ export class EntityExtractionEngine {
     this.synonymMaps.set('migrantes', ['inmigrantes', 'emigrantes'])
     this.synonymMaps.set('refugiados', ['desplazados', 'solicitantes de asilo'])
     
-    // Documentación clínica - Alineados con HopeAI Clínico
+    // Documentación clínica - Alineados con Especialista en Documentación
     this.synonymMaps.set('notas clínicas', ['notas', 'documentar', 'redactar', 'anotar'])
     this.synonymMaps.set('documentación SOAP', ['soap', 'formato SOAP', 'estructura SOAP', 'nota SOAP'])
     this.synonymMaps.set('resúmenes de sesión', ['resumen', 'resúmenes', 'síntesis de sesión', 'síntesis'])
@@ -449,7 +449,7 @@ export class EntityExtractionEngine {
     this.synonymMaps.set('evidencia empírica', ['empírico', 'datos empíricos', 'respaldo empírico'])
     this.synonymMaps.set('fundamento empírico', ['fundamento', 'base empírica'])
     
-    // Exploración socrática - Alineados con HopeAI Socrático
+    // Exploración socrática - Alineados con Supervisor Clínico
     this.synonymMaps.set('reflexionar', ['reflexión', 'pensar', 'meditar', 'contemplar'])
     this.synonymMaps.set('explorar', ['exploración', 'investigar', 'indagar', 'examinar'])
     this.synonymMaps.set('analizar', ['análisis', 'examinar', 'estudiar', 'evaluar', 'revisar'])

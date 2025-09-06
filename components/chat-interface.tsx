@@ -620,8 +620,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     <div className="px-3 md:px-4 pt-3 pb-2 border-b border-border/50">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={cn("text-sm font-bold font-sans", messageAgentConfig.textColor)}>
-                          {message.agent === 'socratico' && 'Filósofo Socrático'}
-                          {message.agent === 'clinico' && 'Archivista Clínico'}
+                          {message.agent === 'socratico' && 'Supervisor Clínico'}
+                    {message.agent === 'clinico' && 'Especialista en Documentación'}
                           {message.agent === 'academico' && 'Investigador Académico'}
                           {message.agent === 'orquestador' && 'HopeAI'}
                           {!message.agent && 'HopeAI'}
@@ -742,8 +742,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 <div className="px-4 pt-3 pb-2 border-b border-border/50">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium font-sans">
-                      {activeAgent === 'socratico' && 'Filósofo Socrático'}
-                      {activeAgent === 'clinico' && 'Archivista Clínico'}
+                      {activeAgent === 'socratico' && 'Supervisor Clínico'}
+                  {activeAgent === 'clinico' && 'Especialista en Documentación'}
                       {activeAgent === 'academico' && 'Investigador Académico'}
                       {activeAgent === 'orquestador' && 'Orquestador'}
                     </span>
@@ -876,8 +876,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     <div className="flex items-center gap-2">
                       <TooltipIconComponent className={cn("h-4 w-4", tooltipConfig.textColor)} />
                       <span className="text-sm font-medium font-sans">
-                        {tooltipAgent === 'socratico' && 'Filósofo Socrático'}
-                        {tooltipAgent === 'clinico' && 'Archivista Clínico'}
+                        {tooltipAgent === 'socratico' && 'Supervisor Clínico'}
+                      {tooltipAgent === 'clinico' && 'Especialista en Documentación'}
                         {tooltipAgent === 'academico' && 'Investigador Académico'}
                         {tooltipAgent === 'orquestador' && 'HopeAI'}
                       </span>

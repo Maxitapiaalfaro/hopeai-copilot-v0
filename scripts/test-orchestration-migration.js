@@ -132,13 +132,13 @@ async function testMessageOrchestration() {
   const testMessages = [
     {
       message: "Hola, necesito ayuda con un caso de ansiedad en un paciente joven",
-      expectedAgent: "socratic-philosopher",
-      description: "Mensaje que debería activar el Filósofo Socrático"
+      expectedAgent: "clinical-supervisor",
+      description: "Mensaje que debería activar el Supervisor Clínico"
     },
     {
       message: "Genera un resumen del caso de María con TEPT",
-      expectedAgent: "clinical-archivist",
-      description: "Mensaje que debería activar el Archivista Clínico"
+      expectedAgent: "documentation-specialist",
+      description: "Mensaje que debería activar el Especialista en Documentación"
     },
     {
       message: "Busca investigaciones recientes sobre EMDR para veteranos",

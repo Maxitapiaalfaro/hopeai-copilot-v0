@@ -4,7 +4,7 @@ import type { AgentType } from "@/types/clinical-types"
 const agentVisuals = {
     // Iteration: Socrático → terracotta/ochre (amber cream)
     socratico: {
-        name: "HopeAI Socrático",
+        name: "Supervisor Clínico",
         description: "Diálogo terapéutico y reflexión profunda",
         icon: Brain,
         textColor: 'text-amber-900 dark:text-amber-200',
@@ -24,7 +24,7 @@ const agentVisuals = {
     },
     // Iteration: Clínico → sage/olive cream (lime family)
     clinico: {
-        name: "HopeAI Clínico",
+        name: "Especialista en Documentación",
         description: "Síntesis y documentación clínica",
         icon: Stethoscope,
         textColor: 'text-lime-900 dark:text-lime-200',

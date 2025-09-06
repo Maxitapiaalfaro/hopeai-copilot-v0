@@ -196,8 +196,8 @@ export function highlightAgentMentions(content: string): string {
 
   // Patrones para detectar menciones exactas de agentes
   const agentPatterns = [
-    { pattern: /\bFilósofo Socrático\b/g, type: 'socratico' as AgentType },
-    { pattern: /\bArchivista Clínico\b/g, type: 'clinico' as AgentType },
+    { pattern: /\bSupervisor Clínico\b/g, type: 'socratico' as AgentType },
+    { pattern: /\bEspecialista en Documentación\b/g, type: 'clinico' as AgentType },
     { pattern: /\bInvestigador Académico\b/g, type: 'academico' as AgentType }
   ]
 

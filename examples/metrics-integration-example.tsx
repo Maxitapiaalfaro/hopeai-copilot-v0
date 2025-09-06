@@ -136,8 +136,8 @@ export function ChatInterfaceWithMetrics({
           value={currentAgent} 
           onChange={(e) => handleAgentChange(e.target.value as AgentType)}
         >
-          <option value="socratico">Filósofo Socrático</option>
-          <option value="clinico">Archivista Clínico</option>
+          <option value="socratico">Supervisor Clínico</option>
+                <option value="clinico">Especialista en Documentación</option>
           <option value="academico">Investigador Académico</option>
         </select>
       </div>

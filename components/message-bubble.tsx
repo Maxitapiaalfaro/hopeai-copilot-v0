@@ -24,14 +24,14 @@ interface MessageBubbleProps {
 
 const agentConfig = {
   socratico: {
-    name: "HopeAI Socrático",
+    name: "Supervisor Clínico",
     icon: Brain,
     color: "text-blue-600",
     bgColor: "bg-blue-50",
     borderColor: "border-blue-200",
   },
   clinico: {
-    name: "HopeAI Clínico",
+    name: "Especialista en Documentación",
     icon: Stethoscope,
     color: "text-green-600",
     bgColor: "bg-green-50",
