@@ -196,8 +196,7 @@ export function PatientLibrarySection({
   const handlePatientClick = (patient: PatientRecord) => {
     selectPatient(patient)
     onPatientSelect?.(patient)
-    // Trigger starting a patient conversation (create/load session)
-    onStartConversation?.(patient)
+    // Removed automatic conversation start - user must explicitly start conversation
   }
 
   const handleStartConversation = (patient: PatientRecord, event: React.MouseEvent) => {
@@ -470,6 +469,21 @@ export function PatientLibrarySection({
                 </Button>
                 
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  {onStartConversation && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onStartConversation(patient)
+                      }}
+                      title="Iniciar conversación"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  
                   <Button
                     variant="ghost"
                     size="icon"

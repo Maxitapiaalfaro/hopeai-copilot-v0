@@ -85,6 +85,35 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         throw new Error(`Sesión no encontrada: ${sessionId}`)
       }
 
+      // Reconstruct sessionMeta if session has patient context
+      let reconstructedSessionMeta = undefined
+      if (chatState.clinicalContext?.patientId) {
+        try {
+          const { getPatientPersistence } = await import('@/lib/patient-persistence')
+          const { PatientContextComposer } = await import('@/lib/patient-summary-builder')
+          
+          const persistence = getPatientPersistence()
+          await persistence.initialize()
+          const patient = await persistence.loadPatientRecord(chatState.clinicalContext.patientId)
+          
+          if (patient) {
+            console.log(`🔄 Reconstructing sessionMeta for patient: ${patient.displayName}`)
+            const composer = new PatientContextComposer()
+            reconstructedSessionMeta = composer.createSessionMetadata(patient, {
+              sessionId: chatState.sessionId,
+              userId: chatState.userId,
+              clinicalMode: chatState.clinicalContext.sessionType || 'clinical_supervision',
+              activeAgent: chatState.activeAgent
+            })
+            console.log(`✅ SessionMeta reconstructed for patient: ${reconstructedSessionMeta.patient.reference}`)
+          } else {
+            console.warn(`⚠️ Patient not found for ID: ${chatState.clinicalContext.patientId}`)
+          }
+        } catch (error) {
+          console.error('Failed to reconstruct sessionMeta:', error)
+        }
+      }
+
       // Actualizar el estado del sistema con los datos de la sesión cargada
       setSystemState(prev => ({
         ...prev,
@@ -94,8 +123,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         activeAgent: chatState.activeAgent,
         history: chatState.history,
         isLoading: false,
-        // Limpiar sessionMeta si la sesión cargada no tiene contexto de paciente
-        sessionMeta: chatState.clinicalContext?.patientId ? prev.sessionMeta : undefined
+        sessionMeta: reconstructedSessionMeta
       }))
       lastSessionIdRef.current = chatState.sessionId
 
@@ -111,7 +139,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       }))
       return false
     }
-  }, [systemState.isInitialized])
+  }, [systemState.isInitialized, systemState.sessionMeta])
 
   // Función para intentar restaurar la sesión más reciente
   const attemptSessionRestoration = useCallback(async () => {
@@ -157,44 +185,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         hopeAISystem.current = await HopeAISystemSingleton.getInitializedInstance()
         console.log('🚀 HopeAI Singleton System inicializado con Intelligent Intent Router')
         
-        // Intentar restaurar la sesión más reciente automáticamente
-        try {
-          const persistence = ClientContextPersistence.getInstance()
-          const recentSession = await persistence.getMostRecentSession()
-          
-          if (recentSession) {
-            console.log('🔄 Intentando restaurar sesión más reciente:', recentSession.sessionId)
-            
-            // Verificar que la sesión sea válida y no muy antigua (ej: menos de 24 horas)
-            const sessionAge = Date.now() - new Date(recentSession.metadata.lastUpdated).getTime()
-            const maxAge = 24 * 60 * 60 * 1000 // 24 horas en milisegundos
-            
-            if (sessionAge < maxAge) {
-              const chatState = await hopeAISystem.current.getChatState(recentSession.sessionId)
-              
-              if (chatState) {
-                setSystemState(prev => ({
-                  ...prev,
-                  sessionId: chatState.sessionId,
-                  userId: chatState.userId,
-                  mode: chatState.mode,
-                  activeAgent: chatState.activeAgent,
-                  history: chatState.history,
-                  isInitialized: true,
-                  isLoading: false
-                }))
-                console.log('✅ Sesión más reciente restaurada exitosamente')
-                return
-              }
-            } else {
-              console.log('⚠️ Sesión más reciente demasiado antigua, no se restaurará')
-            }
-          } else {
-            console.log('ℹ️ No hay sesiones recientes para restaurar')
-          }
-        } catch (error) {
-          console.error('❌ Error intentando restaurar sesión:', error)
-        }
+        // Automatic session restoration disabled to prevent unwanted conversation loading
+        // when users navigate to the Patients tab. Sessions should only be restored
+        // through explicit user actions (e.g., clicking on a conversation or starting a new one)
+        console.log('ℹ️ Automatic session restoration disabled - sessions load only on explicit user action')
         
         setSystemState(prev => ({
           ...prev,

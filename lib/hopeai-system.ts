@@ -117,7 +117,21 @@ export class HopeAISystem {
           console.log(`♻️ Restaurando sesión existente: ${sessionId}`)
           chatHistory = existingState.history
           isExistingSession = true
-          // Retornar la sesión existente sin crear duplicado
+          
+          // Update patient context if provided in patientSessionMeta
+          if (patientSessionMeta?.patient?.reference) {
+            console.log(`🏥 Actualizando contexto de paciente: ${patientSessionMeta.patient.reference}`)
+            existingState.clinicalContext = {
+              ...existingState.clinicalContext,
+              patientId: patientSessionMeta.patient.reference,
+              confidentialityLevel: patientSessionMeta.patient.confidentialityLevel || existingState.clinicalContext?.confidentialityLevel || "high"
+            }
+            
+            // Save the updated state with patient context
+            await this.saveChatSessionBoth(existingState)
+          }
+          
+          // Retornar la sesión existente (ahora con contexto de paciente actualizado si aplica)
           return { sessionId: finalSessionId, chatState: existingState }
         }
       } catch (error) {
@@ -202,9 +216,23 @@ export class HopeAISystem {
           totalTokens: 0,
           messageCount: 0,
           fileReferences: []
+        },
+        clinicalContext: {
+          patientId: sessionMeta?.patient?.reference,
+          sessionType: 'general',
+          confidentialityLevel: sessionMeta?.patient?.confidentialityLevel || "high"
         }
       }
       // Save the new session
+      await this.saveChatSessionBoth(currentState)
+    } else if (sessionMeta?.patient?.reference && currentState.clinicalContext?.patientId !== sessionMeta.patient.reference) {
+      // Update existing session with patient context if provided and different
+      console.log(`🏥 [HopeAI] Updating existing session with patient context: ${sessionMeta.patient.reference}`)
+      currentState.clinicalContext = {
+        ...currentState.clinicalContext,
+        patientId: sessionMeta.patient.reference,
+        confidentialityLevel: sessionMeta.patient.confidentialityLevel || currentState.clinicalContext?.confidentialityLevel || "high"
+      }
       await this.saveChatSessionBoth(currentState)
     }
 

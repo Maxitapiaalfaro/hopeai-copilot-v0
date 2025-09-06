@@ -280,9 +280,8 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                     <PatientLibrarySection
                       isOpen={true}
                       onPatientSelect={(patient) => {
-                        // Start conversation immediately
-                        onPatientConversationStart?.(patient)
-                        setIsOpen(false)
+                        // Patient selected but no automatic conversation start
+                        // User must explicitly start conversation
                       }}
                       onStartConversation={(patient) => {
                         onPatientConversationStart?.(patient)
