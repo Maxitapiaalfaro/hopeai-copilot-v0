@@ -29,7 +29,16 @@ export class ServerStorageAdapter {
       },
     }
     
+    // Debug: mostrar información de la sesión que se guarda
+    console.log(`💾 [ServerStorageAdapter] Guardando sesión:`, {
+      sessionId: updatedState.sessionId,
+      userId: updatedState.userId,
+      hasPatientId: !!updatedState.clinicalContext?.patientId,
+      patientId: updatedState.clinicalContext?.patientId
+    });
+    
     this.chatSessions.set(chatState.sessionId, updatedState)
+    console.log(`📊 [ServerStorageAdapter] Total sesiones después de guardar: ${this.chatSessions.size}`);
   }
 
   async loadChatSession(sessionId: string): Promise<ChatState | null> {
@@ -68,8 +77,16 @@ export class ServerStorageAdapter {
         sortOrder = 'desc'
       } = options
 
-      let sessions = Array.from(this.chatSessions.values())
-        .filter(session => session.userId === userId)
+      // Debug: mostrar información del storage
+      console.log(`🔍 [ServerStorageAdapter] Buscando sesiones para userId: ${userId}`);
+      console.log(`📊 [ServerStorageAdapter] Total sesiones en storage: ${this.chatSessions.size}`);
+      
+      const allSessions = Array.from(this.chatSessions.values());
+      console.log(`🔍 [ServerStorageAdapter] Primeras 3 sesiones en storage:`, 
+        allSessions.slice(0, 3).map(s => ({ sessionId: s.sessionId, userId: s.userId })));
+
+      let sessions = allSessions.filter(session => session.userId === userId);
+      console.log(`🎯 [ServerStorageAdapter] Sesiones filtradas para ${userId}: ${sessions.length}`);
       
       // Ordenar sesiones
       sessions.sort((a, b) => {

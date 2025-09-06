@@ -52,19 +52,22 @@ import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import type { PatientRecord } from "@/types/clinical-types"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
-import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
+import { FichaClinicaPanel } from "@/components/patient-library/FichaClinicaPanel"
+import { PatientConversationHistory } from "@/components/patient-conversation-history"
 import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 
 interface PatientLibrarySectionProps {
   isOpen: boolean
   onPatientSelect?: (patient: PatientRecord) => void
   onStartConversation?: (patient: PatientRecord) => void
+  onConversationSelect?: (sessionId: string) => void
 }
 
 export function PatientLibrarySection({ 
   isOpen, 
   onPatientSelect, 
-  onStartConversation 
+  onStartConversation,
+  onConversationSelect 
 }: PatientLibrarySectionProps) {
   const {
     patients,
@@ -88,6 +91,7 @@ export function PatientLibrarySection({
   } = usePatientLibrary()
   const { systemState } = useHopeAISystem()
   const [isFichaOpen, setIsFichaOpen] = useState(false)
+  const [showConversationHistory, setShowConversationHistory] = useState(false)
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -490,6 +494,19 @@ export function PatientLibrarySection({
                     className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
                     onClick={(e) => {
                       e.stopPropagation()
+                      setShowConversationHistory(true)
+                    }}
+                    title="Ver historial de conversaciones"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    onClick={(e) => {
+                      e.stopPropagation()
                       handleEditPatient(patient)
                     }}
                     title="Editar paciente"
@@ -696,6 +713,44 @@ export function PatientLibrarySection({
             await loadFichasClinicas(selectedPatient.id)
           }}
         />
+      )}
+
+      {/* Patient Conversation History */}
+      {selectedPatient && (
+        <Dialog open={showConversationHistory} onOpenChange={setShowConversationHistory}>
+          <DialogContent className="max-w-4xl max-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle>Historial de Conversaciones - {selectedPatient.displayName}</DialogTitle>
+              <DialogDescription>
+                Revisa las conversaciones anteriores con este paciente
+              </DialogDescription>
+            </DialogHeader>
+            <PatientConversationHistory
+              patient={selectedPatient}
+              userId={"demo_user"}
+              onConversationSelect={async (sessionId: string) => {
+                  console.log('Cargando conversación:', sessionId);
+                  setShowConversationHistory(false);
+                  
+                  try {
+                    // Usar el singleton para obtener el estado de la sesión
+                    const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
+                    const instance = await HopeAISystemSingleton.getInitializedInstance();
+                    const chatState = await instance.getChatState(sessionId);
+                    console.log('✅ Estado de sesión obtenido exitosamente:', sessionId);
+                    
+                    // Notificar al componente padre que se ha seleccionado una conversación
+                    // En lugar de recargar la página, el sistema debería actualizar el estado
+                    if (onConversationSelect) {
+                      onConversationSelect(sessionId);
+                    }
+                  } catch (error) {
+                    console.error('❌ Error obteniendo estado de sesión:', error);
+                  }
+                }}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )

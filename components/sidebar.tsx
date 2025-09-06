@@ -396,6 +396,10 @@ export function Sidebar({ isOpen, onToggle, userId, createSession: createSession
               onStartConversation={(patient) => {
                 onPatientConversationStart?.(patient)
               }}
+              onPatientSelect={(patient) => {
+                // Handle patient selection if needed
+              }}
+              onConversationSelect={onConversationSelect}
             />
           )}
         </div>
