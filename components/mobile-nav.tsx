@@ -287,6 +287,12 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                         onPatientConversationStart?.(patient)
                         setIsOpen(false)
                       }}
+                      onConversationSelect={async (sessionId: string) => {
+                        // Handle conversation selection from patient history modal
+                        console.log('📱 Mobile: Conversación seleccionada desde historial de paciente:', sessionId);
+                        await onConversationSelect(sessionId);
+                        setIsOpen(false); // Close mobile nav after selecting conversation
+                      }}
                     />
                   </div>
                 )}

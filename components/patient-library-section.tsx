@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
@@ -44,7 +45,8 @@ import {
   User,
   Tag,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  X
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePatientLibrary } from "@/hooks/use-patient-library"
@@ -718,37 +720,55 @@ export function PatientLibrarySection({
       {/* Patient Conversation History */}
       {selectedPatient && (
         <Dialog open={showConversationHistory} onOpenChange={setShowConversationHistory}>
-          <DialogContent className="max-w-4xl max-h-[80vh]">
-            <DialogHeader>
-              <DialogTitle>Historial de Conversaciones - {selectedPatient.displayName}</DialogTitle>
-              <DialogDescription>
-                Revisa las conversaciones anteriores con este paciente
-              </DialogDescription>
+          <DialogContent className="w-[100vw] max-w-none h-[100svh] p-0 sm:w-full sm:max-w-4xl sm:h-auto sm:max-h-[80vh] sm:p-0">
+            <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 py-3 border-b sm:px-6 sm:py-4 pt-[env(safe-area-inset-top)]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <DialogTitle className="text-base sm:text-lg truncate">Historial de Conversaciones - {selectedPatient.displayName}</DialogTitle>
+                  <DialogDescription className="hidden sm:block">
+                    Revisa las conversaciones anteriores con este paciente
+                  </DialogDescription>
+                </div>
+                <DialogClose asChild>
+                  <button
+                    aria-label="Cerrar historial"
+                    className="inline-flex items-center justify-center rounded-md h-10 w-10 sm:h-8 sm:w-8 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </DialogClose>
+              </div>
             </DialogHeader>
-            <PatientConversationHistory
-              patient={selectedPatient}
-              userId={"demo_user"}
-              onConversationSelect={async (sessionId: string) => {
-                  console.log('Cargando conversación:', sessionId);
-                  setShowConversationHistory(false);
-                  
-                  try {
-                    // Usar el singleton para obtener el estado de la sesión
-                    const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
-                    const instance = await HopeAISystemSingleton.getInitializedInstance();
-                    const chatState = await instance.getChatState(sessionId);
-                    console.log('✅ Estado de sesión obtenido exitosamente:', sessionId);
+            <div className="px-4 pb-4 sm:px-6 sm:pb-6 overflow-y-auto max-h-[calc(100svh-7rem)] sm:max-h-[60vh] overscroll-contain touch-pan-y pb-[env(safe-area-inset-bottom)]">
+              <PatientConversationHistory
+                patient={selectedPatient}
+                userId={"demo_user"}
+                className="pb-2"
+                onConversationSelect={async (sessionId: string) => {
+                    console.log('📱 Cargando conversación desde historial de paciente:', sessionId);
                     
-                    // Notificar al componente padre que se ha seleccionado una conversación
-                    // En lugar de recargar la página, el sistema debería actualizar el estado
-                    if (onConversationSelect) {
-                      onConversationSelect(sessionId);
+                    // Cerrar el modal inmediatamente para mejor UX
+                    setShowConversationHistory(false);
+                    
+                    try {
+                      // Usar el singleton para obtener el estado de la sesión
+                      const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
+                      const instance = await HopeAISystemSingleton.getInitializedInstance();
+                      const chatState = await instance.getChatState(sessionId);
+                      console.log('✅ Estado de sesión obtenido exitosamente:', sessionId);
+                      
+                      // Notificar al componente padre que se ha seleccionado una conversación
+                      // Esto debería cerrar sidebar/mobile nav y mostrar el chat
+                      if (onConversationSelect) {
+                        await onConversationSelect(sessionId);
+                      }
+                    } catch (error) {
+                      console.error('❌ Error obteniendo estado de sesión:', error);
+                      // En caso de error, mantener el modal cerrado pero mostrar error
                     }
-                  } catch (error) {
-                    console.error('❌ Error obteniendo estado de sesión:', error);
-                  }
-                }}
-            />
+                  }}
+              />
+            </div>
           </DialogContent>
         </Dialog>
       )}

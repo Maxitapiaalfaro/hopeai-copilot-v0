@@ -493,9 +493,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       const success = await loadSession(sessionId)
       if (success) {
         console.log('✅ Conversación cargada exitosamente')
-        // Close sidebar on mobile after selecting conversation
+        // Close sidebar and mobile nav on mobile after selecting conversation
         if (isMobile) {
           setSidebarOpen(false)
+          setMobileNavOpen(false) // Also close mobile nav
         }
       } else {
         console.error('❌ Error cargando la conversación')
