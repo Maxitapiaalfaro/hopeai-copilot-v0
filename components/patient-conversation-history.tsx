@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
-import { Search, MessageCircle, Clock, User, Filter, ChevronDown, Trash2, ExternalLink } from "lucide-react"
+import { Search, MessageCircle, Clock, User, Filter, ChevronDown, Trash2, ExternalLink, Plus, Edit2, Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -61,6 +61,7 @@ export function PatientConversationHistory({
     loadPatientConversations,
     loadMoreConversations,
     deleteConversation,
+    updateConversationTitle,
     searchConversations,
     filterByAgent,
     filterByMode,
@@ -75,6 +76,10 @@ export function PatientConversationHistory({
   const [sortBy, setSortBy] = useState<SortType>('recent')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null)
+  
+  // Estados para edición de títulos
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState("")
 
   // Cargar conversaciones al montar el componente
   useEffect(() => {
@@ -130,6 +135,37 @@ export function PatientConversationHistory({
       await deleteConversation(conversationToDelete)
       setDeleteDialogOpen(false)
       setConversationToDelete(null)
+    }
+  }
+
+  // Funciones para edición de títulos
+  const startEditing = (sessionId: string, currentTitle: string) => {
+    setEditingId(sessionId)
+    setEditingTitle(currentTitle)
+  }
+
+  const cancelEditing = () => {
+    setEditingId(null)
+    setEditingTitle("")
+  }
+
+  const saveTitle = async (sessionId: string) => {
+    if (editingTitle.trim() && editingTitle !== conversations.find(c => c.sessionId === sessionId)?.title) {
+      try {
+        await updateConversationTitle(sessionId, editingTitle.trim())
+      } catch (error) {
+        console.error('Error actualizando título:', error)
+      }
+    }
+    setEditingId(null)
+    setEditingTitle("")
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent, sessionId: string) => {
+    if (e.key === 'Enter') {
+      saveTitle(sessionId)
+    } else if (e.key === 'Escape') {
+      cancelEditing()
     }
   }
 
@@ -203,128 +239,26 @@ export function PatientConversationHistory({
     <div className={`space-y-4 ${className}`}>
       {/* Sticky: Header + búsqueda/filtros dentro del contenedor que desplaza (cuerpo del modal) */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b -mx-4 px-4 pt-3 pb-2 sm:mx-0 sm:px-0">
-        {/* Header con información del paciente */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <User className="h-5 w-5 text-muted-foreground" />
-            <h3 className="font-semibold text-base sm:text-lg truncate">
-              {`Paciente ${patient.id}`}
-            </h3>
-            <Badge variant="outline" className="text-xs">
-              {totalCount} conversación{totalCount !== 1 ? 'es' : ''}
-            </Badge>
-          </div>
-          
-          <Button
-            onClick={() => onNewConversation?.(patient.id)}
-            className="gap-2 h-11 sm:h-9"
-            aria-label="Nueva conversación"
-          >
-            <MessageCircle className="h-4 w-4" />
-            <span className="hidden sm:inline">Nueva conversación</span>
-          </Button>
-        </div>
-
-        {/* Barra de búsqueda y filtros */}
-        <div className="space-y-2 mt-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar en conversaciones..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-11 sm:h-10"
-              aria-label="Buscar en conversaciones"
-            />
-          </div>
-          
-          <div className="flex gap-2 flex-wrap">
-            {/* Filtro por agente */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-1 sm:gap-2 text-xs sm:text-sm h-11 sm:h-9" aria-label="Filtrar por agente">
-                  <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="hidden sm:inline">Agente:</span> {agentFilter === 'all' ? 'Todos' : getAgentConfig(agentFilter as AgentType).name}
-                  <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel>Filtrar por agente</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setAgentFilter('all')}>
-                  Todos los agentes
-                </DropdownMenuItem>
-                {(['socratico', 'clinico', 'academico', 'orquestador'] as AgentType[]).map((agentType) => {
-                  const config = getAgentVisualConfigSafe(agentType)
-                  return (
-                    <DropdownMenuItem 
-                      key={agentType} 
-                      onClick={() => setAgentFilter(agentType)}
-                    >
-                      <span className="mr-2"><config.icon className="h-4 w-4" /></span>
-                      {config.name}
-                    </DropdownMenuItem>
-                  )
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Filtro por modo */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-1 sm:gap-2 text-xs sm:text-sm h-11 sm:h-9" aria-label="Filtrar por modo">
-                  <span className="hidden sm:inline">Modo:</span> {modeFilter === 'all' ? 'Todos' : modeFilter}
-                  <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel>Filtrar por modo</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setModeFilter('all')}>
-                  Todos los modos
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setModeFilter('therapeutic_assistance')}>
-                  Asistencia Terapéutica
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setModeFilter('clinical_supervision')}>
-                  Supervisión Clínica
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setModeFilter('research_support')}>
-                  Soporte de Investigación
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Ordenamiento */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-1 sm:gap-2 text-xs sm:text-sm h-11 sm:h-9" aria-label="Ordenar conversaciones">
-                  <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="hidden sm:inline">
-                    {sortBy === 'recent' ? 'Más reciente' : 
-                     sortBy === 'oldest' ? 'Más antiguo' : 'Más mensajes'}
-                  </span>
-                  <span className="sm:hidden">
-                    {sortBy === 'recent' ? 'Reciente' : 
-                     sortBy === 'oldest' ? 'Antiguo' : 'Mensajes'}
-                  </span>
-                  <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setSortBy('recent')}>
-                  Más reciente
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('oldest')}>
-                  Más antiguo
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('messages')}>
-                  Más mensajes
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+        {/* Barra de búsqueda con botón integrado */}
+        <div className="space-y-2">
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar en conversaciones..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-11 sm:h-10"
+                aria-label="Buscar en conversaciones"
+              />
+            </div>
+            <Button
+              onClick={() => onNewConversation?.(patient.id)}
+              className="h-11 sm:h-10 w-11 sm:w-10 p-0 shrink-0"
+              aria-label="Nueva conversación"
+            >
+              <Plus className="h-4 w-4 text-white" />
+            </Button>
           </div>
         </div>
       </div>
@@ -387,25 +321,61 @@ export function PatientConversationHistory({
                 className="hover:shadow-md transition-all duration-200 cursor-pointer group"
                 onClick={() => handleConversationSelect(conversation.sessionId)}
               >
-                <CardHeader className="pb-2 p-3 sm:p-4">
-                  <div className="flex items-start justify-between gap-2">
+                <CardHeader className="pb-3 p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-xs sm:text-sm truncate group-hover:text-primary transition-colors">
-                        {conversation.title}
-                      </h4>
-                      <div className="flex items-center gap-1 sm:gap-2 mt-1 flex-wrap">
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs px-1.5 py-0.5 ${agentConfig.textColor} ${agentConfig.bgColor} ${agentConfig.borderColor}`}
-                        >
-                          <span className="mr-1"><agentConfig.icon className="h-3 w-3" /></span>
-                          <span className="hidden sm:inline">{agentConfig.name}</span>
-                          <span className="sm:hidden">{agentConfig.name.split(' ')[0]}</span>
-                        </Badge>
-                        <Badge variant="outline" className="text-xs px-1.5 py-0.5">
-                          {conversation.messageCount} mensaje{conversation.messageCount !== 1 ? 's' : ''}
-                        </Badge>
-                      </div>
+                      {editingId === conversation.sessionId ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onKeyDown={(e) => handleKeyPress(e, conversation.sessionId)}
+                            className="text-sm sm:text-base font-semibold h-8"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              saveTitle(conversation.sessionId)
+                            }}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              cancelEditing()
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 group/title">
+                          <h4 className="font-semibold text-sm sm:text-base leading-tight text-foreground group-hover:text-primary transition-colors duration-200 mb-1 flex-1">
+                            {conversation.title}
+                          </h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover/title:opacity-100 transition-opacity h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              startEditing(conversation.sessionId, conversation.title)
+                            }}
+                            aria-label="Editar título"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-0.5 sm:gap-1 ml-1 sm:ml-2">
@@ -438,8 +408,8 @@ export function PatientConversationHistory({
                   </div>
                 </CardHeader>
                 
-                <CardContent className="p-3 sm:p-4 pt-0">
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3 line-clamp-2">
+                <CardContent className="p-4 sm:p-5 pt-0">
+                  <p className="text-sm sm:text-base text-muted-foreground/80 leading-relaxed mb-4 line-clamp-2 font-normal">
                     {conversation.preview}
                   </p>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -447,8 +417,8 @@ export function PatientConversationHistory({
                       <Clock className="h-3 w-3 flex-shrink-0" />
                       <span className="truncate">{formatRelativeTime(new Date(conversation.lastUpdated))}</span>
                     </span>
-                    <Badge variant="outline" className="text-xs px-1.5 py-0.5 ml-2 flex-shrink-0">
-                      {conversation.mode}
+                    <Badge variant="outline" className="text-xs px-1.5 py-0.5 ml-2">
+                      {conversation.messageCount} mensaje{conversation.messageCount !== 1 ? 's' : ''}
                     </Badge>
                   </div>
                 </CardContent>

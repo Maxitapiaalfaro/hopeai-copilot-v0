@@ -124,13 +124,13 @@ export function useMobileSpeechConfig() {
   return React.useMemo(() => {
     // Configuraciones específicas por plataforma para mejorar el speech-to-text
     const config = {
-      // Configuración de timeouts: sin timeouts automáticos en móvil
+      // Configuración de timeouts: sin timeouts automáticos en móvil para permitir grabación continua
       silenceTimeout: detection.isMobile ? null : 3000, // Sin timeout en móvil
       maxRecordingTime: detection.isMobile ? null : 60000, // Sin límite automático en móvil
       
-      // Configuración de sensibilidad
+      // Configuración de sensibilidad - habilitar modo continuo en móvil para toggle functionality
       interimResults: true,
-      continuous: !detection.isMobile, // Desactivar modo continuo en móvil para mejor batería
+      continuous: true, // Habilitar modo continuo en todos los dispositivos para toggle functionality
       
       // Configuraciones específicas por plataforma
       language: 'es-ES',

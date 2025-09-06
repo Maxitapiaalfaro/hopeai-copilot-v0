@@ -46,7 +46,8 @@ import {
   Tag,
   Calendar,
   RefreshCw,
-  X
+  X,
+  Clock
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePatientLibrary } from "@/hooks/use-patient-library"
@@ -496,11 +497,13 @@ export function PatientLibrarySection({
                     className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
                     onClick={(e) => {
                       e.stopPropagation()
+                      // First select the patient, then show conversation history
+                      handlePatientClick(patient)
                       setShowConversationHistory(true)
                     }}
                     title="Ver historial de conversaciones"
                   >
-                    <MessageSquare className="h-3.5 w-3.5" />
+                    <Clock className="h-3.5 w-3.5" />
                   </Button>
                   
                   <Button
@@ -732,7 +735,7 @@ export function PatientLibrarySection({
                 <DialogClose asChild>
                   <button
                     aria-label="Cerrar historial"
-                    className="inline-flex items-center justify-center rounded-md h-10 w-10 sm:h-8 sm:w-8 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="inline-flex items-center justify-center rounded-md h-10 w-10 sm:h-8 sm:w-8 hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <X className="h-5 w-5" />
                   </button>

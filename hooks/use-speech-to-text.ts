@@ -187,27 +187,13 @@ export function useSpeechToText(
     }
   }, [mobileDetection.isMobile, browserSupportsSpeechRecognition])
 
-  // Manejo de timeouts para detección de silencio (solo en desktop)
+  // Manejo de timeouts para detección de silencio (deshabilitado en modo toggle)
   useEffect(() => {
-    if (listening && !mobileDetection.isMobile) {
-      // Limpiar timeout anterior
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current)
-      }
-      
-      // Configurar timeout de silencio solo en desktop
-      const silenceTimeout = 5000
-      silenceTimeoutRef.current = setTimeout(() => {
-        if (listening && !interimTranscript) {
-          console.log('🔇 Silencio detectado, deteniendo grabación automáticamente')
-          stopListening()
-        }
-      }, silenceTimeout)
-    } else {
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current)
-        silenceTimeoutRef.current = null
-      }
+    // En modo toggle, no usar timeout de silencio automático
+    // El usuario controla manualmente cuándo detener
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current)
+      silenceTimeoutRef.current = null
     }
     
     return () => {
@@ -236,7 +222,8 @@ export function useSpeechToText(
       browserSupport: browserSupportsSpeechRecognition,
       micAvailable: isMicrophoneAvailable,
       isMobile: mobileDetection.isMobile,
-      config: finalConfig
+      config: finalConfig,
+      currentlyListening: listening
     })
     
     if (!browserSupportsSpeechRecognition) {
@@ -244,6 +231,13 @@ export function useSpeechToText(
         ? 'Reconocimiento de voz no disponible en este navegador móvil. Intenta con Chrome o Safari.'
         : 'Tu navegador no soporta reconocimiento de voz. Prueba con Chrome, Edge o Safari.'
       setError(errorMsg)
+      return
+    }
+    
+    // Si ya está escuchando, detener (toggle functionality)
+    if (listening) {
+      console.log('🔄 Toggle: deteniendo grabación activa')
+      stopListening()
       return
     }
     
@@ -260,28 +254,24 @@ export function useSpeechToText(
     setConfidence(0)
     
     try {
+      // Configuración optimizada para toggle functionality
       const options = {
-        continuous: finalConfig.continuous && browserSupportsContinuousListening,
-        language: finalConfig.language
+        continuous: true, // Siempre continuo para permitir toggle manual
+        language: finalConfig.language,
+        interimResults: true,
+        maxAlternatives: 1
       }
       
-      console.log('🎤 Opciones de grabación:', options)
-      
-      // Resetear estados antes de iniciar
-      setError(null)
-      setIsProcessing(true)
-      setConfidence(0)
+      console.log('🎤 Iniciando grabación en modo toggle:', options)
       
       SpeechRecognition.startListening(options)
       
-      // Timeout de procesamiento solo en desktop (en móvil el usuario controla manualmente)
-      if (!mobileDetection.isMobile) {
-        const maxRecordingTime = 60000
-        processingTimeoutRef.current = setTimeout(() => {
-          console.log('⏰ Timeout de grabación alcanzado')
-          stopListening()
-        }, maxRecordingTime)
-      }
+      // Timeout de seguridad más largo para modo toggle
+      const maxRecordingTime = mobileDetection.isMobile ? 300000 : 180000 // 5min móvil, 3min desktop
+      processingTimeoutRef.current = setTimeout(() => {
+        console.log('⏰ Timeout de seguridad alcanzado en modo toggle')
+        stopListening()
+      }, maxRecordingTime)
       
       // Timeout de seguridad para evitar bloqueo infinito
       setTimeout(() => {

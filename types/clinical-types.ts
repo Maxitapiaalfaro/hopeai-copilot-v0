@@ -38,6 +38,7 @@ export interface ChatState {
   mode: ClinicalMode
   activeAgent: AgentType
   history: ChatMessage[]
+  title?: string  // Optional custom title for the conversation
   metadata: {
     createdAt: Date
     lastUpdated: Date

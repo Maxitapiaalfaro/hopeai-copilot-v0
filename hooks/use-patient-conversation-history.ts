@@ -31,6 +31,7 @@ interface UsePatientConversationHistoryReturn {
   loadMoreConversations: () => Promise<void>
   openConversation: (sessionId: string) => Promise<ChatState | null>
   deleteConversation: (sessionId: string) => Promise<void>
+  updateConversationTitle: (sessionId: string, newTitle: string) => Promise<void>
   searchConversations: (query: string) => PatientConversationSummary[]
   
   // Filtros específicos para pacientes
@@ -96,11 +97,11 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     
     const lastMessage = chatState.history[chatState.history.length - 1]
     
-    // Generar título inteligente basado en el primer mensaje del usuario
+    // Usar el título guardado en ChatState, o generar uno si no existe
     const firstUserMessage = chatState.history.find(msg => msg.role === 'user')
-    const title = firstUserMessage 
+    const title = chatState.title || (firstUserMessage 
       ? firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
-      : `Sesión ${chatState.activeAgent}`
+      : `Sesión ${chatState.activeAgent}`)
     
     // Crear preview del último intercambio
     const preview = lastMessage
@@ -296,6 +297,54 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     }
   }, [allConversations])
 
+  // Actualizar título de conversación (persistente)
+  const updateConversationTitle = useCallback(async (sessionId: string, newTitle: string) => {
+    setError(null)
+    
+    try {
+      console.log(`✏️ Actualizando título de conversación: ${sessionId} -> ${newTitle}`)
+      
+      // Primero actualizar en el storage persistente
+      const storage = await getStorageAdapter()
+      const chatState = await storage.loadChatSession(sessionId)
+      
+      if (chatState) {
+        // Actualizar el título en el ChatState
+        const updatedChatState = {
+          ...chatState,
+          title: newTitle
+        }
+        
+        // Guardar en storage
+        await storage.saveChatSession(updatedChatState)
+        console.log(`💾 Título guardado en storage persistente`)
+      }
+      
+      // Luego actualizar estado local inmediatamente
+      const updatedConversations = allConversations.map(conv => 
+        conv.sessionId === sessionId 
+          ? { ...conv, title: newTitle }
+          : conv
+      )
+      
+      // Actualizar ambos estados para asegurar consistencia
+      setAllConversations(updatedConversations)
+      setConversations(updatedConversations)
+      
+      // Actualizar cache
+      const cachedConv = conversationCache.current.get(sessionId)
+      if (cachedConv) {
+        conversationCache.current.set(sessionId, { ...cachedConv, title: newTitle })
+      }
+      
+      console.log(`✅ Título actualizado exitosamente en storage y estado local`)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
+      setError(`Error actualizando título: ${errorMessage}`)
+      console.error('❌ Error actualizando título:', err)
+    }
+  }, [allConversations])
+
   // Buscar conversaciones
   const searchConversations = useCallback((query: string): PatientConversationSummary[] => {
     setSearchQuery(query)
@@ -374,6 +423,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     loadMoreConversations,
     openConversation,
     deleteConversation,
+    updateConversationTitle,
     searchConversations,
     filterByAgent,
     filterByMode,
