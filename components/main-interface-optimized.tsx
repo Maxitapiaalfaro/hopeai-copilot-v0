@@ -699,6 +699,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               hasExistingFicha={(fichasClinicasLocal && fichasClinicasLocal.length > 0) || false}
               fichaLoading={isFichaLoading}
               generateLoading={isGenerateFichaLoading}
+              reasoningBullets={systemState.reasoningBullets}
             />
             {patient && (
               <FichaClinicaPanel

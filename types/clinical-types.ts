@@ -15,6 +15,36 @@ export interface ChatMessage {
   // ELIMINADO: attachments duplicados - usar solo fileReferences por ID
 }
 
+// Tipos para bullets progresivos de razonamiento
+export interface ReasoningBullet {
+  id: string
+  content: string
+  status: "generating" | "completed" | "error"
+  timestamp: Date
+  order: number
+}
+
+export interface ReasoningBulletsState {
+  sessionId: string
+  bullets: ReasoningBullet[]
+  isGenerating: boolean
+  currentStep: number
+  totalSteps?: number
+  error?: string
+}
+
+export interface BulletGenerationContext {
+  userInput: string
+  sessionContext: any[]
+  selectedAgent: string
+  extractedEntities: any[]
+  clinicalContext?: {
+    patientId?: string
+    patientSummary?: string
+    sessionType: string
+  }
+}
+
 export interface ClinicalFile {
   id: string
   name: string

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 
 // Estados de transición explícitos para HopeAI
@@ -28,6 +28,8 @@ interface HopeAISystemState {
     confidence: number
     extractedEntities: any[]
   }
+  // Estado de bullets progresivos
+  reasoningBullets: ReasoningBulletsState
 }
 
 interface UseHopeAISystemReturn {
@@ -50,6 +52,10 @@ interface UseHopeAISystemReturn {
   resetSystem: () => void
   addStreamingResponseToHistory: (responseContent: string, agent: AgentType) => Promise<void>
   setSessionMeta: (sessionMeta: any) => void
+  
+  // Bullets progresivos
+  clearReasoningBullets: () => void
+  addReasoningBullet: (bullet: ReasoningBullet) => void
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
@@ -62,7 +68,15 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     error: null,
     isInitialized: false,
     history: [],
-    transitionState: 'idle'
+    transitionState: 'idle',
+    reasoningBullets: {
+      sessionId: '',
+      bullets: [],
+      isGenerating: false,
+      currentStep: 0,
+      totalSteps: undefined,
+      error: undefined
+    }
   })
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
@@ -311,10 +325,23 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         history: [...prev.history, userMessage],
         isLoading: true,
         error: null,
-        transitionState: 'thinking'
+        transitionState: 'thinking',
+        reasoningBullets: {
+          ...prev.reasoningBullets,
+          sessionId: sessionIdToUse!,
+          bullets: [],
+          isGenerating: true,
+          currentStep: 0
+        }
       }))
 
       console.log('📤 Enviando mensaje con enrutamiento inteligente:', message.substring(0, 50) + '...')
+      
+      // Callback para manejar bullets progresivos
+      const handleBulletUpdate = (bullet: ReasoningBullet) => {
+        console.log('🎯 Bullet recibido:', bullet.content)
+        addReasoningBullet(bullet)
+      }
       
       // Simular estado de selección de agente
       setTimeout(() => {
@@ -329,7 +356,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         message,
         useStreaming,
         undefined, // suggestedAgent
-        sessionMeta || systemState.sessionMeta // patient context metadata
+        sessionMeta || systemState.sessionMeta, // patient context metadata
+        handleBulletUpdate // callback para bullets progresivos
       )
       
       // Cambiar a estado de respuesta del especialista
@@ -346,7 +374,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         activeAgent: result.updatedState.activeAgent,
         routingInfo: result.response.routingInfo,
         isLoading: false,
-        transitionState: 'idle'
+        transitionState: 'idle',
+        reasoningBullets: {
+          ...prev.reasoningBullets,
+          isGenerating: false
+        }
       }))
       lastSessionIdRef.current = sessionIdToUse!
 
@@ -414,7 +446,15 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       error: null,
       isInitialized: systemState.isInitialized,
       history: [],
-      transitionState: 'idle'
+      transitionState: 'idle',
+      reasoningBullets: {
+        sessionId: '',
+        bullets: [],
+        isGenerating: false,
+        currentStep: 0,
+        totalSteps: undefined,
+        error: undefined
+      }
     })
     lastSessionIdRef.current = null
   }, [systemState.isInitialized])
@@ -481,6 +521,32 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     }))
   }, [])
 
+  // Funciones para manejar bullets progresivos
+  const clearReasoningBullets = useCallback(() => {
+    setSystemState(prev => ({
+      ...prev,
+      reasoningBullets: {
+        ...prev.reasoningBullets,
+        bullets: [],
+        isGenerating: false,
+        currentStep: 0,
+        error: undefined
+      }
+    }))
+  }, [])
+
+  const addReasoningBullet = useCallback((bullet: ReasoningBullet) => {
+    setSystemState(prev => ({
+      ...prev,
+      reasoningBullets: {
+        ...prev.reasoningBullets,
+        bullets: [...prev.reasoningBullets.bullets, bullet],
+        currentStep: prev.reasoningBullets.currentStep + 1,
+        isGenerating: bullet.status === 'generating'
+      }
+    }))
+  }, [])
+
   return {
     systemState,
     createSession,
@@ -491,6 +557,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     clearError,
     resetSystem,
     addStreamingResponseToHistory,
-    setSessionMeta
+    setSessionMeta,
+    clearReasoningBullets,
+    addReasoningBullet
   }
 }

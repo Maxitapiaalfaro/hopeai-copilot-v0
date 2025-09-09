@@ -190,7 +190,8 @@ export class HopeAISystem {
     message: string,
     useStreaming = true,
     suggestedAgent?: string,
-    sessionMeta?: PatientSessionMeta
+    sessionMeta?: PatientSessionMeta,
+    onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -345,7 +346,8 @@ export class HopeAISystem {
           message,
           sessionId,
           currentState.userId || 'demo_user',
-          resolvedSessionFiles
+          resolvedSessionFiles,
+          onBulletUpdate
         )
         
         // 📊 RECORD ORCHESTRATION COMPLETION 

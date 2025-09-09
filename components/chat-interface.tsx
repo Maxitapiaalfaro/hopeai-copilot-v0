@@ -22,6 +22,8 @@ import { getFilesByIds } from "@/lib/hopeai-system"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
+import { ReasoningBullets } from "@/components/reasoning-bullets"
+import type { ReasoningBulletsState } from "@/types/clinical-types"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -40,11 +42,12 @@ interface ChatInterfaceProps {
   hasExistingFicha?: boolean
   fichaLoading?: boolean
   generateLoading?: boolean
+  reasoningBullets?: ReasoningBulletsState
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', onGenerateFichaClinica, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', onGenerateFichaClinica, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, reasoningBullets }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -788,8 +791,24 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             </div>
           )}
 
+          {/* Reasoning Bullets - Mostrar bullets progresivos */}
+          {reasoningBullets && (reasoningBullets.isGenerating || reasoningBullets.bullets.length > 0) && (
+            <div className="flex items-start gap-4 sm:px-0 px-2 mb-4">
+              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
+                <IconComponent className={cn("h-4 w-4", config.textColor)} />
+              </div>
+              <div className="flex-1 max-w-[80%]">
+                <ReasoningBullets
+                  bullets={reasoningBullets.bullets}
+                  isGenerating={reasoningBullets.isGenerating}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Typing Indicator with Transition States */}
-          {(isProcessing || isStreaming) && !streamingResponse && (
+          {(isProcessing || isStreaming) && !streamingResponse && !reasoningBullets?.isGenerating && (
             <div className="flex items-start gap-4 sm:px-0 px-2">
               <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
                 <div className="transition-all duration-700 ease-out">

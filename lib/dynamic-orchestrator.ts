@@ -22,7 +22,7 @@ import { EntityExtractionEngine, ExtractedEntity } from './entity-extraction-eng
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
 import { UserPreferencesManager } from './user-preferences-manager';
 import { ai } from './google-genai-config';
-import type { ClinicalFile } from '@/types/clinical-types';
+import type { ClinicalFile, ReasoningBullet, BulletGenerationContext } from '@/types/clinical-types';
 
 /**
  * Tipo para el contenido de conversación
@@ -140,7 +140,8 @@ export class DynamicOrchestrator {
     userInput: string,
     sessionId: string,
     userId: string,
-    sessionFiles?: ClinicalFile[]
+    sessionFiles?: ClinicalFile[],
+    onBulletUpdate?: (bullet: ReasoningBullet) => void
   ): Promise<DynamicOrchestrationResult> {
     const startTime = Date.now();
     
@@ -155,6 +156,40 @@ export class DynamicOrchestrator {
       
       // 2. Actualizar historial de conversación con archivos adjuntos
       this.updateConversationHistory(sessionContext, userInput, sessionFiles);
+      
+      // 🎯 NUEVA FUNCIONALIDAD: Generar bullets progresivos antes de la orquestación
+      if (onBulletUpdate) {
+        this.log('info', `Generando bullets progresivos para sesión ${sessionId}`);
+        
+        // Crear contexto para generación de bullets
+        const bulletContext: BulletGenerationContext = {
+          userInput,
+          sessionContext: sessionContext.conversationHistory,
+          selectedAgent: sessionContext.currentAgent || 'socratico',
+          extractedEntities: [], // Se llenará después de la extracción
+          clinicalContext: {
+            sessionType: 'general'
+          }
+        };
+        
+        // Generar bullets progresivos en paralelo (no bloquea la orquestación)
+        const bulletGenerator = this.generateReasoningBullets(bulletContext, onBulletUpdate);
+        
+        // Procesar bullets de forma asíncrona
+        (async () => {
+          try {
+            for await (const bullet of bulletGenerator) {
+              // Los bullets se envían automáticamente via onBulletUpdate callback
+              this.log('debug', `Bullet generado: ${bullet.content}`);
+            }
+          } catch (error) {
+            this.log('warn', `Error generando bullets progresivos: ${error}`);
+          }
+        })();
+        
+        // Pequeña pausa para permitir que se generen algunos bullets antes de continuar
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
       
       // 3. Realizar orquestación inteligente
       const orchestrationResult = await this.intentRouter.orchestrateWithTools(
@@ -235,6 +270,192 @@ export class DynamicOrchestrator {
     }
   }
 
+  /**
+   * Genera bullets progresivos de razonamiento en tiempo real
+   */
+  async *generateReasoningBullets(
+    context: BulletGenerationContext,
+    onBulletUpdate?: (bullet: ReasoningBullet) => void
+  ): AsyncGenerator<ReasoningBullet, void, unknown> {
+    const startTime = Date.now();
+    let bulletCounter = 0;
+    
+    try {
+      this.log('info', `Generando bullets progresivos para sesión ${context.sessionContext.length > 0 ? 'con contexto' : 'nueva'}`);
+      
+      // Construir prompt contextual para generar bullets progresivos
+      const bulletPrompt = this.buildBulletGenerationPrompt(context);
+      
+      // Crear chat para generar bullets progresivos
+      const bulletChat = ai.chats.create({
+        model: 'gemini-2.5-flash-lite',
+        config: {
+          systemInstruction: `Eres un asistente especializado en generar pasos de razonamiento progresivos para HopeAI.
+        
+Tu tarea es crear bullets que muestren AUTÉNTICAMENTE cómo la IA está procesando y adaptándose al caso específico del usuario.
+        
+Cada bullet debe:
+        1. Reflejar el proceso de razonamiento real basado en el contexto específico
+        2. Mostrar adaptación al caso clínico particular
+        3. Ser específico y contextual, no genérico
+        4. Progresar lógicamente hacia la respuesta final
+        
+Formato de respuesta: Genera exactamente 4-6 bullets, uno por línea, comenzando cada uno con "• "
+        
+Ejemplo para un caso de ansiedad:
+        • Analizando el patrón de síntomas de ansiedad descritos por el paciente
+        • Identificando factores desencadenantes específicos en el contexto laboral
+        • Evaluando la efectividad de técnicas cognitivo-conductuales previas
+        • Seleccionando estrategias de intervención personalizadas
+        • Preparando recomendaciones basadas en evidencia científica`,
+          temperature: 0.7,
+          maxOutputTokens: 500,
+          topP: 0.8
+        }
+      });
+      
+      // Generar bullets usando streaming
+      const bulletStream = await bulletChat.sendMessageStream({ message: bulletPrompt });
+      
+      let accumulatedText = '';
+      let currentBulletText = '';
+      let isInBullet = false;
+      
+      for await (const chunk of bulletStream) {
+        if (chunk.text) {
+          accumulatedText += chunk.text;
+          currentBulletText += chunk.text;
+          
+          // Detectar inicio de bullet
+          if (chunk.text.includes('•') && !isInBullet) {
+            isInBullet = true;
+            currentBulletText = chunk.text.substring(chunk.text.indexOf('•'));
+          }
+          
+          // Detectar final de bullet (nueva línea)
+          if (isInBullet && chunk.text.includes('\n')) {
+            const bulletContent = currentBulletText
+              .replace('•', '')
+              .trim()
+              .split('\n')[0]
+              .trim();
+            
+            if (bulletContent.length > 0) {
+              bulletCounter++;
+              const bullet: ReasoningBullet = {
+                id: `bullet_${Date.now()}_${bulletCounter}`,
+                content: bulletContent,
+                status: 'completed',
+                timestamp: new Date(),
+                order: bulletCounter
+              };
+              
+              // Callback para actualización en tiempo real
+              if (onBulletUpdate) {
+                onBulletUpdate(bullet);
+              }
+              
+              yield bullet;
+              
+              // Pequeña pausa para efecto visual
+              await new Promise(resolve => setTimeout(resolve, 300));
+            }
+            
+            currentBulletText = '';
+            isInBullet = false;
+          }
+        }
+      }
+      
+      // Procesar último bullet si no terminó con nueva línea
+      if (isInBullet && currentBulletText.trim().length > 0) {
+        const bulletContent = currentBulletText
+          .replace('•', '')
+          .trim();
+        
+        if (bulletContent.length > 0) {
+          bulletCounter++;
+          const bullet: ReasoningBullet = {
+            id: `bullet_${Date.now()}_${bulletCounter}`,
+            content: bulletContent,
+            status: 'completed',
+            timestamp: new Date(),
+            order: bulletCounter
+          };
+          
+          if (onBulletUpdate) {
+            onBulletUpdate(bullet);
+          }
+          
+          yield bullet;
+        }
+      }
+      
+      const processingTime = Date.now() - startTime;
+      this.log('info', `Bullets progresivos generados: ${bulletCounter} bullets en ${processingTime}ms`);
+      
+    } catch (error) {
+      this.log('error', `Error generando bullets progresivos: ${error}`);
+      
+      // Generar bullet de error
+      const errorBullet: ReasoningBullet = {
+        id: `bullet_error_${Date.now()}`,
+        content: 'Procesando consulta...',
+        status: 'error',
+        timestamp: new Date(),
+        order: 1
+      };
+      
+      if (onBulletUpdate) {
+        onBulletUpdate(errorBullet);
+      }
+      
+      yield errorBullet;
+    }
+  }
+  
+  /**
+   * Construye el prompt para generar bullets contextuales
+   */
+  private buildBulletGenerationPrompt(context: BulletGenerationContext): string {
+    const { userInput, sessionContext, selectedAgent, extractedEntities, clinicalContext } = context;
+    
+    let prompt = `Consulta del usuario: "${userInput}"\n\n`;
+    
+    // Añadir contexto de sesión si existe
+    if (sessionContext && sessionContext.length > 0) {
+      const recentMessages = sessionContext.slice(-3);
+      prompt += `Contexto de conversación reciente:\n`;
+      recentMessages.forEach((msg: any, index) => {
+        prompt += `${index + 1}. ${msg.role}: ${msg.parts?.[0]?.text || msg.content || 'Sin contenido'}\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    // Añadir agente seleccionado
+    prompt += `Agente especializado seleccionado: ${selectedAgent}\n\n`;
+    
+    // Añadir entidades extraídas si existen
+    if (extractedEntities && extractedEntities.length > 0) {
+      prompt += `Entidades clínicas detectadas: ${extractedEntities.map((e: any) => e.text || e.name).join(', ')}\n\n`;
+    }
+    
+    // Añadir contexto clínico si existe
+    if (clinicalContext) {
+      if (clinicalContext.patientId) {
+        prompt += `Contexto del paciente: ID ${clinicalContext.patientId}\n`;
+      }
+      if (clinicalContext.sessionType) {
+        prompt += `Tipo de sesión: ${clinicalContext.sessionType}\n`;
+      }
+      prompt += `\n`;
+    }
+    
+    prompt += `Genera bullets progresivos que muestren cómo estás procesando específicamente esta consulta y adaptándote a este caso particular.`;
+    
+    return prompt;
+  }
+  
   /**
    * Obtiene o crea una nueva sesión
    */
