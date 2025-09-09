@@ -43,6 +43,10 @@ export interface BulletGenerationContext {
     patientSummary?: string
     sessionType: string
   }
+  // NUEVOS CAMPOS para coherencia con el razonamiento del agente
+  orchestrationReasoning?: string
+  agentConfidence?: number
+  contextualTools?: any[]
 }
 
 export interface ClinicalFile {

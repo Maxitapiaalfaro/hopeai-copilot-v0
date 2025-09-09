@@ -157,46 +157,51 @@ export class DynamicOrchestrator {
       // 2. Actualizar historial de conversación con archivos adjuntos
       this.updateConversationHistory(sessionContext, userInput, sessionFiles);
       
-      // 🎯 NUEVA FUNCIONALIDAD: Generar bullets progresivos antes de la orquestación
+      // 3. Realizar orquestación inteligente PRIMERO para obtener el agente correcto
+      const orchestrationResult = await this.intentRouter.orchestrateWithTools(
+        userInput,
+        sessionContext.conversationHistory,
+        sessionContext.currentAgent
+      );
+      
+      // 🎯 FUNCIONALIDAD MEJORADA: Generar bullets progresivos DESPUÉS de la orquestación
+      // para usar el razonamiento real del agente seleccionado
       if (onBulletUpdate) {
-        this.log('info', `Generando bullets progresivos para sesión ${sessionId}`);
+        this.log('info', `Generando bullets progresivos coherentes para agente ${orchestrationResult.selectedAgent}`);
         
-        // Crear contexto para generación de bullets
+        // Crear contexto enriquecido para generación de bullets
         const bulletContext: BulletGenerationContext = {
           userInput,
           sessionContext: sessionContext.conversationHistory,
-          selectedAgent: sessionContext.currentAgent || 'socratico',
-          extractedEntities: [], // Se llenará después de la extracción
+          selectedAgent: orchestrationResult.selectedAgent,
+          extractedEntities: [], // Se extraerán en el proceso
           clinicalContext: {
             sessionType: 'general'
-          }
+          },
+          // NUEVO: Incluir el razonamiento real del orquestador
+          orchestrationReasoning: orchestrationResult.reasoning,
+          agentConfidence: orchestrationResult.confidence,
+          contextualTools: orchestrationResult.contextualTools
         };
         
-        // Generar bullets progresivos en paralelo (no bloquea la orquestación)
+        // Generar bullets progresivos que reflejen el razonamiento real
         const bulletGenerator = this.generateReasoningBullets(bulletContext, onBulletUpdate);
         
         // Procesar bullets de forma asíncrona
         (async () => {
           try {
             for await (const bullet of bulletGenerator) {
-              // Los bullets se envían automáticamente via onBulletUpdate callback
-              this.log('debug', `Bullet generado: ${bullet.content}`);
+              // Los bullets ahora reflejan el razonamiento real del agente
+              this.log('debug', `Bullet coherente generado: ${bullet.content}`);
             }
           } catch (error) {
-            this.log('warn', `Error generando bullets progresivos: ${error}`);
+            this.log('warn', `Error generando bullets coherentes: ${error}`);
           }
         })();
         
-        // Pequeña pausa para permitir que se generen algunos bullets antes de continuar
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Pausa reducida ya que la orquestación ya se completó
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
-      
-      // 3. Realizar orquestación inteligente
-      const orchestrationResult = await this.intentRouter.orchestrateWithTools(
-        userInput,
-        sessionContext.conversationHistory,
-        sessionContext.currentAgent
-      );
       
       // 4. Optimizar selección de herramientas
       const optimizedTools = await this.optimizeToolSelection(
@@ -286,30 +291,38 @@ export class DynamicOrchestrator {
       // Construir prompt contextual para generar bullets progresivos
       const bulletPrompt = this.buildBulletGenerationPrompt(context);
       
-      // Crear chat para generar bullets progresivos
+      // Crear chat para generar bullets progresivos coherentes con el agente
       const bulletChat = ai.chats.create({
         model: 'gemini-2.5-flash-lite',
         config: {
-          systemInstruction: `Eres un asistente especializado en generar pasos de razonamiento progresivos para HopeAI.
-        
-Tu tarea es crear bullets que muestren AUTÉNTICAMENTE cómo la IA está procesando y adaptándose al caso específico del usuario.
-        
-Cada bullet debe:
-        1. Reflejar el proceso de razonamiento real basado en el contexto específico
-        2. Mostrar adaptación al caso clínico particular
-        3. Ser específico y contextual, no genérico
-        4. Progresar lógicamente hacia la respuesta final
-        
-Formato de respuesta: Genera exactamente 4-6 bullets, uno por línea, comenzando cada uno con "• "
-        
-Ejemplo para un caso de ansiedad:
-        • Analizando el patrón de síntomas de ansiedad descritos por el paciente
-        • Identificando factores desencadenantes específicos en el contexto laboral
-        • Evaluando la efectividad de técnicas cognitivo-conductuales previas
-        • Seleccionando estrategias de intervención personalizadas
-        • Preparando recomendaciones basadas en evidencia científica`,
-          temperature: 0.7,
-          maxOutputTokens: 500,
+          systemInstruction: `Eres el sistema de razonamiento progresivo de HopeAI, especializado en generar bullets que reflejen AUTÉNTICAMENTE el proceso de pensamiento del agente seleccionado.
+
+Tu tarea es crear bullets que muestren cómo el agente específico está procesando la consulta según su metodología particular:
+
+🤔 **Supervisor Clínico (socratico)**: Enfoque en exploración reflexiva, identificación de patrones emocionales, formulación de preguntas socráticas y facilitación de insights.
+
+📋 **Especialista en Documentación (clinico)**: Enfoque en análisis de información, estructuración profesional, identificación de elementos clínicamente relevantes y síntesis documental.
+
+🔬 **Investigador Académico (academico)**: Enfoque en validación empírica, búsqueda de evidencia, evaluación metodológica y síntesis científica.
+
+🎯 **Orquestador Dinámico (orquestador)**: Enfoque en análisis de intención, selección de especialista, optimización de herramientas y coordinación inteligente.
+
+**PRINCIPIOS CRÍTICOS:**
+1. Usa el razonamiento de selección proporcionado como base fundamental
+2. Refleja la metodología específica del agente seleccionado
+3. Incorpora las herramientas contextuales disponibles
+4. Muestra progresión lógica hacia la respuesta del agente
+5. Sé específico al caso, nunca genérico
+
+**Formato:** Genera exactamente 4-6 bullets, uno por línea, comenzando con "• "
+
+**Ejemplo Supervisor Clínico:**
+• Identificando patrones emocionales subyacentes en la narrativa compartida
+• Evaluando disposición para exploración reflexiva profunda
+• Formulando preguntas que faciliten autoconocimiento sobre la situación
+• Preparando terreno para insights sobre creencias limitantes`,
+          temperature: 0.6,
+          maxOutputTokens: 600,
           topP: 0.8
         }
       });
@@ -418,7 +431,16 @@ Ejemplo para un caso de ansiedad:
    * Construye el prompt para generar bullets contextuales
    */
   private buildBulletGenerationPrompt(context: BulletGenerationContext): string {
-    const { userInput, sessionContext, selectedAgent, extractedEntities, clinicalContext } = context;
+    const { 
+      userInput, 
+      sessionContext, 
+      selectedAgent, 
+      extractedEntities, 
+      clinicalContext,
+      orchestrationReasoning,
+      agentConfidence,
+      contextualTools
+    } = context;
     
     let prompt = `Consulta del usuario: "${userInput}"\n\n`;
     
@@ -432,8 +454,20 @@ Ejemplo para un caso de ansiedad:
       prompt += `\n`;
     }
     
-    // Añadir agente seleccionado
-    prompt += `Agente especializado seleccionado: ${selectedAgent}\n\n`;
+    // MEJORA CRÍTICA: Incluir el razonamiento real del orquestador
+    prompt += `Agente especializado seleccionado: ${selectedAgent}\n`;
+    if (orchestrationReasoning) {
+      prompt += `Razonamiento de selección: ${orchestrationReasoning}\n`;
+    }
+    if (agentConfidence) {
+      prompt += `Confianza en la selección: ${(agentConfidence * 100).toFixed(1)}%\n`;
+    }
+    prompt += `\n`;
+    
+    // Añadir herramientas contextuales si existen
+    if (contextualTools && contextualTools.length > 0) {
+      prompt += `Herramientas clínicas disponibles: ${contextualTools.map((tool: any) => tool.name).join(', ')}\n\n`;
+    }
     
     // Añadir entidades extraídas si existen
     if (extractedEntities && extractedEntities.length > 0) {
@@ -451,9 +485,71 @@ Ejemplo para un caso de ansiedad:
       prompt += `\n`;
     }
     
-    prompt += `Genera bullets progresivos que muestren cómo estás procesando específicamente esta consulta y adaptándote a este caso particular.`;
+    // MEJORA CRÍTICA: Prompts específicos por agente que reflejen su metodología
+    prompt += this.getAgentSpecificBulletInstructions(selectedAgent);
     
     return prompt;
+  }
+  
+  /**
+   * Genera instrucciones específicas para bullets según el agente seleccionado
+   */
+  private getAgentSpecificBulletInstructions(selectedAgent: string): string {
+    const agentInstructions = {
+      'socratico': `Como Supervisor Clínico de HopeAI, genera bullets que reflejen tu proceso de razonamiento socrático:
+• Muestra cómo identificas patrones en la información del usuario
+• Refleja tu proceso de formulación de preguntas reflexivas
+• Indica cómo evalúas la profundidad emocional requerida
+• Demuestra tu análisis de la disposición del usuario para la exploración
+• Muestra cómo preparas el terreno para insights terapéuticos
+
+Ejemplo de bullets socráticos:
+• Identificando patrones emocionales subyacentes en la narrativa del usuario
+• Evaluando la disposición para exploración reflexiva profunda
+• Formulando preguntas que faciliten el autoconocimiento
+• Preparando terreno para insights sobre creencias limitantes`,
+      
+      'clinico': `Como Especialista en Documentación de HopeAI, genera bullets que reflejen tu proceso de síntesis documental:
+• Muestra cómo analizas la información para estructurarla profesionalmente
+• Refleja tu proceso de identificación de elementos clínicamente relevantes
+• Indica cómo organizas la información según estándares profesionales
+• Demuestra tu evaluación de completitud y coherencia documental
+• Muestra cómo preparas la síntesis para uso clínico futuro
+
+Ejemplo de bullets clínicos:
+• Analizando elementos clave para documentación estructurada
+• Identificando información clínicamente relevante para el expediente
+• Organizando datos según formato SOAP/PIRP apropiado
+• Evaluando completitud de la información para síntesis profesional`,
+      
+      'academico': `Como Investigador Académico de HopeAI, genera bullets que reflejen tu proceso de validación científica:
+• Muestra cómo identificas conceptos que requieren validación empírica
+• Refleja tu proceso de formulación de consultas de búsqueda específicas
+• Indica cómo evalúas la relevancia de diferentes fuentes científicas
+• Demuestra tu análisis de la calidad metodológica de la evidencia
+• Muestra cómo preparas la síntesis de evidencia para aplicación clínica
+
+Ejemplo de bullets académicos:
+• Identificando conceptos clave que requieren validación científica
+• Formulando estrategias de búsqueda en bases de datos especializadas
+• Evaluando relevancia y calidad metodológica de estudios disponibles
+• Sintetizando evidencia empírica para aplicación clínica práctica`,
+      
+      'orquestador': `Como Orquestador Dinámico de HopeAI, genera bullets que reflejen tu proceso de coordinación inteligente:
+• Muestra cómo analizas la consulta para determinar el especialista óptimo
+• Refleja tu evaluación de la complejidad y naturaleza de la solicitud
+• Indica cómo consideras el contexto de sesión para la selección
+• Demuestra tu proceso de optimización de herramientas contextuales
+• Muestra cómo preparas la transición fluida al especialista seleccionado
+
+Ejemplo de bullets de orquestación:
+• Analizando naturaleza de la consulta para selección óptima de especialista
+• Evaluando contexto de sesión y historial para continuidad terapéutica
+• Optimizando herramientas clínicas según dominio detectado
+• Preparando transición fluida al especialista más apropiado`
+    };
+    
+    return agentInstructions[selectedAgent as keyof typeof agentInstructions] || agentInstructions['socratico'];
   }
   
   /**
