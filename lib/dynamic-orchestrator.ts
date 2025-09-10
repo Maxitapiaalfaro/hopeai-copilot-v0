@@ -141,7 +141,11 @@ export class DynamicOrchestrator {
     sessionId: string,
     userId: string,
     sessionFiles?: ClinicalFile[],
-    onBulletUpdate?: (bullet: ReasoningBullet) => void
+    onBulletUpdate?: (bullet: ReasoningBullet) => void,
+    externalConversationHistory?: Content[],
+    patientId?: string,
+    patientSummary?: string,
+    sessionType?: string
   ): Promise<DynamicOrchestrationResult> {
     const startTime = Date.now();
     
@@ -154,7 +158,7 @@ export class DynamicOrchestrator {
       // 1. Obtener o crear contexto de sesión
       const sessionContext = await this.getOrCreateSession(sessionId, userId);
       
-      // 2. Actualizar historial de conversación con archivos adjuntos
+      // 2. Actualizar historial de conversación con archivos adjuntos (usuario)
       this.updateConversationHistory(sessionContext, userInput, sessionFiles);
       
       // 3. Realizar orquestación inteligente PRIMERO para obtener el agente correcto
@@ -169,14 +173,31 @@ export class DynamicOrchestrator {
       if (onBulletUpdate) {
         this.log('info', `Generando bullets progresivos coherentes para agente ${orchestrationResult.selectedAgent}`);
         
+        // Determinar conversación a usar para bullets: preferir historia completa externa (usuario + modelo)
+        const bulletConversation: Content[] = (externalConversationHistory && externalConversationHistory.length > 0)
+          ? externalConversationHistory.slice(-6) // tomar últimos 6 turnos para coherencia temporal
+          : sessionContext.conversationHistory.slice(-6);
+
+        // Extraer entidades del bloque conversacional (usuario + modelo si está disponible)
+        let extractedEntities: any[] = [];
+        try {
+          const conversationText = bulletConversation
+            .map((msg: any) => (msg.parts && msg.parts[0] && (msg.parts[0] as any).text) || '')
+            .join(' ');
+          const entityResult = await this.entityExtractor.extractEntities(conversationText);
+          extractedEntities = entityResult.entities || [];
+        } catch {}
+
         // Crear contexto enriquecido para generación de bullets
         const bulletContext: BulletGenerationContext = {
           userInput,
-          sessionContext: sessionContext.conversationHistory,
+          sessionContext: bulletConversation,
           selectedAgent: orchestrationResult.selectedAgent,
-          extractedEntities: [], // Se extraerán en el proceso
+          extractedEntities,
           clinicalContext: {
-            sessionType: 'general'
+            patientId: patientId,
+            patientSummary: patientSummary,
+            sessionType: sessionType || 'general'
           },
           // NUEVO: Incluir el razonamiento real del orquestador
           orchestrationReasoning: orchestrationResult.reasoning,
@@ -289,38 +310,33 @@ export class DynamicOrchestrator {
       this.log('info', `Generando bullets progresivos para sesión ${context.sessionContext.length > 0 ? 'con contexto' : 'nueva'}`);
       
       // Construir prompt contextual para generar bullets progresivos
-      const bulletPrompt = this.buildBulletGenerationPrompt(context);
+      const instructionHeader = `Eres el sistema de razonamiento progresivo de HopeAI, especializado en generar bullets que reflejen AUTÉNTICAMENTE el proceso de pensamiento del agente seleccionado.
+
+Tu tarea es crear bullets que muestren cómo el agente específico está procesando la consulta según su metodología particular.
+
+PRINCIPIOS CRÍTICOS:
+1) Usa el razonamiento de selección proporcionado como base fundamental
+2) Refleja la metodología específica del agente seleccionado
+3) Incorpora las herramientas contextuales disponibles
+4) Muestra progresión lógica hacia la respuesta del agente
+5) Sé específico al caso, nunca genérico
+6) Ancla CADA bullet explícitamente al contexto reciente provisto (usuario y modelo); si falta base, omite ese bullet
+
+ESTILO (MODO PENSAMIENTO):
+- Tono exploratorio y tentativo: usa expresiones como "me pregunto si", "podría", "parece que", "quizás".
+- Evita lenguaje de acción/decisión o compromisos: no uses "voy a", "haré", "debemos", "mi objetivo es", "te recomiendo".
+- No des órdenes ni recomendaciones; no hables directamente al usuario.
+- Prefiere observaciones e hipótesis sobre planes: prioriza "observando", "notando", "considerando", "hipotetizando".
+- Frases breves y completas (idealmente 8–18 palabras), sin cortar al final.
+
+FORMATO: Genera exactamente 4-6 bullets, uno por línea, comenzando con "• ".
+`;
+      const bulletPrompt = instructionHeader + this.buildBulletGenerationPrompt(context);
       
-      // Crear chat para generar bullets progresivos coherentes con el agente
+      // Crear chat para generar bullets progresivos coherentes con el agente (usar prompt contextual, no sólo systemInstruction)
       const bulletChat = ai.chats.create({
         model: 'gemini-2.5-flash-lite',
         config: {
-          systemInstruction: `Eres el sistema de razonamiento progresivo de HopeAI, especializado en generar bullets que reflejen AUTÉNTICAMENTE el proceso de pensamiento del agente seleccionado.
-
-Tu tarea es crear bullets que muestren cómo el agente específico está procesando la consulta según su metodología particular:
-
-🤔 **Supervisor Clínico (socratico)**: Enfoque en exploración reflexiva, identificación de patrones emocionales, formulación de preguntas socráticas y facilitación de insights.
-
-📋 **Especialista en Documentación (clinico)**: Enfoque en análisis de información, estructuración profesional, identificación de elementos clínicamente relevantes y síntesis documental.
-
-🔬 **Investigador Académico (academico)**: Enfoque en validación empírica, búsqueda de evidencia, evaluación metodológica y síntesis científica.
-
-🎯 **Orquestador Dinámico (orquestador)**: Enfoque en análisis de intención, selección de especialista, optimización de herramientas y coordinación inteligente.
-
-**PRINCIPIOS CRÍTICOS:**
-1. Usa el razonamiento de selección proporcionado como base fundamental
-2. Refleja la metodología específica del agente seleccionado
-3. Incorpora las herramientas contextuales disponibles
-4. Muestra progresión lógica hacia la respuesta del agente
-5. Sé específico al caso, nunca genérico
-
-**Formato:** Genera exactamente 4-6 bullets, uno por línea, comenzando con "• "
-
-**Ejemplo Supervisor Clínico:**
-• Identificando patrones emocionales subyacentes en la narrativa compartida
-• Evaluando disposición para exploración reflexiva profunda
-• Formulando preguntas que faciliten autoconocimiento sobre la situación
-• Preparando terreno para insights sobre creencias limitantes`,
           temperature: 0.6,
           maxOutputTokens: 600,
           topP: 0.8
@@ -329,77 +345,99 @@ Tu tarea es crear bullets que muestren cómo el agente específico está procesa
       
       // Generar bullets usando streaming
       const bulletStream = await bulletChat.sendMessageStream({ message: bulletPrompt });
-      
-      let accumulatedText = '';
-      let currentBulletText = '';
-      let isInBullet = false;
-      
+
+      // Parser robusto basado en marcadores: detecta encabezados '## ' y bullets '• '
+      let buffer = '';
+      let currentStart = -1; // índice del inicio del bullet actual en buffer
+      const emittedHeadings = new Set<string>();
+
       for await (const chunk of bulletStream) {
-        if (chunk.text) {
-          accumulatedText += chunk.text;
-          currentBulletText += chunk.text;
-          
-          // Detectar inicio de bullet
-          if (chunk.text.includes('•') && !isInBullet) {
-            isInBullet = true;
-            currentBulletText = chunk.text.substring(chunk.text.indexOf('•'));
+        if (!chunk.text) continue;
+        buffer += chunk.text;
+
+        // Emitir encabezados '## Título' que aparezcan completos en el buffer
+        while (true) {
+          const hIdx = buffer.indexOf('\n## ');
+          if (hIdx === -1) break;
+          const after = buffer.indexOf('\n', hIdx + 1);
+          if (after === -1) break; // esperar a tener la línea completa
+          const line = buffer.slice(hIdx + 1, after).trim(); // '## Título'
+          const heading = line.replace(/^##\s+/, '').trim();
+          if (heading && !emittedHeadings.has(heading)) {
+            emittedHeadings.add(heading);
+            const sep: ReasoningBullet = {
+              id: `sep_${Date.now()}_${emittedHeadings.size}`,
+              content: heading,
+              status: 'completed',
+              timestamp: new Date(),
+              order: emittedHeadings.size,
+              type: 'separator'
+            } as any;
+            if (onBulletUpdate) onBulletUpdate(sep);
+            yield sep;
           }
-          
-          // Detectar final de bullet (nueva línea)
-          if (isInBullet && chunk.text.includes('\n')) {
-            const bulletContent = currentBulletText
-              .replace('•', '')
-              .trim()
-              .split('\n')[0]
-              .trim();
-            
-            if (bulletContent.length > 0) {
-              bulletCounter++;
-              const bullet: ReasoningBullet = {
-                id: `bullet_${Date.now()}_${bulletCounter}`,
-                content: bulletContent,
-                status: 'completed',
-                timestamp: new Date(),
-                order: bulletCounter
-              };
-              
-              // Callback para actualización en tiempo real
-              if (onBulletUpdate) {
-                onBulletUpdate(bullet);
+          // Recortar buffer antes del heading procesado para evitar reprocesarlo
+          buffer = buffer.slice(after);
+        }
+
+        // Procesar todos los marcadores de bullets presentes en el buffer
+        let idx = 0;
+        while (true) {
+          const markerIndex = buffer.indexOf('• ', idx);
+          if (markerIndex === -1) break;
+
+          if (currentStart === -1) {
+            // Comienza un nuevo bullet
+            currentStart = markerIndex;
+            idx = markerIndex + 2;
+          } else {
+            // Tenemos inicio anterior y aparece uno nuevo: emitir el bullet previo
+            const rawBullet = buffer.slice(currentStart, markerIndex);
+            {
+              const cleaned = rawBullet.replace(/^•\s?/, '').replace(/\s+/g, ' ').trim();
+              if (cleaned.length > 0) {
+                bulletCounter++;
+                const bullet: ReasoningBullet = {
+                  id: `bullet_${Date.now()}_${bulletCounter}`,
+                  content: cleaned,
+                  status: 'completed',
+                  timestamp: new Date(),
+                  order: bulletCounter
+                };
+                if (onBulletUpdate) onBulletUpdate(bullet);
+                yield bullet;
+                await new Promise(resolve => setTimeout(resolve, 300));
               }
-              
-              yield bullet;
-              
-              // Pequeña pausa para efecto visual
-              await new Promise(resolve => setTimeout(resolve, 300));
             }
-            
-            currentBulletText = '';
-            isInBullet = false;
+            currentStart = markerIndex;
+            idx = markerIndex + 2;
           }
         }
+
+        // Para evitar que el buffer crezca indefinidamente, recortar la parte procesada
+        // Si tenemos un inicio actual, mantener desde currentStart; si no, mantener últimos 1000 chars
+        if (currentStart > 0) {
+          buffer = buffer.slice(currentStart);
+          currentStart = 0; // ajustado al nuevo buffer
+        } else if (currentStart === -1 && buffer.length > 2000) {
+          buffer = buffer.slice(-1000);
+        }
       }
-      
-      // Procesar último bullet si no terminó con nueva línea
-      if (isInBullet && currentBulletText.trim().length > 0) {
-        const bulletContent = currentBulletText
-          .replace('•', '')
-          .trim();
-        
-        if (bulletContent.length > 0) {
+
+      // Emitir el último bullet si quedó abierto al finalizar el stream
+      if (currentStart !== -1) {
+        const rawBullet = buffer.slice(currentStart);
+        const cleaned = rawBullet.replace(/^•\s?/, '').replace(/\s+/g, ' ').trim();
+        if (cleaned.length > 0) {
           bulletCounter++;
           const bullet: ReasoningBullet = {
             id: `bullet_${Date.now()}_${bulletCounter}`,
-            content: bulletContent,
+            content: cleaned,
             status: 'completed',
             timestamp: new Date(),
             order: bulletCounter
           };
-          
-          if (onBulletUpdate) {
-            onBulletUpdate(bullet);
-          }
-          
+          if (onBulletUpdate) onBulletUpdate(bullet);
           yield bullet;
         }
       }
@@ -446,7 +484,7 @@ Tu tarea es crear bullets que muestren cómo el agente específico está procesa
     
     // Añadir contexto de sesión si existe
     if (sessionContext && sessionContext.length > 0) {
-      const recentMessages = sessionContext.slice(-3);
+      const recentMessages = sessionContext.slice(-6);
       prompt += `Contexto de conversación reciente:\n`;
       recentMessages.forEach((msg: any, index) => {
         prompt += `${index + 1}. ${msg.role}: ${msg.parts?.[0]?.text || msg.content || 'Sin contenido'}\n`;
@@ -479,6 +517,9 @@ Tu tarea es crear bullets que muestren cómo el agente específico está procesa
       if (clinicalContext.patientId) {
         prompt += `Contexto del paciente: ID ${clinicalContext.patientId}\n`;
       }
+      if (clinicalContext.patientSummary) {
+        prompt += `Resumen del paciente (curado): ${clinicalContext.patientSummary.substring(0, 800)}\n`;
+      }
       if (clinicalContext.sessionType) {
         prompt += `Tipo de sesión: ${clinicalContext.sessionType}\n`;
       }
@@ -487,6 +528,9 @@ Tu tarea es crear bullets que muestren cómo el agente específico está procesa
     
     // MEJORA CRÍTICA: Prompts específicos por agente que reflejen su metodología
     prompt += this.getAgentSpecificBulletInstructions(selectedAgent);
+    
+    // Aclaración de rol: Los bullets son "pensamientos internos" del agente seleccionado
+    prompt += `\nNOTA DE ROL: Los bullets representan el pensamiento interno del agente (${selectedAgent}). No deben confundirse con la respuesta al usuario. Deben ser breves, concretos y siempre anclados a los mensajes recientes.`;
     
     return prompt;
   }

@@ -13,6 +13,8 @@ export interface ChatMessage {
   fileReferences?: string[]  // IDs de archivos, no objetos completos
   groundingUrls?: Array<{title: string, url: string, domain?: string}>
   // ELIMINADO: attachments duplicados - usar solo fileReferences por ID
+  // NUEVA FUNCIONALIDAD: Bullets de razonamiento específicos por mensaje
+  reasoningBullets?: ReasoningBullet[]
 }
 
 // Tipos para bullets progresivos de razonamiento
@@ -21,7 +23,8 @@ export interface ReasoningBullet {
   content: string
   status: "generating" | "completed" | "error"
   timestamp: Date
-  order: number
+  order?: number
+  type?: "reasoning" | "separator"  // ARQUITECTURA MEJORADA: Soporte para separadores visuales
 }
 
 export interface ReasoningBulletsState {

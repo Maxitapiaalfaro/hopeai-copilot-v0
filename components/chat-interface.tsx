@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown, Brain, Search, Stethoscope, BookOpen, Maximize2, Minimize2, FileText, Copy, Check, ThumbsUp, ThumbsDown, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { AgentType, ChatState, ClinicalFile } from "@/types/clinical-types"
+import type { AgentType, ChatState, ClinicalFile, ReasoningBullet } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
 import { useSpeechToText } from "@/hooks/use-speech-to-text"
 import { MarkdownRenderer, StreamingMarkdownRenderer } from "@/components/markdown-renderer"
@@ -32,7 +32,12 @@ interface ChatInterfaceProps {
   currentSession: ChatState | null
   sendMessage: (message: string, useStreaming?: boolean, attachedFiles?: ClinicalFile[]) => Promise<any>
   uploadDocument: (file: File) => Promise<any>
-  addStreamingResponseToHistory?: (responseContent: string, agent: AgentType, groundingUrls?: Array<{title: string, url: string, domain?: string}>) => Promise<void>
+  addStreamingResponseToHistory?: (
+    responseContent: string,
+    agent: AgentType,
+    groundingUrls?: Array<{title: string, url: string, domain?: string}>,
+    reasoningBulletsForThisResponse?: ReasoningBullet[]
+  ) => Promise<void>
   pendingFiles?: ClinicalFile[]
   onRemoveFile?: (fileId: string) => void
   transitionState?: TransitionState
@@ -67,6 +72,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [previewAgent, setPreviewAgent] = useState<AgentType | null>(null)
+  // Collapse states for reasoning bullets
+  const [areBulletsCollapsed, setAreBulletsCollapsed] = useState(false)
+  const [collapsedMessageBullets, setCollapsedMessageBullets] = useState<Record<string, boolean>>({})
+
+  const toggleExternalBullets = () => setAreBulletsCollapsed(prev => !prev)
+  const toggleMessageBullets = (id: string) => setCollapsedMessageBullets(prev => ({ ...prev, [id]: !prev[id] }))
+  // Snapshot of reasoning bullets for current streaming response
+  const bulletsSnapshotRef = useRef<ReasoningBullet[]>([])
   
   // Hook para speech-to-text
   const { isListening, interimTranscript, error: speechError } = useSpeechToText({
@@ -96,6 +109,22 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
     loadMessageFiles()
   }, [currentSession?.history])
+
+  // Keep snapshot of reasoning bullets during streaming cycle
+  useEffect(() => {
+    if (isStreaming && reasoningBullets && reasoningBullets.bullets) {
+      bulletsSnapshotRef.current = [...reasoningBullets.bullets]
+    }
+  }, [isStreaming, reasoningBullets?.bullets])
+
+  // Default-collapse reasoning inside the freshly added model message (post-stream commit)
+  useEffect(() => {
+    const last = currentSession?.history && currentSession.history[currentSession.history.length - 1]
+    if (!last) return
+    if (last.role === 'model' && last.reasoningBullets && last.reasoningBullets.length > 0) {
+      setCollapsedMessageBullets(prev => (prev[last.id] === undefined ? { ...prev, [last.id]: true } : prev))
+    }
+  }, [currentSession?.history?.length])
 
   // Auto-scroll only when new content arrives (not on first render or welcome state)
   const prevHistoryLenRef = useRef<number>(0)
@@ -227,6 +256,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     // Limpiar input y preparar UI para streaming
     setInputValue("")
     setIsStreaming(true)
+    bulletsSnapshotRef.current = []
     setStreamingResponse("")
 
     console.log('📤 Frontend: Enviando mensaje:', message.substring(0, 50) + '...')
@@ -328,7 +358,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   // Usar el agente de la información de enrutamiento si está disponible,
                   // de lo contrario usar el agente activo actual
                   const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-                  await addStreamingResponseToHistory(fullResponse, responseAgent, accumulatedGroundingUrls)
+                  await addStreamingResponseToHistory(fullResponse, responseAgent, accumulatedGroundingUrls, bulletsSnapshotRef.current)
                   console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
                 } catch (historyError) {
                   console.error('❌ Frontend: Error agregando al historial:', historyError)
@@ -524,6 +554,17 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const tooltipAgent = previewAgent || activeAgent
   const tooltipConfig = getAgentVisualConfig(tooltipAgent)
   const TooltipIconComponent = tooltipConfig.icon
+  
+  // Determine if the latest model message already contains persisted reasoning bullets
+  const lastHistoryMessage = currentSession?.history && currentSession.history.length > 0
+    ? currentSession.history[currentSession.history.length - 1]
+    : undefined
+  const lastModelMessageHasBullets = !!(
+    lastHistoryMessage &&
+    lastHistoryMessage.role === 'model' &&
+    lastHistoryMessage.reasoningBullets &&
+    lastHistoryMessage.reasoningBullets.length > 0
+  )
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-serif paper-noise">
@@ -621,7 +662,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   {/* Agent Context Header for AI responses */}
                   {message.role === "model" && (
                     <div className="px-3 md:px-4 pt-3 pb-2 border-b border-border/50">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center justify-between gap-2 mb-1">
                         <span className={cn("text-sm font-bold font-sans", messageAgentConfig.textColor)}>
                           {message.agent === 'socratico' && 'Supervisor Clínico'}
                     {message.agent === 'clinico' && 'Especialista en Documentación'}
@@ -629,14 +670,36 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           {message.agent === 'orquestador' && 'HopeAI'}
                           {!message.agent && 'HopeAI'}
                         </span>
+                        {message.reasoningBullets && message.reasoningBullets.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleMessageBullets(message.id)}
+                            className="inline-flex items-center justify-center h-7 px-2 text-xs rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label={collapsedMessageBullets[message.id] ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
+                            title={collapsedMessageBullets[message.id] ? 'Mostrar razonamiento' : 'Ocultar razonamiento'}
+                          >
+                            {collapsedMessageBullets[message.id] ? 'Mostrar razonamiento' : 'Ocultar razonamiento'}
+                          </button>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground font-sans">
-                        {message.agent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
-                        {message.agent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
-                        {message.agent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
+                        {message.agent === 'socratico' && 'Diálogo terapéutico y exploración reflexiva'}
+                        {message.agent === 'clinico' && 'Documentación clínica y síntesis profesional'}
+                        {message.agent === 'academico' && 'Investigación científica y evidencia académica'}
                         {message.agent === 'orquestador' && 'Asistente principal coordinando respuesta'}
                         {!message.agent && 'Respuesta del sistema'}
                       </p>
+                    </div>
+                  )}
+                  {/* Reasoning bullets at the top of AI message with per-message collapse */}
+                  {message.role === 'model' && message.reasoningBullets && message.reasoningBullets.length > 0 && !collapsedMessageBullets[message.id] && (
+                    <div className="p-3 md:p-4">
+                      <ReasoningBullets 
+                        bullets={message.reasoningBullets}
+                        isGenerating={false}
+                        showHeader={false}
+                        className="text-sm"
+                      />
                     </div>
                   )}
                   <div className="p-3 md:p-4">
@@ -741,15 +804,24 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 <div className={cn("absolute -top-2 -left-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background", config.bgColor, config.borderColor)}>
                   <IconComponent className={cn("h-3 w-3", config.textColor)} />
                 </div>
-                {/* Agent Context Header */}
+                {/* Agent Context Header with collapse control */}
                 <div className="px-4 pt-3 pb-2 border-b border-border/50">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="text-sm font-medium font-sans">
                       {activeAgent === 'socratico' && 'Supervisor Clínico'}
                   {activeAgent === 'clinico' && 'Especialista en Documentación'}
                       {activeAgent === 'academico' && 'Investigador Académico'}
                       {activeAgent === 'orquestador' && 'Orquestador'}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => setAreBulletsCollapsed(prev => !prev)}
+                      className="inline-flex items-center justify-center h-7 px-2 text-xs rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={areBulletsCollapsed ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
+                      title={areBulletsCollapsed ? 'Mostrar razonamiento' : 'Ocultar razonamiento'}
+                    >
+                      {areBulletsCollapsed ? 'Mostrar Razonamiento' : 'Ocultar Razonamiento'}
+                    </button>
                   </div>
                   <p className="text-xs text-muted-foreground font-sans">
                     {activeAgent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
@@ -791,64 +863,52 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             </div>
           )}
 
-          {/* Reasoning Bullets - Mostrar bullets progresivos */}
-          {reasoningBullets && (reasoningBullets.isGenerating || reasoningBullets.bullets.length > 0) && (
-            <div className="flex items-start gap-4 sm:px-0 px-2 mb-4">
-              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
+          {/* Reasoning Bullets - primary indicator replacing typing indicator, styled like AI message */}
+          {reasoningBullets && (
+            reasoningBullets.isGenerating || (reasoningBullets.bullets.length > 0 && !lastModelMessageHasBullets)
+          ) && (
+            <div className="flex items-start sm:gap-4 gap-0 sm:px-0 px-2 pt-4">
+              {/* Desktop: Icon outside message */}
+              <div className={cn("hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
                 <IconComponent className={cn("h-4 w-4", config.textColor)} />
               </div>
-              <div className="flex-1 max-w-[80%]">
-                <ReasoningBullets
-                  bullets={reasoningBullets.bullets}
-                  isGenerating={reasoningBullets.isGenerating}
-                  className="w-full"
-                />
+              <div className={cn("relative max-w-[95%] sm:max-w-[80%] rounded-lg border", config.bgColor, config.borderColor)}>
+                {/* Mobile: Agent icon in corner */}
+                <div className={cn("absolute -top-2 -left-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background", config.bgColor, config.borderColor)}>
+                  <IconComponent className={cn("h-3 w-3", config.textColor)} />
+                </div>
+                {/* Agent Context Header */}
+                <div className="px-4 pt-3 pb-2 border-b border-border/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium font-sans">
+                      {activeAgent === 'socratico' && 'Supervisor Clínico'}
+                  {activeAgent === 'clinico' && 'Especialista en Documentación'}
+                      {activeAgent === 'academico' && 'Investigador Académico'}
+                      {activeAgent === 'orquestador' && 'Orquestador'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-sans">
+                    {activeAgent === 'socratico' && 'Especialista en diálogo terapéutico y exploración reflexiva'}
+                    {activeAgent === 'clinico' && 'Especialista en documentación clínica y síntesis profesional'}
+                    {activeAgent === 'academico' && 'Especialista en investigación científica y evidencia académica'}
+                    {activeAgent === 'orquestador' && 'Coordinando respuesta entre especialistas'}
+                  </p>
+                </div>
+                {!areBulletsCollapsed && (
+                  <div className="p-4">
+                    <ReasoningBullets
+                      bullets={reasoningBullets.bullets}
+                      isGenerating={reasoningBullets.isGenerating}
+                      className="w-full"
+                      showHeader={false}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Typing Indicator with Transition States */}
-          {(isProcessing || isStreaming) && !streamingResponse && !reasoningBullets?.isGenerating && (
-            <div className="flex items-start gap-4 sm:px-0 px-2">
-              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}>
-                <div className="transition-all duration-700 ease-out">
-                  {transitionState === 'thinking' && <Brain className="h-4 w-4 text-primary" style={{ animation: 'gentle-pulse 2s ease-in-out infinite' }} />}
-                  {transitionState === 'selecting_agent' && <Search className="h-4 w-4 text-primary" style={{ animation: 'gentle-fade 1.5s ease-in-out infinite alternate' }} />}
-                  {(transitionState === 'specialist_responding' || transitionState === 'idle') && <IconComponent className={cn("h-4 w-4", config.textColor)} />}
-                </div>
-              </div>
-              <div className={cn("max-w-[80%] rounded-lg p-4 border", config.bgColor, config.borderColor)}>
-                <div className="flex items-center gap-3">
-                  <div className="flex gap-1">
-                    <div 
-                      className="w-2 h-2 rounded-full bg-primary"
-                      style={{ animation: 'gentle-bounce 2s ease-in-out infinite' }}
-                    ></div>
-                    <div
-                      className="w-2 h-2 rounded-full bg-primary"
-                      style={{ animation: 'gentle-bounce 2s ease-in-out infinite', animationDelay: "0.4s" }}
-                    ></div>
-                    <div
-                      className="w-2 h-2 rounded-full bg-primary"
-                      style={{ animation: 'gentle-bounce 2s ease-in-out infinite', animationDelay: "0.8s" }}
-                    ></div>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-sans text-muted-foreground">
-                      {transitionState === 'thinking' && 'HopeAI está analizando tu consulta...'}
-                      {transitionState === 'selecting_agent' && 'Eligiendo el especialista más adecuado...'}
-                      {(transitionState === 'specialist_responding' || transitionState === 'idle') && `${config.name} generando respuesta especializada...`}
-                    </span>
-                    <span className="text-xs font-sans text-muted-foreground/70 mt-1">
-                      {transitionState === 'thinking' && 'Identificando el tipo de consulta y contexto necesario'}
-                      {transitionState === 'selecting_agent' && ''}
-                      {(transitionState === 'specialist_responding' || transitionState === 'idle') && `Aplicando conocimiento especializado en ${activeAgent === 'socratico' ? 'diálogo terapéutico' : activeAgent === 'clinico' ? 'documentación clínica' : 'investigación académica'}`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Removed typing indicator; reasoning bullets serve as the only thinking indicator */}
 
           <div ref={messagesEndRef} />
         </div>

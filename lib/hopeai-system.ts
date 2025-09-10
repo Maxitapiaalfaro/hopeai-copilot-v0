@@ -9,7 +9,7 @@ import { getPatientPersistence } from "./patient-persistence"
 import { PatientSummaryBuilder } from "./patient-summary-builder"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, ReasoningBullet } from "@/types/clinical-types"
 
 export class HopeAISystem {
   private _initialized = false
@@ -342,12 +342,27 @@ export class HopeAISystem {
         // 🧠 USAR ORQUESTACIÓN AVANZADA CON APRENDIZAJE CROSS-SESSION
         console.log(`[HopeAI] 🧠 Using Advanced Orchestration with cross-session learning`)
         
+        // Construir conversación completa (usuario + modelo) en formato Content[] para bullets coherentes
+        const externalConversationHistory = (currentState.history || []).slice(-10).map((msg: ChatMessage) => ({
+          role: msg.role,
+          parts: [{ text: msg.content }]
+        }))
+
+        // Contexto de paciente para bullets
+        const patientIdForBullets = patientReference
+        const patientSummaryForBullets = patientSummary
+        const sessionTypeForBullets = currentState.mode
+
         orchestrationResult = await this.dynamicOrchestrator.orchestrate(
           message,
           sessionId,
           currentState.userId || 'demo_user',
           resolvedSessionFiles,
-          onBulletUpdate
+          onBulletUpdate,
+          externalConversationHistory,
+          patientIdForBullets,
+          patientSummaryForBullets,
+          sessionTypeForBullets
         )
         
         // 📊 RECORD ORCHESTRATION COMPLETION 
@@ -733,7 +748,8 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     sessionId: string,
     responseContent: string,
     agent: AgentType,
-    groundingUrls?: Array<{title: string, url: string, domain?: string}>
+    groundingUrls?: Array<{title: string, url: string, domain?: string}>,
+    reasoningBullets?: ReasoningBullet[]
   ): Promise<void> {
     if (!this._initialized) await this.initialize()
 
@@ -749,7 +765,8 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       role: "model",
       agent: agent,
       timestamp: new Date(),
-      groundingUrls: groundingUrls || []
+      groundingUrls: groundingUrls || [],
+      reasoningBullets: reasoningBullets && reasoningBullets.length > 0 ? [...reasoningBullets] : undefined
     }
 
     currentState.history.push(aiMessage)

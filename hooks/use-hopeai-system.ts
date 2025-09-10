@@ -5,6 +5,9 @@ import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 
+// ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
+const MAX_HISTORICAL_BULLETS = 15
+
 // Estados de transición explícitos para HopeAI
 export type TransitionState = 'idle' | 'thinking' | 'selecting_agent' | 'specialist_responding'
 
@@ -50,7 +53,12 @@ interface UseHopeAISystemReturn {
   // Control de estado
   clearError: () => void
   resetSystem: () => void
-  addStreamingResponseToHistory: (responseContent: string, agent: AgentType) => Promise<void>
+  addStreamingResponseToHistory: (
+    responseContent: string,
+    agent: AgentType,
+    groundingUrls?: Array<{title: string, url: string, domain?: string}>,
+    reasoningBulletsForThisResponse?: ReasoningBullet[]
+  ) => Promise<void>
   setSessionMeta: (sessionMeta: any) => void
   
   // Bullets progresivos
@@ -81,6 +89,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
   const lastSessionIdRef = useRef<string | null>(null)
+
+  // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
+  const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
 
   // Cargar sesión existente
   const loadSession = useCallback(async (sessionId: string, allowDuringInit = false): Promise<boolean> => {
@@ -319,21 +330,26 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         fileReferences: attachedFiles?.map(file => file.id) || []
       }
 
+      // NUEVA FUNCIONALIDAD: Limpiar bullets temporales del mensaje anterior
+      setCurrentMessageBullets([])
+      
       // Actualizar el historial inmediatamente con el mensaje del usuario
-      setSystemState(prev => ({
-        ...prev,
-        history: [...prev.history, userMessage],
-        isLoading: true,
-        error: null,
-        transitionState: 'thinking',
-        reasoningBullets: {
-          ...prev.reasoningBullets,
-          sessionId: sessionIdToUse!,
-          bullets: [],
-          isGenerating: true,
-          currentStep: 0
+      setSystemState(prev => {
+        return {
+          ...prev,
+          history: [...prev.history, userMessage],
+          isLoading: true,
+          error: null,
+          transitionState: 'thinking',
+          reasoningBullets: {
+            ...prev.reasoningBullets,
+            sessionId: sessionIdToUse!,
+            bullets: [], // Limpiar bullets globales para el nuevo mensaje
+            isGenerating: true,
+            currentStep: 0
+          }
         }
-      }))
+      })
 
       console.log('📤 Enviando mensaje con enrutamiento inteligente:', message.substring(0, 50) + '...')
       
@@ -464,6 +480,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     responseContent: string,
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
+    reasoningBulletsForThisResponse?: ReasoningBullet[],
     sessionIdOverride?: string
   ): Promise<void> => {
     if (!hopeAISystem.current) {
@@ -492,25 +509,45 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         targetSessionId,
         responseContent,
         agent,
-        groundingUrls
+        groundingUrls,
+        reasoningBulletsForThisResponse && reasoningBulletsForThisResponse.length > 0
+          ? reasoningBulletsForThisResponse
+          : currentMessageBullets
       )
 
       // Actualizar el historial local inmediatamente
       const updatedState = await hopeAISystem.current.getChatState(targetSessionId)
+      
+      // NUEVA FUNCIONALIDAD: Asociar bullets del mensaje actual con el último mensaje de respuesta
+      const updatedHistory = [...updatedState.history]
+      const bulletsToAttach = (reasoningBulletsForThisResponse && reasoningBulletsForThisResponse.length > 0)
+        ? reasoningBulletsForThisResponse
+        : currentMessageBullets
+      if (updatedHistory.length > 0 && bulletsToAttach.length > 0) {
+        const lastMessage = updatedHistory[updatedHistory.length - 1]
+        if (lastMessage.role === 'model') {
+          lastMessage.reasoningBullets = [...bulletsToAttach]
+          console.log('🎯 Bullets asociados al mensaje:', bulletsToAttach.length)
+        }
+      }
+      
       setSystemState(prev => ({
         ...prev,
-        history: updatedState.history,
+        history: updatedHistory,
         activeAgent: updatedState.activeAgent, // Sincronizar el agente activo
         isLoading: false
       }))
+      
+      // Limpiar bullets temporales después de asociarlos
+      setCurrentMessageBullets([])
 
       console.log('✅ Respuesta de streaming agregada al historial')
-      console.log('📊 Historial actualizado con', updatedState.history.length, 'mensajes')
+      console.log('📊 Historial actualizado con', updatedHistory.length, 'mensajes')
     } catch (error) {
       console.error('❌ Error agregando respuesta al historial:', error)
       throw error
     }
-  }, [systemState.sessionId])
+  }, [systemState.sessionId, currentMessageBullets])
 
   // Establecer contexto del paciente
   const setSessionMeta = useCallback((sessionMeta: any) => {
@@ -522,7 +559,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   }, [])
 
   // Funciones para manejar bullets progresivos
-  const clearReasoningBullets = useCallback(() => {
+  const clearReasoningBullets = useCallback((clearAll = false) => {
+    setCurrentMessageBullets([])
     setSystemState(prev => ({
       ...prev,
       reasoningBullets: {
@@ -536,6 +574,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   }, [])
 
   const addReasoningBullet = useCallback((bullet: ReasoningBullet) => {
+    // Agregar bullet al estado temporal del mensaje actual
+    setCurrentMessageBullets(prev => [...prev, bullet])
+    
+    // Mantener compatibilidad con el estado global para la UI actual
     setSystemState(prev => ({
       ...prev,
       reasoningBullets: {
