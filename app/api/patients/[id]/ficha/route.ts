@@ -1,49 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clinicalTaskOrchestrator } from '@/lib/clinical-task-orchestrator'
-import { getStorageAdapter } from '@/lib/server-storage-adapter'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await request.json()
-    const { fichaId, sessionId, sessionState, patientForm, conversationSummary } = body
+    const { fichaId, sessionId, sessionState, patientForm, conversationSummary, previousFichaContent } = body
     if (!fichaId) {
       return NextResponse.json({ error: 'fichaId es requerido' }, { status: 400 })
     }
     const { id } = await params
     let effectiveSessionState = sessionState
     if (!effectiveSessionState && sessionId) {
-      const storage = await getStorageAdapter()
-      const loaded = await storage.loadChatSession(sessionId)
-      if (!loaded) {
-        return NextResponse.json({ error: 'Sesión no encontrada' }, { status: 404 })
-      }
-      effectiveSessionState = loaded
+      // No server-side storage for fichas; session must be provided by client or looked up elsewhere
+      return NextResponse.json({ error: 'Debe proveerse sessionState en el cuerpo cuando no hay persistencia de servidor' }, { status: 400 })
     }
     if (!effectiveSessionState) {
       return NextResponse.json({ error: 'Debe proveerse sessionId o sessionState' }, { status: 400 })
     }
-    await clinicalTaskOrchestrator.generateFichaClinica({
+    const ficha = await clinicalTaskOrchestrator.generateFichaClinica({
       fichaId,
       pacienteId: id,
       sessionState: effectiveSessionState,
       patientForm,
-      conversationSummary
+      conversationSummary,
+      previousFichaContent // Pasar contenido anterior para actualización incremental
     })
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, ficha })
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Error' }, { status: 500 })
   }
 }
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const storage = await getStorageAdapter()
-    const { id } = await params
-    const fichas = await storage.getFichasClinicasByPaciente(id)
-    return NextResponse.json({ items: fichas })
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || 'Error' }, { status: 500 })
-  }
+export async function GET(_request: NextRequest, _ctx: { params: Promise<{ id: string }> }) {
+  // Server no longer returns ficha data; client IndexedDB is the source of truth
+  return NextResponse.json({ items: [] })
 }
 
 

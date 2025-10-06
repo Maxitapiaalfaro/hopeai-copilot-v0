@@ -12,9 +12,12 @@ import { useMobileDetection } from './use-mobile'
  * - Manejo de estados de grabación y transcripción
  * - Integración con el input de chat existente
  * - Configuración optimizada para uso clínico
+ * - Intento de suprimir el sonido de notificación del navegador (beep)
+ *   Nota: El beep es una característica de seguridad del navegador que puede
+ *   no ser completamente suprimible en todos los navegadores móviles.
  * 
  * @author Arquitecto Principal de Sistemas de IA (A-PSI)
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 interface SpeechToTextConfig {
@@ -254,6 +257,55 @@ export function useSpeechToText(
     setConfidence(0)
     
     try {
+      // ESTRATEGIA ANTI-SONIDO: Intentar silenciar el beep del navegador
+      
+      // Estrategia 1: Acceder directamente a la instancia de SpeechRecognition y deshabilitar sonidos
+      try {
+        const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        if (SpeechRecognitionAPI) {
+          // Acceder a la instancia global si existe
+          const recognitionInstance = SpeechRecognition.getRecognition ? SpeechRecognition.getRecognition() : null
+          
+          if (recognitionInstance) {
+            // Intentar deshabilitar sonidos usando propiedades no estándar
+            // Estas propiedades pueden existir en algunos navegadores
+            (recognitionInstance as any).soundstart = null;
+            (recognitionInstance as any).soundend = null;
+            (recognitionInstance as any).audiostart = null;
+            (recognitionInstance as any).audioend = null;
+          }
+        }
+      } catch (err) {
+        console.log('No se pudo acceder a la instancia de SpeechRecognition:', err)
+      }
+      
+      // Estrategia 2: Mutar temporalmente el audio del contexto web
+      let originalVolume = 1
+      let audioContextMuted = false
+      
+      try {
+        // Crear contexto de audio para controlar el volumen
+        const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext
+        if (AudioContext) {
+          const audioCtx = new AudioContext()
+          const gainNode = audioCtx.createGain()
+          gainNode.connect(audioCtx.destination)
+          originalVolume = gainNode.gain.value
+          gainNode.gain.value = 0 // Silenciar
+          audioContextMuted = true
+          
+          // Restaurar después de 100ms (después de que el beep se haya reproducido)
+          setTimeout(() => {
+            if (audioContextMuted) {
+              gainNode.gain.value = originalVolume
+              audioCtx.close()
+            }
+          }, 100)
+        }
+      } catch (audioErr) {
+        console.log('No se pudo mutar el contexto de audio:', audioErr)
+      }
+      
       // Configuración optimizada para toggle functionality
       const options = {
         continuous: true, // Siempre continuo para permitir toggle manual
@@ -262,7 +314,7 @@ export function useSpeechToText(
         maxAlternatives: 1
       }
       
-      console.log('🎤 Iniciando grabación en modo toggle:', options)
+      console.log('🎤 Iniciando grabación en modo toggle (sin sonido):', options)
       
       SpeechRecognition.startListening(options)
       

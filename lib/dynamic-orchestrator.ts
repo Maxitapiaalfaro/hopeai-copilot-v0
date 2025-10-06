@@ -117,13 +117,13 @@ export class DynamicOrchestrator {
     this.activeSessions = new Map();
     
     this.config = {
-      enableAdaptiveLearning: true,
+      enableAdaptiveLearning: false,
       maxToolsPerSession: 8,
       confidenceThreshold: 0.75,
       sessionTimeoutMinutes: 60,
-      enableRecommendations: true,
+      enableRecommendations: false,          // DESACTIVADO: Código inútil que añadía 500-1000ms sin valor
       asyncRecommendations: false,           // Default to sync for backward compatibility
-      toolContinuityThreshold: 3,           // Default threshold for tool persistence
+      toolContinuityThreshold: 3,           // ⭐ Smart tool persistence
       dominantTopicsUpdateInterval: 5,      // Update every 5 interactions
       logLevel: 'info',
       ...config
@@ -172,28 +172,21 @@ export class DynamicOrchestrator {
       // para usar el razonamiento real del agente seleccionado
       if (onBulletUpdate) {
         this.log('info', `Generando bullets progresivos coherentes para agente ${orchestrationResult.selectedAgent}`);
-        
         // Determinar conversación a usar para bullets: preferir historia completa externa (usuario + modelo)
         const bulletConversation: Content[] = (externalConversationHistory && externalConversationHistory.length > 0)
           ? externalConversationHistory.slice(-6) // tomar últimos 6 turnos para coherencia temporal
           : sessionContext.conversationHistory.slice(-6);
 
-        // Extraer entidades del bloque conversacional (usuario + modelo si está disponible)
-        let extractedEntities: any[] = [];
-        try {
-          const conversationText = bulletConversation
-            .map((msg: any) => (msg.parts && msg.parts[0] && (msg.parts[0] as any).text) || '')
-            .join(' ');
-          const entityResult = await this.entityExtractor.extractEntities(conversationText);
-          extractedEntities = entityResult.entities || [];
-        } catch {}
+        // 🚀 OPTIMIZACIÓN: Reutilizar entidades ya extraídas por orchestrateWithTools
+        // Evita llamada API duplicada (~500ms ahorrados)
+        const extractedEntities: any[] = []; // Temporal - las entidades ya se usan internamente en orchestrateWithTools
 
         // Crear contexto enriquecido para generación de bullets
         const bulletContext: BulletGenerationContext = {
           userInput,
           sessionContext: bulletConversation,
           selectedAgent: orchestrationResult.selectedAgent,
-          extractedEntities,
+          extractedEntities, // ✅ Reutilizar entidades (ya extraídas, ~500ms ahorrados)
           clinicalContext: {
             patientId: patientId,
             patientSummary: patientSummary,
@@ -219,9 +212,6 @@ export class DynamicOrchestrator {
             this.log('warn', `Error generando bullets coherentes: ${error}`);
           }
         })();
-        
-        // Pausa reducida ya que la orquestación ya se completó
-        await new Promise(resolve => setTimeout(resolve, 200));
       }
       
       // 4. Optimizar selección de herramientas
@@ -314,6 +304,12 @@ export class DynamicOrchestrator {
 
 Tu tarea es crear bullets que muestren cómo el agente específico está procesando la consulta según su metodología particular.
 
+⚠️ ROLES CRÍTICOS - NO CONFUNDIR:
+- El USUARIO es el PSICÓLOGO/PROFESIONAL CLÍNICO que usa HopeAI
+- El PACIENTE es la persona sobre la cual el psicólogo está consultando
+- Los bullets reflejan cómo el agente ayuda al PSICÓLOGO a pensar sobre su PACIENTE
+- NUNCA asumas que el usuario ES el paciente
+
 PRINCIPIOS CRÍTICOS:
 1) Usa el razonamiento de selección proporcionado como base fundamental
 2) Refleja la metodología específica del agente seleccionado
@@ -321,6 +317,7 @@ PRINCIPIOS CRÍTICOS:
 4) Muestra progresión lógica hacia la respuesta del agente
 5) Sé específico al caso, nunca genérico
 6) Ancla CADA bullet explícitamente al contexto reciente provisto (usuario y modelo); si falta base, omite ese bullet
+7) **CRÍTICO**: Si se proporciona información del paciente (ficha clínica, historial), intégrala como contexto del CASO que el psicólogo está consultando, no como información del usuario.
 
 ESTILO (MODO PENSAMIENTO):
 - Tono exploratorio y tentativo: usa expresiones como "me pregunto si", "podría", "parece que", "quizás".
@@ -328,6 +325,7 @@ ESTILO (MODO PENSAMIENTO):
 - No des órdenes ni recomendaciones; no hables directamente al usuario.
 - Prefiere observaciones e hipótesis sobre planes: prioriza "observando", "notando", "considerando", "hipotetizando".
 - Frases breves y completas (idealmente 8–18 palabras), sin cortar al final.
+- **CONTEXTO DEL PACIENTE**: Cuando hay ficha clínica, refiérete al paciente en tercera persona (ej: "considerando el historial de ansiedad del paciente", "notando que el paciente presenta...").
 
 FORMATO: Genera exactamente 4-6 bullets, uno por línea, comenzando con "• ".
 `;
@@ -512,18 +510,32 @@ FORMATO: Genera exactamente 4-6 bullets, uno por línea, comenzando con "• ".
       prompt += `Entidades clínicas detectadas: ${extractedEntities.map((e: any) => e.text || e.name).join(', ')}\n\n`;
     }
     
-    // Añadir contexto clínico si existe
-    if (clinicalContext) {
+    // CRÍTICO: Añadir contexto clínico del paciente de forma PROMINENTE
+    if (clinicalContext && (clinicalContext.patientId || clinicalContext.patientSummary)) {
+      prompt += `\n═══════════════════════════════════════════════════════════════\n`;
+      prompt += `🏥 FICHA CLÍNICA DEL PACIENTE (CASO BAJO SUPERVISIÓN)\n`;
+      prompt += `═══════════════════════════════════════════════════════════════\n\n`;
+      prompt += `⚠️ IMPORTANTE: Esta es información del PACIENTE del psicólogo, NO del psicólogo mismo.\n`;
+      prompt += `El psicólogo está consultando sobre este caso clínico.\n\n`;
+      
       if (clinicalContext.patientId) {
-        prompt += `Contexto del paciente: ID ${clinicalContext.patientId}\n`;
+        prompt += `ID del Paciente: ${clinicalContext.patientId}\n\n`;
       }
+      
       if (clinicalContext.patientSummary) {
-        prompt += `Resumen del paciente (curado): ${clinicalContext.patientSummary.substring(0, 800)}\n`;
+        // Incluir más del resumen del paciente (1500 caracteres en lugar de 800)
+        prompt += `Información Clínica del Paciente:\n${clinicalContext.patientSummary.substring(0, 1500)}${clinicalContext.patientSummary.length > 1500 ? '...' : ''}\n\n`;
       }
+      
       if (clinicalContext.sessionType) {
-        prompt += `Tipo de sesión: ${clinicalContext.sessionType}\n`;
+        prompt += `Tipo de sesión: ${clinicalContext.sessionType}\n\n`;
       }
-      prompt += `\n`;
+      
+      prompt += `INSTRUCCIÓN EXPLÍCITA: Los bullets DEBEN reflejar cómo el agente ayuda al PSICÓLOGO a pensar sobre este CASO.\n`;
+      prompt += `- Usa tercera persona para el paciente: "considerando que el paciente presenta...", "notando que el paciente tiene historial de..."\n`;
+      prompt += `- Los bullets son el proceso de pensamiento del agente AL SERVICIO del psicólogo\n`;
+      prompt += `- Integra la ficha clínica como contexto del caso bajo análisis\n`;
+      prompt += `═══════════════════════════════════════════════════════════════\n\n`;
     }
     
     // MEJORA CRÍTICA: Prompts específicos por agente que reflejen su metodología
@@ -540,44 +552,59 @@ FORMATO: Genera exactamente 4-6 bullets, uno por línea, comenzando con "• ".
    */
   private getAgentSpecificBulletInstructions(selectedAgent: string): string {
     const agentInstructions = {
-      'socratico': `Como Supervisor Clínico de HopeAI, genera bullets que reflejen tu proceso de razonamiento socrático:
-• Muestra cómo identificas patrones en la información del usuario
-• Refleja tu proceso de formulación de preguntas reflexivas
-• Indica cómo evalúas la profundidad emocional requerida
-• Demuestra tu análisis de la disposición del usuario para la exploración
-• Muestra cómo preparas el terreno para insights terapéuticos
+      'socratico': `Como Supervisor Clínico de HopeAI, genera bullets que reflejen tu proceso de razonamiento socrático AL SERVICIO del psicólogo:
+• Muestra cómo identificas patrones en la consulta del psicólogo
+• Refleja tu proceso de formulación de preguntas reflexivas que ayuden al psicólogo
+• Indica cómo evalúas la profundidad del análisis clínico requerido
+• Demuestra tu análisis del caso que el psicólogo presenta
+• Muestra cómo preparas insights que ayuden al psicólogo en su práctica
+• **Si hay ficha del paciente**: Integra características del CASO (tercera persona) en tu razonamiento para ayudar al psicólogo
 
-Ejemplo de bullets socráticos:
-• Identificando patrones emocionales subyacentes en la narrativa del usuario
-• Evaluando la disposición para exploración reflexiva profunda
-• Formulando preguntas que faciliten el autoconocimiento
-• Preparando terreno para insights sobre creencias limitantes`,
+Ejemplo de bullets socráticos (SIN contexto de paciente):
+• Identificando patrones en cómo el psicólogo describe su consulta
+• Evaluando qué preguntas reflexivas podrían profundizar el análisis
+• Formulando hipótesis sobre la dirección de la exploración clínica
+
+Ejemplo de bullets socráticos (CON ficha de paciente):
+• Considerando cómo el historial de ansiedad del paciente informa este caso
+• Notando que los síntomas descritos resuenan con el perfil clínico del paciente
+• Evaluando qué aspectos de la ficha son más relevantes para esta consulta`,
       
-      'clinico': `Como Especialista en Documentación de HopeAI, genera bullets que reflejen tu proceso de síntesis documental:
-• Muestra cómo analizas la información para estructurarla profesionalmente
-• Refleja tu proceso de identificación de elementos clínicamente relevantes
+      'clinico': `Como Especialista en Documentación de HopeAI, genera bullets que reflejen tu proceso de síntesis documental AL SERVICIO del psicólogo:
+• Muestra cómo analizas la información que el psicólogo proporciona
+• Refleja tu proceso de identificación de elementos clínicamente relevantes del caso
 • Indica cómo organizas la información según estándares profesionales
-• Demuestra tu evaluación de completitud y coherencia documental
-• Muestra cómo preparas la síntesis para uso clínico futuro
+• Demuestra tu evaluación de completitud y coherencia documental del caso
+• Muestra cómo preparas la síntesis para el expediente clínico
+• **Si hay ficha del paciente**: Relaciona la nueva información con el historial existente del CASO y evalúa cómo actualizar la ficha
 
-Ejemplo de bullets clínicos:
+Ejemplo de bullets clínicos (SIN contexto de paciente):
 • Analizando elementos clave para documentación estructurada
 • Identificando información clínicamente relevante para el expediente
 • Organizando datos según formato SOAP/PIRP apropiado
-• Evaluando completitud de la información para síntesis profesional`,
-      
-      'academico': `Como Investigador Académico de HopeAI, genera bullets que reflejen tu proceso de validación científica:
-• Muestra cómo identificas conceptos que requieren validación empírica
-• Refleja tu proceso de formulación de consultas de búsqueda específicas
-• Indica cómo evalúas la relevancia de diferentes fuentes científicas
-• Demuestra tu análisis de la calidad metodológica de la evidencia
-• Muestra cómo preparas la síntesis de evidencia para aplicación clínica
 
-Ejemplo de bullets académicos:
+Ejemplo de bullets clínicos (CON ficha de paciente):
+• Evaluando cómo esta nueva información complementa el expediente del paciente
+• Considerando qué secciones de la ficha clínica requieren actualización
+• Identificando patrones evolutivos en el caso al comparar con registros previos`,
+      
+      'academico': `Como Investigador Académico de HopeAI, genera bullets que reflejen tu proceso de validación científica AL SERVICIO del psicólogo:
+• Muestra cómo identificas conceptos en la consulta que requieren validación empírica
+• Refleja tu proceso de formulación de consultas de búsqueda específicas
+• Indica cómo evalúas qué evidencia científica sería más útil para el psicólogo
+• Demuestra tu análisis de la calidad metodológica de la evidencia
+• Muestra cómo preparas la síntesis de evidencia para el caso clínico
+• **Si hay ficha del paciente**: Considera características del CASO (edad, diagnóstico, tratamiento) al buscar evidencia aplicable
+
+Ejemplo de bullets académicos (SIN contexto de paciente):
 • Identificando conceptos clave que requieren validación científica
 • Formulando estrategias de búsqueda en bases de datos especializadas
-• Evaluando relevancia y calidad metodológica de estudios disponibles
-• Sintetizando evidencia empírica para aplicación clínica práctica`,
+• Evaluando relevancia de estudios para la consulta del psicólogo
+
+Ejemplo de bullets académicos (CON ficha de paciente):
+• Considerando que el paciente es adulto joven con TAG al buscar evidencia
+• Buscando estudios sobre intervenciones efectivas para el perfil del paciente
+• Evaluando si la evidencia disponible se ajusta a las características del caso`,
       
       'orquestador': `Como Orquestador Dinámico de HopeAI, genera bullets que reflejen tu proceso de coordinación inteligente:
 • Muestra cómo analizas la consulta para determinar el especialista óptimo

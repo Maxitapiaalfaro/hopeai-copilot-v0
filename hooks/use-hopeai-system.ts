@@ -77,6 +77,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     isInitialized: false,
     history: [],
     transitionState: 'idle',
+    sessionMeta: undefined, // Estado inicial sin contexto de paciente
     reasoningBullets: {
       sessionId: '',
       bullets: [],
@@ -306,16 +307,40 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
     // Lazy-create session on first message send
     let sessionIdToUse = systemState.sessionId
+    let sessionMetaToUse = sessionMeta || systemState.sessionMeta
+    
     if (!sessionIdToUse) {
       const userId = systemState.userId || 'demo_user'
       const mode = systemState.mode || 'clinical_supervision'
       const agent = systemState.activeAgent || 'socratico'
+      
+      console.log('🔄 Creando sesión lazy con contexto:', {
+        hasSessionMeta: !!systemState.sessionMeta,
+        patientRef: systemState.sessionMeta?.patient?.reference
+      })
+      
       const newSessionId = await createSession(userId, mode, agent)
       if (!newSessionId) {
         throw new Error('No se pudo crear la sesión')
       }
       sessionIdToUse = newSessionId
       lastSessionIdRef.current = newSessionId
+      
+      // CRÍTICO: Si hay sessionMeta (contexto del paciente) preestablecido,
+      // actualizarlo con el sessionId recién creado ANTES de enviarlo
+      if (systemState.sessionMeta) {
+        const updatedSessionMeta = {
+          ...systemState.sessionMeta,
+          sessionId: newSessionId
+        }
+        sessionMetaToUse = updatedSessionMeta
+        setSystemState(prev => ({
+          ...prev,
+          sessionMeta: updatedSessionMeta
+        }))
+        console.log('✅ SessionMeta actualizado con sessionId:', newSessionId)
+        console.log('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
+      }
     }
 
     try {
@@ -359,6 +384,33 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         addReasoningBullet(bullet)
       }
       
+      // 🎯 CALLBACK: Cuando se selecciona el agente INMEDIATAMENTE
+      const handleAgentSelected = (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => {
+        console.log('🎯 Agente seleccionado INMEDIATAMENTE:', routingInfo.targetAgent)
+        setSystemState(prev => {
+          // 🔥 ACTUALIZAR el mensaje del usuario con el agente REAL
+          const updatedHistory = [...prev.history]
+          const lastMessage = updatedHistory[updatedHistory.length - 1]
+          if (lastMessage && lastMessage.role === 'user') {
+            lastMessage.agent = routingInfo.targetAgent as AgentType
+            console.log('🔄 Mensaje del usuario actualizado con agente real:', routingInfo.targetAgent)
+          }
+          
+          return {
+            ...prev,
+            history: updatedHistory,
+            activeAgent: routingInfo.targetAgent as AgentType, // 🔥 ACTUALIZAR activeAgent INMEDIATAMENTE
+            routingInfo: {
+              detectedIntent: 'agent_selected',
+              targetAgent: routingInfo.targetAgent as AgentType,
+              confidence: routingInfo.confidence,
+              extractedEntities: []
+            },
+            transitionState: 'specialist_responding'
+          }
+        })
+      }
+      
       // Simular estado de selección de agente
       setTimeout(() => {
         setSystemState(prev => ({
@@ -372,17 +424,28 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         message,
         useStreaming,
         undefined, // suggestedAgent
-        sessionMeta || systemState.sessionMeta, // patient context metadata
-        handleBulletUpdate // callback para bullets progresivos
+        sessionMetaToUse, // patient context metadata (ya actualizado con sessionId si es lazy creation)
+        handleBulletUpdate, // callback para bullets progresivos
+        handleAgentSelected // callback cuando se selecciona el agente
       )
       
-      // Cambiar a estado de respuesta del especialista
-      setSystemState(prev => ({
-        ...prev,
-        transitionState: 'specialist_responding'
-      }))
-
-      // Actualizar estado con la respuesta y información de enrutamiento
+      // 🎯 ACTUALIZAR ROUTING INFO INMEDIATAMENTE para mostrar el agente real
+      if (result.response.routingInfo) {
+        setSystemState(prev => ({
+          ...prev,
+          routingInfo: result.response.routingInfo,
+          transitionState: 'specialist_responding'
+        }))
+        console.log('🎯 Agente seleccionado:', result.response.routingInfo.targetAgent)
+      } else {
+        // Cambiar a estado de respuesta del especialista sin routing info
+        setSystemState(prev => ({
+          ...prev,
+          transitionState: 'specialist_responding'
+        }))
+      }
+      
+      // Actualizar estado con la respuesta completa al final
       // Mantener el historial actualizado sin sobrescribir
       setSystemState(prev => ({
         ...prev,
@@ -463,6 +526,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       isInitialized: systemState.isInitialized,
       history: [],
       transitionState: 'idle',
+      sessionMeta: undefined, // CRÍTICO: Limpiar contexto del paciente
       reasoningBullets: {
         sessionId: '',
         bullets: [],

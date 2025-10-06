@@ -1,7 +1,6 @@
 import { ai } from "./google-genai-config"
 import { createContextWindowManager } from "./context-window-manager"
 import type { FichaClinicaState, ChatState } from "@/types/clinical-types"
-import { getStorageAdapter } from "./server-storage-adapter"
 import { createPartFromUri } from "@google/genai"
 import type { Content, Part } from "@google/genai"
 
@@ -31,9 +30,10 @@ export class ClinicalTaskOrchestrator {
     patientForm?: any
     conversationSummary?: string
     sessionId?: string
-  }): Promise<void> {
-    const storage = await getStorageAdapter()
-    // 1) Persistir estado inicial
+    previousFichaContent?: string
+  }): Promise<FichaClinicaState> {
+    // Stateless server generation: DO NOT persist on server.
+    // Client will handle persistence in IndexedDB.
     const initialState: FichaClinicaState = {
       fichaId: params.fichaId,
       pacienteId: params.pacienteId,
@@ -43,21 +43,21 @@ export class ClinicalTaskOrchestrator {
       ultimaActualizacion: new Date(),
       historialVersiones: [{ version: 1, fecha: new Date() }]
     }
-    await storage.saveFichaClinica(initialState)
 
     try {
-      // 2) Construcción de contexto: historial + formulario inicial + resumen conversación
+      // 1) Construcción de contexto: historial + formulario inicial + resumen conversación + ficha anterior
       const messageParts: Part[] = await this.composePartsForModel(
         params.sessionState,
         params.patientForm,
         params.conversationSummary,
-        params.sessionId
+        params.sessionId,
+        params.previousFichaContent
       )
 
-      // 3) Llamada stateless al modelo con systemInstruction estricta
+      // 2) Llamada stateless al modelo con systemInstruction estricta
       const content: Content = { role: 'user', parts: messageParts as unknown as any }
       const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash-lite',
         contents: [content as any],
         config: {
           temperature: 0.2,
@@ -67,14 +67,13 @@ export class ClinicalTaskOrchestrator {
       })
 
       const text = result.text || ''
-
-      const updated: FichaClinicaState = {
+      const completed: FichaClinicaState = {
         ...initialState,
         estado: 'completado',
         contenido: text,
         ultimaActualizacion: new Date()
       }
-      await storage.saveFichaClinica(updated)
+      return completed
     } catch (error) {
       const failed: FichaClinicaState = {
         fichaId: params.fichaId,
@@ -85,7 +84,7 @@ export class ClinicalTaskOrchestrator {
         ultimaActualizacion: new Date(),
         historialVersiones: [{ version: 1, fecha: new Date() }]
       }
-      await storage.saveFichaClinica(failed)
+      return failed
     }
   }
 
@@ -95,7 +94,8 @@ export class ClinicalTaskOrchestrator {
   private async composeFichaPromptParts(
     sessionState: ChatState,
     patientForm?: any,
-    conversationSummary?: string
+    conversationSummary?: string,
+    previousFichaContent?: string
   ): Promise<string> {
     const manager = createContextWindowManager({ enableLogging: false })
     const historyAsContent = sessionState.history.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] }))
@@ -116,23 +116,34 @@ export class ClinicalTaskOrchestrator {
         .join('\n')
     }
 
-    const header = 'Genera una Ficha Clínica formal basada exclusivamente en el material provisto.'
+    const header = previousFichaContent 
+      ? 'Actualiza la Ficha Clínica integrando nueva información de la sesión actual.'
+      : 'Genera una Ficha Clínica formal basada exclusivamente en el material provisto.'
+    
     const source = 'Fuentes internas: historial de conversación y formulario/registro del paciente disponibles.'
+    
+    const previousFichaBlock = previousFichaContent 
+      ? `\n\nFICHA CLÍNICA EXISTENTE (mantén información relevante y actualiza con nuevos datos):\n${previousFichaContent}\n`
+      : ''
+    
     const formBlock = patientFormBlock ? `\n\nFormulario/Registro del Paciente:\n${patientFormBlock}` : ''
+    
     const autoSummary = !conversationSummary || conversationSummary.trim().length === 0
       ? conversation.split('\n').slice(-6).join('\n')
       : conversationSummary
     const convoSummaryBlock = autoSummary ? `\n\nResumen de Conversación Actual:\n${autoSummary}` : ''
-    return `${header}\n${source}${formBlock}${convoSummaryBlock}\n\nHistorial:\n${conversation}`
+    
+    return `${header}\n${source}${previousFichaBlock}${formBlock}${convoSummaryBlock}\n\nHistorial:\n${conversation}`
   }
 
   private async composePartsForModel(
     sessionState: ChatState,
     patientForm?: any,
     conversationSummary?: string,
-    sessionId?: string
+    sessionId?: string,
+    previousFichaContent?: string
   ): Promise<Part[]> {
-    const textPrompt = await this.composeFichaPromptParts(sessionState, patientForm, conversationSummary)
+    const textPrompt = await this.composeFichaPromptParts(sessionState, patientForm, conversationSummary, previousFichaContent)
     const parts: Part[] = [{ text: textPrompt } as Part]
 
     // Adjuntar archivos del último mensaje del usuario si existen
@@ -162,9 +173,21 @@ export class ClinicalTaskOrchestrator {
 
   private getArchivistaSystemInstruction(): string {
     return (
-      'Actúas como Especialista en Documentación. Tu única tarea es sintetizar una ficha clínica formal basada exclusivamente en la información proporcionada. ' +
-      'No infieras ni añadas datos externos. No incluyas marcadores de sistema, etiquetas entre corchetes ni referencias a instrucciones del sistema. ' +
-      'Escribe únicamente contenido clínico final, claro y profesional. Cita únicamente hechos presentes en el historial y el formulario de admisión. '
+      'Actúas como Especialista en Documentación Clínica. Tu tarea es crear o actualizar fichas clínicas profesionales.\n\n' +
+      'CUANDO HAY FICHA EXISTENTE:\n' +
+      '- Mantén toda la información relevante de la ficha anterior\n' +
+      '- Integra los nuevos hallazgos de la sesión actual\n' +
+      '- Actualiza diagnósticos o información que haya cambiado\n' +
+      '- Mantén la coherencia temporal y clínica del caso\n' +
+      '- Preserva el contexto histórico del paciente\n\n' +
+      'CUANDO ES FICHA NUEVA:\n' +
+      '- Genera una ficha clínica formal basada en la información proporcionada\n\n' +
+      'REGLAS GENERALES:\n' +
+      '- No infieras ni añadas datos externos\n' +
+      '- No incluyas marcadores de sistema o etiquetas entre corchetes\n' +
+      '- Escribe únicamente contenido clínico final, claro y profesional\n' +
+      '- Cita únicamente hechos presentes en el material provisto\n' +
+      '- Mantén un registro cronológico coherente del caso'
     )
   }
 

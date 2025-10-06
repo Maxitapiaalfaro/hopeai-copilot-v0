@@ -4,7 +4,7 @@ import { useState, useCallback } from "react"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import { PatientSummaryBuilder, PatientContextComposer } from "@/lib/patient-summary-builder"
 import { PatientPersistence } from "@/lib/patient-persistence"
-import type { PatientRecord, AgentType, ClinicalMode, PatientSessionMeta } from "@/types/clinical-types"
+import type { PatientRecord, AgentType, ClinicalMode, PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
 import * as Sentry from "@sentry/nextjs"
 
 interface UsePatientChatSessionReturn {
@@ -76,13 +76,41 @@ export function usePatientChatSession(): UsePatientChatSessionReturn {
           console.log('✅ Clinical session created:', sessionId)
           span.setAttribute("session.id", sessionId)
           
-          // Step 2: Generate patient context summary
-          const patientSummary = PatientSummaryBuilder.getSummary(patient)
+          // Step 2: Load latest ficha clínica (if exists) and generate patient context summary
+          let patientSummary: string
+          let usedFicha = false
           
-          console.log('📋 Patient summary generated:', patientSummary.substring(0, 100) + '...')
+          try {
+            // Cargar fichas clínicas del paciente
+            const { getStorageAdapter } = await import("@/lib/server-storage-adapter")
+            const storage = await getStorageAdapter()
+            const fichas = await storage.getFichasClinicasByPaciente(patient.id)
+            
+            // Obtener la ficha más reciente completada
+            const latestFicha = fichas
+            .filter((f: FichaClinicaState) => f.estado === 'completado')
+            .sort((a: FichaClinicaState, b: FichaClinicaState) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
+            
+            if (latestFicha) {
+              console.log(`📋 Found latest ficha clínica for patient (version ${latestFicha.version})`)
+              span.setAttribute("ficha.version", latestFicha.version)
+              span.setAttribute("ficha.used", true)
+              usedFicha = true
+            }
+            
+            // Usar el nuevo método getSummaryWithFicha que prioriza ficha sobre summary
+            patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patient, latestFicha)
+          } catch (error) {
+            console.warn('⚠️ Error loading ficha clínica, using standard summary:', error)
+            span.setAttribute("ficha.used", false)
+            // Fallback al summary estándar si hay error
+            patientSummary = PatientSummaryBuilder.getSummary(patient)
+          }
+          
+          console.log(`📋 Patient summary generated${usedFicha ? ' (using ficha clínica)' : ''}:`, patientSummary.substring(0, 100) + '...')
           span.setAttribute("summary.length", patientSummary.length)
           
-          // Step 3: Create session metadata for orchestrator
+          // Step 3: Create session metadata for Orchestrator
           const composer = new PatientContextComposer()
           const sessionMeta: PatientSessionMeta = composer.createSessionMetadata(patient, {
             sessionId,

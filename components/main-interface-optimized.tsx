@@ -5,6 +5,7 @@ import { ChatInterface } from "@/components/chat-interface"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
+import { X } from "lucide-react"
 
 
 import { MobileNav } from "@/components/mobile-nav"
@@ -14,7 +15,7 @@ import { HopeAISystemSingleton } from "@/lib/hopeai-system"
 import { useSessionMetrics } from "@/hooks/use-session-metrics"
 import { useConversationHistory } from "@/hooks/use-conversation-history"
 import { usePioneerInvitation } from "@/hooks/use-pioneer-invitation"
-import { usePatientChatSession } from "@/hooks/use-patient-chat-session"
+// Hook removido: usePatientChatSession - Ya no se usa porque implementamos lazy creation
 import { PioneerCircleInvitation } from "@/components/pioneer-circle-invitation"
 import { DebugPioneerInvitation } from "@/components/debug-pioneer-invitation"
 import type { AgentType, ClinicalFile, PatientRecord, FichaClinicaState } from "@/types/clinical-types"
@@ -22,6 +23,7 @@ import { usePatientRecord } from "@/hooks/use-patient-library"
 import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
 import { PatientContextComposer } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
+import { clinicalStorage } from "@/lib/clinical-context-storage"
 
 // Componente de métricas de rendimiento (opcional, para desarrollo)
 function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
@@ -42,15 +44,21 @@ function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
 
 export function MainInterfaceOptimized({ showDebugElements = true }: { showDebugElements?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarActiveTab, setSidebarActiveTab] = useState<'conversations' | 'patients'>('conversations')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [mobileNavInitialTab, setMobileNavInitialTab] = useState<'conversations' | 'patients'>('conversations')
 
   const [pendingFiles, setPendingFiles] = useState<ClinicalFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [isFichaOpen, setIsFichaOpen] = useState(false)
+  const [isDebugCardVisible, setIsDebugCardVisible] = useState(true)
   const [fichasClinicasLocal, setFichasClinicasLocal] = useState<FichaClinicaState[]>([])
   const [isFichaLoading, setIsFichaLoading] = useState(false)
   const [isGenerateFichaLoading, setIsGenerateFichaLoading] = useState(false)
+  const [fichaAbortController, setFichaAbortController] = useState<AbortController | null>(null)
+  const [previousFichaBackup, setPreviousFichaBackup] = useState<FichaClinicaState | null>(null)
+  const [lastGeneratedFichaId, setLastGeneratedFichaId] = useState<string | null>(null)
+  const [clearPatientSelectionTrigger, setClearPatientSelectionTrigger] = useState(0)
   const isMobile = useMediaQuery("(max-width: 768px)")
 
   // Usar el sistema HopeAI
@@ -110,13 +118,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     totalConversations: totalConversationsCount || 0 // NUEVA: Pasar el conteo real de conversaciones
   })
 
-  // Hook para gestión de conversaciones con pacientes
-  const {
-    startPatientConversation,
-    isStartingConversation,
-    error: patientConversationError,
-    clearError: clearPatientError
-  } = usePatientChatSession()
+  // Hook removido: usePatientChatSession
+  // Ya no se necesita porque implementamos lazy creation directamente en handlePatientConversationStart
+  const patientConversationError = null
+  const clearPatientError = () => {}
 
   // Debug logging para Pioneer Circle
   useEffect(() => {
@@ -244,6 +249,11 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           const startTime = Date.now()
           console.log('📤 Enviando mensaje HopeAI:', message.substring(0, 50) + '...')
           console.log('📎 Archivos adjuntos:', pendingFiles.length)
+          console.log('🏥 Contexto del paciente:', {
+            hasSessionMeta: !!systemState.sessionMeta,
+            patientRef: systemState.sessionMeta?.patient?.reference || 'None',
+            sessionId: systemState.sessionMeta?.sessionId || 'None'
+          })
           
           // Actualizar actividad del usuario
           updateActivity()
@@ -251,7 +261,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           // CRITICAL: Capturar archivos antes de envío para mostrar inmediatamente en historial
           const attachedFilesForMessage = [...pendingFiles]
           
-          const response = await sendMessage(message, useStreaming, attachedFilesForMessage)
+          // CRÍTICO: Pasar el sessionMeta para que el backend pueda cargar la ficha clínica del paciente
+          const response = await sendMessage(message, useStreaming, attachedFilesForMessage, systemState.sessionMeta)
           
           // Limpiar archivos pendientes después del envío exitoso
           setPendingFiles([])
@@ -308,51 +319,64 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   // Manejar inicio de conversación con paciente
+  // CRÍTICO: NO crea sesión inmediatamente, solo prepara el contexto
+  // La sesión se crea "lazily" cuando el usuario envía el primer mensaje
   const handlePatientConversationStart = async (patient: PatientRecord, initialMessage?: string) => {
     try {
-      console.log('🏥 Iniciando conversación con paciente:', patient.displayName)
+      console.log('🏥 Preparando conversación con paciente:', patient.displayName)
       
       // Limpiar cualquier error previo
       if (patientConversationError) {
         clearPatientError()
       }
       
-      // Iniciar conversación con paciente usando el hook especializado
-      const sessionId = await startPatientConversation(patient, initialMessage)
+      // Limpiar archivos pendientes
+      setPendingFiles([])
       
-      if (sessionId) {
-        console.log('✅ Conversación con paciente iniciada exitosamente:', sessionId)
-        
-        // CRÍTICO: Cargar la nueva sesión en el sistema principal
-        const loadSuccess = await loadSession(sessionId)
-        
-        if (loadSuccess) {
-          console.log('✅ Sesión del paciente cargada en el sistema principal:', sessionId)
-          
-          // Crear y establecer el contexto del paciente en el sistema
-          const composer = new PatientContextComposer()
-          const patientSessionMeta = composer.createSessionMetadata(
-            patient,
-            {
-              sessionId,
-              userId: systemState.userId || "demo_user",
-              clinicalMode: "clinical",
-              activeAgent: systemState.activeAgent
-            }
-          )
-          
-          // Establecer el contexto del paciente en el sistema
-          setSessionMeta(patientSessionMeta)
-          console.log('🏥 Contexto del paciente establecido en el sistema:', patient.displayName)
-        } else {
-          console.error('❌ Error cargando sesión del paciente en el sistema principal')
+      // CRÍTICO: Resetear sistema para limpiar sesión anterior
+      // Esto asegura que no haya sesión activa hasta que se envíe el primer mensaje
+      resetSystem()
+      
+      // Crear el metadata del paciente SIN sessionId (se creará lazily)
+      const composer = new PatientContextComposer()
+      const patientSessionMeta = composer.createSessionMetadata(
+        patient,
+        {
+          sessionId: '', // Vacío - se llenará cuando se cree la sesión al enviar primer mensaje
+          userId: systemState.userId || "demo_user",
+          clinicalMode: "clinical",
+          activeAgent: 'socratico' // Agente por defecto
         }
-      } else {
-        console.error('❌ Error iniciando conversación con paciente')
+      )
+      
+      // Establecer el contexto del paciente ANTES de crear la sesión
+      // Esto permite que ChatInterface muestre el paciente activo
+      // y cree la sesión con el contexto correcto al enviar el primer mensaje
+      setSessionMeta(patientSessionMeta)
+      
+      console.log('✅ Contexto del paciente preparado (sesión se creará al enviar primer mensaje):', patient.displayName)
+      
+      // Cerrar sidebar en mobile después de seleccionar paciente
+      if (isMobile) {
+        setSidebarOpen(false)
+        setMobileNavOpen(false)
       }
     } catch (error) {
       console.error('❌ Error en handlePatientConversationStart:', error)
     }
+  }
+
+  // Manejar limpieza del contexto del paciente
+  // Solo disponible cuando NO hay sesión activa (antes del primer mensaje)
+  const handleClearPatientContext = () => {
+    console.log('🧹 Limpiando contexto del paciente')
+    // Limpiar archivos pendientes también
+    setPendingFiles([])
+    // Resetear sistema completo - vuelve a estado inicial sin paciente
+    resetSystem()
+    // Incrementar trigger para limpiar selección en la librería de pacientes
+    setClearPatientSelectionTrigger(prev => prev + 1)
+    console.log('✅ Contexto del paciente removido - listo para conversación general')
   }
 
   // Función de subida de documentos usando HopeAI System con estado reactivo
@@ -539,9 +563,24 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   const handleGenerateFichaFromChat = async () => {
+    // Crear AbortController para permitir cancelación
+    const abortController = new AbortController()
+    setFichaAbortController(abortController)
+    
     try {
       setIsGenerateFichaLoading(true)
       if (!systemState.sessionId || !patient) return
+      
+      // Cargar la última ficha existente para continuidad clínica
+      await clinicalStorage.initialize()
+      const fichasExistentes = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
+      const ultimaFicha = fichasExistentes
+        .filter(f => f.estado === 'completado')
+        .sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
+      
+      // Guardar backup de la última ficha para permitir reversión
+      setPreviousFichaBackup(ultimaFicha || null)
+      
       const sessionState = {
         sessionId: systemState.sessionId,
         userId: systemState.userId,
@@ -569,18 +608,76 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       const res = await fetch(`/api/patients/${encodeURIComponent(patient.id)}/ficha`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fichaId, sessionId: systemState.sessionId, sessionState, patientForm, conversationSummary })
+        body: JSON.stringify({ 
+          fichaId, 
+          sessionId: systemState.sessionId, 
+          sessionState, 
+          patientForm, 
+          conversationSummary,
+          previousFichaContent: ultimaFicha?.contenido // Incluir ficha anterior para continuidad
+        }),
+        signal: abortController.signal // Permitir cancelación
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+      const data = await res.json()
+      if (!res.ok || !data.success) {
         throw new Error(data.error || 'Error generando ficha clínica')
+      }
+      // Persist to IndexedDB (client-side only)
+      if (data.ficha) {
+        await clinicalStorage.initialize()
+        await clinicalStorage.saveFichaClinica({
+          ...data.ficha,
+          ultimaActualizacion: new Date(data.ficha.ultimaActualizacion)
+        })
+        // Guardar ID de la ficha recién generada para permitir descarte
+        setLastGeneratedFichaId(fichaId)
       }
       await refreshFichaList()
       setIsFichaOpen(true)
-    } catch (err) {
-      console.error('❌ Error generando ficha clínica desde chat:', err)
+    } catch (err: any) {
+      // Diferenciar cancelación de otros errores
+      if (err.name === 'AbortError') {
+        console.log('✋ Generación de ficha clínica cancelada por el usuario')
+      } else {
+        console.error('❌ Error generando ficha clínica desde chat:', err)
+      }
     } finally {
       setIsGenerateFichaLoading(false)
+      setFichaAbortController(null)
+    }
+  }
+
+  const handleCancelFichaGeneration = () => {
+    if (fichaAbortController) {
+      fichaAbortController.abort()
+      console.log('🛑 Cancelando generación de ficha clínica...')
+    }
+  }
+
+  const handleDiscardFichaAndRevert = async () => {
+    if (!patient || !lastGeneratedFichaId) return
+    
+    try {
+      await clinicalStorage.initialize()
+      
+      // Eliminar la ficha recién generada de IndexedDB
+      await clinicalStorage.deleteFichaClinica(lastGeneratedFichaId)
+      
+      // Si había una ficha anterior, asegurarse de que esté en IndexedDB
+      if (previousFichaBackup) {
+        await clinicalStorage.saveFichaClinica(previousFichaBackup)
+      }
+      
+      // Refrescar la lista
+      await refreshFichaList()
+      
+      // Limpiar estados
+      setLastGeneratedFichaId(null)
+      setPreviousFichaBackup(null)
+      
+      console.log('↩️ Ficha descartada, revertida a la versión anterior')
+    } catch (err) {
+      console.error('❌ Error descartando ficha:', err)
     }
   }
 
@@ -597,13 +694,12 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const refreshFichaList = async () => {
     if (!patient) return
     try {
-      const res = await fetch(`/api/patients/${encodeURIComponent(patient.id)}/ficha`)
-      const data = await res.json()
-      if (res.ok && Array.isArray(data.items)) {
-        setFichasClinicasLocal(data.items)
-      }
+      await clinicalStorage.initialize()
+      const items = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
+      const sorted = (items || []).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
+      setFichasClinicasLocal(sorted)
     } catch (e) {
-      console.error('Error loading fichas clínicas:', e)
+      console.error('Error loading fichas clínicas (IndexedDB):', e)
     }
   }
 
@@ -632,27 +728,33 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
   return (
     <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-background font-sans">
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-        userId={systemState.userId || "demo_user"}
-        createSession={createSession}
-        onConversationSelect={handleConversationSelect}
-        onPatientConversationStart={handlePatientConversationStart}
-        onNewChat={() => {
-          // Reset local pending UI state and HopeAI system
-          setPendingFiles([])
-          // Clear HopeAI state so ChatInterface shows welcome and first send lazily creates a session
-          resetSystem()
-          // Optionally close sidebar on mobile
-          if (isMobile) setSidebarOpen(false)
-        }}
-      />
+      {!isMobile && (
+        <Sidebar 
+          isOpen={sidebarOpen} 
+          onToggle={() => setSidebarOpen(!sidebarOpen)}
+          activeTab={sidebarActiveTab}
+          onActiveTabChange={setSidebarActiveTab}
+          userId={systemState.userId || "demo_user"}
+          createSession={createSession}
+          onConversationSelect={handleConversationSelect}
+          onPatientConversationStart={handlePatientConversationStart}
+          onClearPatientContext={handleClearPatientContext}
+          clearPatientSelectionTrigger={clearPatientSelectionTrigger}
+          onNewChat={() => {
+            // Reset local pending UI state and HopeAI system
+            setPendingFiles([])
+            // Clear HopeAI state so ChatInterface shows welcome and first send lazily creates a session
+            resetSystem()
+          }}
+        />
+      )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header 
           onHistoryToggle={() => setMobileNavOpen(true)} 
           sessionMeta={systemState.sessionMeta}
+          onClearPatientContext={handleClearPatientContext}
+          hasActiveSession={!!systemState.sessionId}
         />
 
         {isMobile && (
@@ -669,6 +771,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               }
             }}
             onPatientConversationStart={handlePatientConversationStart}
+            onClearPatientContext={handleClearPatientContext}
+            clearPatientSelectionTrigger={clearPatientSelectionTrigger}
             onNewChat={() => {
               setPendingFiles([])
               resetSystem()
@@ -690,15 +794,28 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               pendingFiles={pendingFiles}
               onRemoveFile={handleRemoveFile}
               transitionState={systemState.transitionState}
+              routingInfo={systemState.routingInfo}
               onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
+              onCancelFichaGeneration={handleCancelFichaGeneration}
+              onDiscardFicha={lastGeneratedFichaId ? handleDiscardFichaAndRevert : undefined}
               onOpenFichaClinica={patient ? handleOpenFichaFromChat : undefined}
               onOpenPatientLibrary={() => {
-                setMobileNavInitialTab('patients')
-                setMobileNavOpen(true)
+                // Mobile: Abrir MobileNav en tab de pacientes
+                if (isMobile) {
+                  setMobileNavInitialTab('patients')
+                  setMobileNavOpen(true)
+                } else {
+                  // Desktop: Abrir Sidebar en tab de pacientes
+                  setSidebarActiveTab('patients')
+                  if (!sidebarOpen) {
+                    setSidebarOpen(true)
+                  }
+                }
               }}
               hasExistingFicha={(fichasClinicasLocal && fichasClinicasLocal.length > 0) || false}
               fichaLoading={isFichaLoading}
               generateLoading={isGenerateFichaLoading}
+              canRevertFicha={!!lastGeneratedFichaId && !!previousFichaBackup}
               reasoningBullets={systemState.reasoningBullets}
             />
             {patient && (
@@ -709,6 +826,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
                 fichas={fichasClinicasLocal}
                 onRefresh={refreshFichaList}
                 onGenerate={handleGenerateFichaFromChat}
+                isGenerating={isGenerateFichaLoading}
+                onCancelGeneration={handleCancelFichaGeneration}
+                canRevert={!!lastGeneratedFichaId && !!previousFichaBackup}
+                onRevert={handleDiscardFichaAndRevert}
               />
             )}
           </div>
@@ -728,16 +849,26 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         />
       )}
 
-      {systemState.sessionId && process.env.NODE_ENV === 'development' && showDebugElements && (
+      {systemState.sessionId && process.env.NODE_ENV === 'development' && showDebugElements && isDebugCardVisible && (
         <div className="fixed bottom-4 right-4 bg-card text-card-foreground p-2 rounded-lg shadow-lg text-xs border border-border">
-           <div>Sesión: {systemState.sessionId}</div>
-           <div>Agente: {systemState.activeAgent}</div>
-           <div>Mensajes: {systemState.history.length}</div>
-           {systemState.routingInfo && (
-             <div>Intent: {systemState.routingInfo.detectedIntent}</div>
-           )}
-         </div>
-       )}
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="font-semibold">Debug Info</div>
+            <button
+              onClick={() => setIsDebugCardVisible(false)}
+              className="hover:bg-muted rounded p-0.5 transition-colors"
+              aria-label="Close debug card"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <div>Sesión: {systemState.sessionId}</div>
+          <div>Agente: {systemState.activeAgent}</div>
+          <div>Mensajes: {systemState.history.length}</div>
+          {systemState.routingInfo && (
+            <div>Intent: {systemState.routingInfo.detectedIntent}</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

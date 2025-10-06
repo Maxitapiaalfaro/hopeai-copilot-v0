@@ -786,13 +786,43 @@ export class EntityExtractionEngine {
       totalSynonyms: this.synonymMaps.size,
       config: this.config
     }
-    
     for (const [type, entities] of Array.from(this.knownEntities)) {
       stats.entitiesByType[type] = entities.size
       stats.totalKnownEntities += entities.size
     }
     
     return stats
+  }
+
+  /**
+   * 🚀 OPTIMIZACIÓN: Exponer function declarations para llamada combinada
+   * Permite al IntelligentIntentRouter combinar intención + entidades en una sola llamada LLM
+   */
+  public getEntityExtractionFunctions(): FunctionDeclaration[] {
+    return entityExtractionFunctions;
+  }
+
+  /**
+   * 🚀 OPTIMIZACIÓN: Procesar function calls de forma pública (para llamada combinada)
+   * Usado cuando el IntelligentIntentRouter hace una llamada combinada de intención + entidades
+   */
+  public async processFunctionCallsPublic(
+    functionCalls: any[], 
+    startTime?: number
+  ): Promise<EntityExtractionResult> {
+    const processingStartTime = startTime || Date.now();
+    
+    const entities = await this.processFunctionCalls(functionCalls);
+    const { primaryEntities, secondaryEntities } = this.classifyEntitiesByImportance(entities);
+    const overallConfidence = this.calculateOverallConfidence(entities);
+    
+    return {
+      entities,
+      primaryEntities,
+      secondaryEntities,
+      confidence: overallConfidence,
+      processingTime: Date.now() - processingStartTime
+    };
   }
 }
 

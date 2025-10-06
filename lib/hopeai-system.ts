@@ -74,9 +74,9 @@ export class HopeAISystem {
       // Inicializar DynamicOrchestrator con optimizaciones de performance
       if (this.useAdvancedOrchestration) {
         this.dynamicOrchestrator = new DynamicOrchestrator(clinicalAgentRouter, {
-          enableAdaptiveLearning: true,
-          enableRecommendations: true,
-          asyncRecommendations: true,          // 🚀 Performance optimization
+          enableAdaptiveLearning: false,
+          enableRecommendations: false,
+          asyncRecommendations: false,          // 🚀 Performance optimization
           toolContinuityThreshold: 3,         // 🛠️ Smart tool persistence
           dominantTopicsUpdateInterval: 5,    // 📊 Optimized update frequency
           maxToolsPerSession: 8,
@@ -191,7 +191,8 @@ export class HopeAISystem {
     useStreaming = true,
     suggestedAgent?: string,
     sessionMeta?: PatientSessionMeta,
-    onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void
+    onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void,
+    onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -271,7 +272,11 @@ export class HopeAISystem {
 
       // ARQUITECTURA OPTIMIZADA: Crear contexto enriquecido para detección de intención
       // Incluir archivos de la sesión actual para análisis contextual
-      console.log(`🏥 [HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`);
+      console.log(`🏥 [HopeAI] SessionMeta received:`, {
+        hasSessionMeta: !!sessionMeta,
+        patientReference: sessionMeta?.patient?.reference || 'None',
+        sessionId: sessionMeta?.sessionId || sessionId
+      });
       
       // PATIENT CONTEXT: Retrieve full patient summary if available
       let patientSummary: string | undefined = undefined;
@@ -283,13 +288,46 @@ export class HopeAISystem {
           const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
           
           if (patientRecord) {
-            // Use cached summary if available and valid, otherwise build new one
-            if (patientRecord.summaryCache && PatientSummaryBuilder.isCacheValid(patientRecord)) {
-              patientSummary = patientRecord.summaryCache.text;
-              console.log(`🏥 [HopeAI] Using cached patient summary (${patientRecord.summaryCache.tokenCount || 'unknown'} tokens)`);
+            // 🎯 OPTIMIZACIÓN: Detectar si es el primer mensaje con este paciente
+            const isFirstPatientMessage = currentState.history.length === 0 || 
+              !currentState.history.some((msg: any) => msg.content?.includes(patientRecord.displayName));
+            
+            console.log(`🏥 [HopeAI] Checking if first patient message:`, {
+              historyLength: currentState.history.length,
+              patientName: patientRecord.displayName,
+              isFirstMessage: isFirstPatientMessage
+            })
+            
+            if (isFirstPatientMessage) {
+              // 📋 PRIMER MENSAJE: Cargar ficha clínica completa
+              let latestFicha = null;
+              try {
+                const fichas = await this.storage.getFichasClinicasByPaciente(patientReference);
+                latestFicha = fichas
+                  .filter((f: any) => f.estado === 'completado')
+                  .sort((a: any, b: any) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0];
+                
+                if (latestFicha) {
+                  console.log(`🏥 [HopeAI] Found latest ficha clínica (version ${latestFicha.version}) for ${patientRecord.displayName}`);
+                }
+              } catch (fichaError) {
+                console.warn(`🏥 [HopeAI] Error loading ficha clínica for ${patientReference}:`, fichaError);
+              }
+              
+              // Usar getSummaryWithFicha que prioriza ficha sobre summary
+              patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patientRecord, latestFicha);
+              
+              if (latestFicha) {
+                console.log(`🏥 [HopeAI] ✅ First message: Using FULL ficha clínica v${latestFicha.version} as patient context`);
+              } else if (patientRecord.summaryCache && PatientSummaryBuilder.isCacheValid(patientRecord)) {
+                console.log(`🏥 [HopeAI] ✅ First message: Using cached patient summary (${patientRecord.summaryCache.tokenCount || 'unknown'} tokens)`);
+              } else {
+                console.log(`🏥 [HopeAI] ✅ First message: Built fresh patient summary for ${patientRecord.displayName}`);
+              }
             } else {
-              patientSummary = PatientSummaryBuilder.buildSummary(patientRecord);
-              console.log(`🏥 [HopeAI] Built fresh patient summary for ${patientRecord.displayName}`);
+              // 🔄 MENSAJES SUBSECUENTES: Solo referencia breve (el modelo ya tiene el contexto)
+              patientSummary = `Continuing conversation with ${patientRecord.displayName}. Patient context already provided in previous messages.`;
+              console.log(`🏥 [HopeAI] ⚡ Subsequent message: Using brief patient reference (context already in model memory)`);
             }
           }
         } catch (error) {
@@ -324,7 +362,7 @@ export class HopeAISystem {
       }
 
       // Determinar si usar orquestación avanzada o routing directo
-      let routingResult;
+      let routingResult; 
       let orchestrationResult = null;
       
       if (suggestedAgent) {
@@ -343,7 +381,7 @@ export class HopeAISystem {
         console.log(`[HopeAI] 🧠 Using Advanced Orchestration with cross-session learning`)
         
         // Construir conversación completa (usuario + modelo) en formato Content[] para bullets coherentes
-        const externalConversationHistory = (currentState.history || []).slice(-10).map((msg: ChatMessage) => ({
+        const externalConversationHistory = (currentState.history || []).map((msg: ChatMessage) => ({
           role: msg.role,
           parts: [{ text: msg.content }]
         }))
@@ -397,6 +435,15 @@ export class HopeAISystem {
           toolsSelected: orchestrationResult.contextualTools.length,
           hasRecommendations: !!orchestrationResult.recommendations
         })
+        
+        // 🎯 CALLBACK: Notificar al frontend del agente seleccionado INMEDIATAMENTE
+        if (onAgentSelected) {
+          onAgentSelected({
+            targetAgent: orchestrationResult.selectedAgent,
+            confidence: orchestrationResult.confidence,
+            reasoning: orchestrationResult.reasoning
+          })
+        }
       } else {
         // Usar el router inteligente para clasificar la intención y enrutar automáticamente
         console.log(`[HopeAI] Using standard intelligent routing`)
@@ -406,6 +453,15 @@ export class HopeAISystem {
           currentState.activeAgent,
           enrichedSessionContext
         )
+        
+        // 🎯 CALLBACK: Notificar al frontend del agente seleccionado INMEDIATAMENTE
+        if (onAgentSelected && routingResult.enrichedContext) {
+          onAgentSelected({
+            targetAgent: routingResult.targetAgent,
+            confidence: routingResult.enrichedContext.confidence,
+            reasoning: routingResult.enrichedContext.transitionReason || 'Routing based on intent classification'
+          })
+        }
       }
 
       // Manejar solicitudes explícitas de cambio de agente

@@ -4,8 +4,8 @@ import type { AgentType } from "@/types/clinical-types"
 const agentVisuals = {
     // Iteration: Socrático → terracotta/ochre (amber cream)
     socratico: {
-        name: "Supervisor Clínico",
-        description: "Diálogo terapéutico y reflexión profunda",
+        name: "Análisis Psicoterapéutico",
+        description: "Análisis de proceso terapéutico y formulación de caso",
         icon: Brain,
         textColor: 'text-amber-900 dark:text-amber-200',
         bgColor: 'bg-amber-50 dark:bg-amber-950/40 paper-noise color-fragment',
@@ -24,8 +24,8 @@ const agentVisuals = {
     },
     // Iteration: Clínico → sage/olive cream (lime family)
     clinico: {
-        name: "Especialista en Documentación",
-        description: "Síntesis y documentación clínica",
+        name: "Documentación Clínica Especializada",
+        description: "Elaboración de documentación con estándares clínicos",
         icon: Stethoscope,
         textColor: 'text-lime-900 dark:text-lime-200',
         bgColor: 'bg-lime-50 dark:bg-lime-950/40 paper-noise color-fragment',
@@ -44,8 +44,8 @@ const agentVisuals = {
     },
     // Iteration: Académico → taupe/stone cream (earthy, dark academic)
     academico: {
-        name: "HopeAI Académico",
-        description: "Investigación y evidencia científica",
+        name: "Revisión de Literatura Científica",
+        description: "Integración de evidencia empírica y literatura revisada por pares",
         icon: BookOpen,
         textColor: 'text-stone-700 dark:text-stone-200',
         bgColor: 'bg-stone-50 dark:bg-stone-900/40 paper-noise color-fragment',
@@ -63,8 +63,8 @@ const agentVisuals = {
         }
     },
     orquestador: {
-        name: "HopeAI Orquestador",
-        description: "Coordinación inteligente de especialistas",
+        name: "Sistema de Coordinación",
+        description: "Sistema de coordinación multi-agente",
         icon: Zap,
         // Neutral warm stone to sit between amber and cool agents
         textColor: 'text-stone-800 dark:text-stone-200',
@@ -73,7 +73,6 @@ const agentVisuals = {
         focusWithinBorderColor: 'focus-within:border-stone-300 dark:focus-within:border-stone-600',
         typingDotColor: 'bg-stone-500 dark:bg-stone-300',
         button: {
-            // Subtle primary: light background, dark text
             bg: 'bg-stone-200 dark:bg-stone-800/50',
             hoverBg: 'hover:bg-stone-300 dark:hover:bg-stone-700/60',
             text: 'text-stone-900 dark:text-stone-100',
@@ -84,8 +83,8 @@ const agentVisuals = {
         }
     },
     desconocido: {
-        name: "HopeAI",
-        description: "Procesando su solicitud...",
+        name: "Sistema de Asistencia Clínica",
+        description: "Procesando consulta clínica...",
         icon: Brain,
         textColor: 'text-stone-800 dark:text-stone-200',
         bgColor: 'bg-stone-100 dark:bg-stone-900/40 paper-noise color-fragment',

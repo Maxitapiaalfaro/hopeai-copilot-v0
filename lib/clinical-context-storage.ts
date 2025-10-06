@@ -296,6 +296,19 @@ export class ClinicalContextStorage {
     })
   }
 
+  async deleteFichaClinica(fichaId: string): Promise<void> {
+    if (!this.db) throw new Error("Database not initialized")
+
+    const transaction = this.db.transaction(["fichas_clinicas"], "readwrite")
+    const store = transaction.objectStore("fichas_clinicas")
+
+    return new Promise<void>((resolve, reject) => {
+      const request = store.delete(fichaId)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
   async clearAllData(): Promise<void> {
     if (!this.db) throw new Error("Database not initialized")
 

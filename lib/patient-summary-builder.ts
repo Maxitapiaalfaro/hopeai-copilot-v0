@@ -80,7 +80,6 @@ export class PatientSummaryBuilder {
    */
   static isCacheValid(patient: PatientRecord): boolean {
     if (!patient.summaryCache) return false
-    
     // Check if patient was updated after cache
     const cacheDate = new Date(patient.summaryCache.updatedAt)
     return patient.updatedAt <= cacheDate
@@ -95,6 +94,35 @@ export class PatientSummaryBuilder {
     }
     
     return this.buildSummary(patient)
+  }
+
+  /**
+   * Gets the most comprehensive summary available:
+   * 1. Most recent completed ficha clínica (if exists)
+   * 2. Cached summary (if valid)
+   * 3. Freshly built summary
+   * 
+   * @param patient - The patient record
+   * @param latestFicha - Optional latest completed ficha clínica
+   * @returns The most comprehensive summary text
+   */
+  static getSummaryWithFicha(
+    patient: PatientRecord,
+    latestFicha?: { contenido: string; version: number } | null
+  ): string {
+    // Prioridad 1: Si existe ficha clínica completada, usarla
+    if (latestFicha && latestFicha.contenido && latestFicha.contenido.trim().length > 0) {
+      console.log(`📋 Using ficha clínica as patient summary (version ${latestFicha.version})`);
+      
+      // Agregar encabezado para contexto
+      const fichaWithHeader = `[Ficha Clínica Actualizada - Versión ${latestFicha.version}]\n\n${latestFicha.contenido}`;
+      
+      // Asegurar límites de tokens
+      return this.ensureTokenLimits(fichaWithHeader);
+    }
+    
+    // Prioridad 2 y 3: Usar el método estándar (cache o build)
+    return this.getSummary(patient);
   }
 
   /**

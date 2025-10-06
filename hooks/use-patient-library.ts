@@ -207,11 +207,23 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
   // --- Ficha clínica API integration ---
   const generateFichaClinica = useCallback(async (patientId: string, fichaId: string, sessionState: any) => {
     try {
+      // Cargar la última ficha existente para continuidad clínica
+      const fichasExistentes = await clinicalStorage.getFichasClinicasByPaciente(patientId)
+      const ultimaFicha = fichasExistentes
+        .filter(f => f.estado === 'completado')
+        .sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
+      
       const { patientForm, conversationSummary, ...sessionStateCore } = sessionState || {}
       const res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fichaId, sessionState: sessionStateCore, patientForm, conversationSummary })
+        body: JSON.stringify({ 
+          fichaId, 
+          sessionState: sessionStateCore, 
+          patientForm, 
+          conversationSummary,
+          previousFichaContent: ultimaFicha?.contenido // Incluir ficha anterior para continuidad
+        })
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
@@ -239,6 +251,23 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       } catch (persistErr) {
         console.warn('No se pudo persistir placeholder de ficha en IndexedDB:', persistErr)
       }
+      // Guardar resultado final en IndexedDB y estado local (cliente como fuente de verdad)
+      if (data.ficha) {
+        try {
+          const completed: FichaClinicaState = {
+            ...data.ficha,
+            ultimaActualizacion: new Date(data.ficha.ultimaActualizacion)
+          }
+          await clinicalStorage.saveFichaClinica(completed)
+          setFichasClinicas(prev => {
+            const map = new Map(prev.map(i => [i.fichaId, i]))
+            map.set(completed.fichaId, completed)
+            return Array.from(map.values()).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
+          })
+        } catch (persistFinalErr) {
+          console.warn('No se pudo persistir ficha final en IndexedDB:', persistFinalErr)
+        }
+      }
     } catch (err) {
       console.error('Failed to generate ficha clínica:', err)
       setError('Failed to generate ficha clínica')
@@ -247,60 +276,17 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
   }, [])
 
   const loadFichasClinicas = useCallback(async (patientId: string): Promise<FichaClinicaState[]> => {
-    // 1) Carga inmediata desde IndexedDB para UX responsiva
+    // Cliente como única fuente de verdad: cargar solo desde IndexedDB
     try {
       const localItems = await clinicalStorage.getFichasClinicasByPaciente(patientId)
-      if (Array.isArray(localItems) && localItems.length >= 0) {
-        setFichasClinicas(localItems)
-      }
+      const sorted = (localItems || []).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
+      setFichasClinicas(sorted)
+      return sorted
     } catch (localErr) {
       console.warn('No se pudieron cargar fichas locales:', localErr)
-    }
-
-    // 2) Sincronización con servidor (si disponible)
-    try {
-      const res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`)
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Error cargando fichas')
-      }
-      const serverItems: FichaClinicaState[] = Array.isArray(data.items) ? data.items : []
-
-      // Persistir/actualizar en IndexedDB y fusionar con locales
-      const localAfterSyncMap = new Map<string, FichaClinicaState>()
-      try {
-        const existingLocal = await clinicalStorage.getFichasClinicasByPaciente(patientId)
-        for (const item of existingLocal) {
-          localAfterSyncMap.set(item.fichaId, item)
-        }
-      } catch {}
-
-      for (const serverItem of serverItems) {
-        try {
-          await clinicalStorage.saveFichaClinica(serverItem)
-          const prev = localAfterSyncMap.get(serverItem.fichaId)
-          if (!prev || new Date(serverItem.ultimaActualizacion).getTime() >= new Date(prev.ultimaActualizacion).getTime()) {
-            localAfterSyncMap.set(serverItem.fichaId, serverItem)
-          }
-        } catch (persistErr) {
-          console.warn('No se pudo persistir ficha recibida del servidor:', persistErr)
-        }
-      }
-
-      const merged = Array.from(localAfterSyncMap.values()).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
-      setFichasClinicas(merged)
-      return merged
-    } catch (err) {
-      console.error('Failed to load fichas clínicas (server):', err)
-      // Mantener lo local si el servidor falla
-      try {
-        const fallback = await clinicalStorage.getFichasClinicasByPaciente(patientId)
-        setFichasClinicas(fallback)
-        return fallback
-      } catch {
-        setError('Failed to load fichas clínicas')
-        return []
-      }
+      setError('Failed to load fichas clínicas')
+      setFichasClinicas([])
+      return []
     }
   }, [])
 

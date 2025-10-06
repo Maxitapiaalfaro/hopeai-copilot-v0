@@ -38,6 +38,12 @@
     100% { opacity: 0.97; transform: translateY(0px); }
   }
   .animate-gentle-flicker { animation: gentle-flicker 2.4s ease-in-out infinite; }
+  
+  /* Fade in for sidebar reveal */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 @layer base {

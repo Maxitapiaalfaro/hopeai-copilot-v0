@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -15,6 +15,12 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +42,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Plus,
   Search,
   Users,
@@ -47,7 +60,8 @@ import {
   Calendar,
   RefreshCw,
   X,
-  Clock
+  Clock,
+  MoreVertical
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePatientLibrary } from "@/hooks/use-patient-library"
@@ -63,14 +77,20 @@ interface PatientLibrarySectionProps {
   isOpen: boolean
   onPatientSelect?: (patient: PatientRecord) => void
   onStartConversation?: (patient: PatientRecord) => void
+  onClearPatientContext?: () => void
   onConversationSelect?: (sessionId: string) => void
+  onDialogOpenChange?: (isOpen: boolean) => void
+  clearSelectionTrigger?: number // Trigger para limpiar selección desde fuera
 }
 
 export function PatientLibrarySection({ 
   isOpen, 
   onPatientSelect, 
   onStartConversation,
-  onConversationSelect 
+  onClearPatientContext,
+  onConversationSelect,
+  onDialogOpenChange,
+  clearSelectionTrigger
 }: PatientLibrarySectionProps) {
   const {
     patients,
@@ -99,6 +119,48 @@ export function PatientLibrarySection({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<PatientRecord | null>(null)
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
+  const [historyPatient, setHistoryPatient] = useState<PatientRecord | null>(null)
+
+  // Notificar al componente padre cuando se abre/cierra un diálogo o dropdown
+  useEffect(() => {
+    const hasOpenDialog = isCreateDialogOpen || isEditDialogOpen || isFichaOpen || showConversationHistory || openDropdownId !== null
+    onDialogOpenChange?.(hasOpenDialog)
+  }, [isCreateDialogOpen, isEditDialogOpen, isFichaOpen, showConversationHistory, openDropdownId, onDialogOpenChange])
+
+  // Limpiar selección cuando se recibe trigger desde el padre (por ej. desde badge del header)
+  useEffect(() => {
+    if (clearSelectionTrigger !== undefined && clearSelectionTrigger > 0) {
+      selectPatient(null)
+      console.log('🧹 Selección de paciente limpiada desde trigger externo')
+    }
+  }, [clearSelectionTrigger, selectPatient])
+
+  // CRÍTICO: Limpiar formulario cuando se abre el diálogo de CREACIÓN
+  // Esto previene que datos de edición previa contaminen un nuevo registro
+  useEffect(() => {
+    if (isCreateDialogOpen && !editingPatient) {
+      resetForm()
+    }
+  }, [isCreateDialogOpen, editingPatient])
+
+  // CRÍTICO: Limpiar estado cuando se CIERRA el diálogo de edición
+  // Esto asegura que no queden datos residuales del paciente editado
+  useEffect(() => {
+    if (!isEditDialogOpen && editingPatient) {
+      setEditingPatient(null)
+      resetForm()
+    }
+  }, [isEditDialogOpen, editingPatient])
+
+  // CRÍTICO: Asegurar que solo un diálogo esté abierto a la vez
+  // Si se abre el diálogo de creación, cerrar el de edición
+  useEffect(() => {
+    if (isCreateDialogOpen && isEditDialogOpen) {
+      setIsEditDialogOpen(false)
+      setEditingPatient(null)
+    }
+  }, [isCreateDialogOpen, isEditDialogOpen])
 
   // Form state for patient creation/editing
   const [formData, setFormData] = useState({
@@ -149,6 +211,11 @@ export function PatientLibrarySection({
   }
 
   const handleEditPatient = (patient: PatientRecord) => {
+    // Cerrar diálogo de creación si está abierto
+    if (isCreateDialogOpen) {
+      setIsCreateDialogOpen(false)
+    }
+    
     setEditingPatient(patient)
     setFormData({
       displayName: patient.displayName,
@@ -204,6 +271,12 @@ export function PatientLibrarySection({
     selectPatient(patient)
     onPatientSelect?.(patient)
     // Removed automatic conversation start - user must explicitly start conversation
+  }
+
+  // Función para abrir historial sin seleccionar visualmente la card
+  const handleOpenHistoryForPatient = (patient: PatientRecord) => {
+    setHistoryPatient(patient)
+    setShowConversationHistory(true)
   }
 
   const handleStartConversation = (patient: PatientRecord, event: React.MouseEvent) => {
@@ -292,110 +365,131 @@ export function PatientLibrarySection({
                 <Plus className="h-4 w-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[95vw] max-w-[425px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="font-serif">Agregar Paciente</DialogTitle>
-                <DialogDescription className="font-sans">
+            <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise">
+              <DialogHeader className="space-y-3">
+                <DialogTitle className="font-serif text-2xl">Agregar Paciente</DialogTitle>
+                <DialogDescription className="font-sans text-muted-foreground">
                   Crea un nuevo registro de paciente para conversaciones contextualizadas.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4 font-sans">
-                <div className="grid gap-2">
-                  <Label htmlFor="displayName">Nombre de identificación *</Label>
+              <div className="grid gap-5 py-6 font-sans">
+                <div className="grid gap-3">
+                  <Label htmlFor="displayName" className="text-sm font-semibold text-foreground">
+                    Nombre de identificación *
+                  </Label>
                   <Input
                     id="displayName"
                     value={formData.displayName}
                     onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
                     placeholder="ej. Paciente A, Caso 001"
+                    className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
                   />
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="grid gap-2">
-                    <Label htmlFor="ageRange">Rango de edad</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid gap-3">
+                    <Label htmlFor="ageRange" className="text-sm font-semibold text-foreground">
+                      Rango de edad
+                    </Label>
                     <Input
                       id="ageRange"
                       value={formData.ageRange}
                       onChange={(e) => setFormData(prev => ({ ...prev, ageRange: e.target.value }))}
                       placeholder="ej. 25-30"
+                      className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
                     />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="gender">Género</Label>
+                  <div className="grid gap-3">
+                    <Label htmlFor="gender" className="text-sm font-semibold text-foreground">
+                      Género
+                    </Label>
                     <Input
                       id="gender"
                       value={formData.gender}
                       onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value }))}
                       placeholder="ej. Femenino"
+                      className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
                     />
                   </div>
                 </div>
                 
-                <div className="grid gap-2">
-                  <Label htmlFor="occupation">Ocupación</Label>
+                <div className="grid gap-3">
+                  <Label htmlFor="occupation" className="text-sm font-semibold text-foreground">
+                    Ocupación
+                  </Label>
                   <Input
                     id="occupation"
                     value={formData.occupation}
                     onChange={(e) => setFormData(prev => ({ ...prev, occupation: e.target.value }))}
                     placeholder="ej. Estudiante"
+                    className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
                   />
                 </div>
                 
-                <div className="grid gap-2">
-                  <Label htmlFor="tags">Áreas de enfoque</Label>
+                <div className="grid gap-3">
+                  <Label htmlFor="tags" className="text-sm font-semibold text-foreground">
+                    Áreas de enfoque
+                  </Label>
                   <Input
                     id="tags"
                     value={formData.tags}
                     onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
                     placeholder="ej. ansiedad, trauma, relaciones"
+                    className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">Separa múltiples áreas con comas</p>
                 </div>
                 
-                <div className="grid gap-2">
-                  <Label htmlFor="confidentiality">Nivel de confidencialidad</Label>
+                <div className="grid gap-3">
+                  <Label htmlFor="confidentiality" className="text-sm font-semibold text-foreground">
+                    Nivel de confidencialidad
+                  </Label>
                   <Select
                     value={formData.confidentialityLevel}
                     onValueChange={(value: "high" | "medium" | "low") => 
                       setFormData(prev => ({ ...prev, confidentialityLevel: value }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 rounded-xl border-border/60 focus:ring-primary/20 focus:border-primary/40 transition-all">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">Alto</SelectItem>
-                      <SelectItem value="medium">Medio</SelectItem>
-                      <SelectItem value="low">Bajo</SelectItem>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="high" className="rounded-lg">Alto</SelectItem>
+                      <SelectItem value="medium" className="rounded-lg">Medio</SelectItem>
+                      <SelectItem value="low" className="rounded-lg">Bajo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
-                <div className="grid gap-2">
-                  <Label htmlFor="notes">Notas clínicas</Label>
+                <div className="grid gap-3">
+                  <Label htmlFor="notes" className="text-sm font-semibold text-foreground">
+                    Notas clínicas
+                  </Label>
                   <Textarea
                     id="notes"
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Información relevante del caso..."
-                    rows={3}
+                    rows={4}
+                    className="rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all resize-none"
                   />
                 </div>
               </div>
-              <DialogFooter className="flex-col sm:flex-row gap-2">
+              <DialogFooter className="flex-col sm:flex-row gap-3 pt-4 border-t border-border/40">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setIsCreateDialogOpen(false)
                     resetForm()
                   }}
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto h-11 rounded-xl border-border/60 hover:bg-secondary/80 transition-all"
                 >
                   Cancelar
                 </Button>
                 <Button
                   onClick={handleCreatePatient}
                   disabled={!formData.displayName.trim()}
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto h-11 rounded-xl bg-foreground text-background hover:bg-foreground/90 shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Crear Paciente
                 </Button>
@@ -418,54 +512,113 @@ export function PatientLibrarySection({
 
       {/* Patient List */}
       <ScrollArea className="h-64">
-        <div className="px-4 space-y-2">
+        <div className="px-4 space-y-1.5">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-4 w-4 animate-spin mr-2 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground font-sans">Cargando...</span>
+            <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-3">
+                <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground font-medium">Cargando pacientes...</span>
+              </div>
             </div>
           ) : filteredPatients.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm font-sans">
-                {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
-              </p>
+            <div className="text-center py-12 px-4 text-muted-foreground">
+              <div className="bg-secondary/40 rounded-xl p-6 border border-border/40">
+                <User className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                <p className="text-sm font-medium">
+                  {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
+                </p>
+                {!searchQuery && (
+                  <p className="text-xs mt-1 opacity-70">
+                    Crea tu primer paciente
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             filteredPatients.map((patient) => (
               <div key={patient.id} className="relative group">
-                <Button
-                  variant="ghost"
+                {/* Clickable card to start conversation */}
+                <button
+                  onClick={() => {
+                    // No iniciar conversación si el dropdown está abierto
+                    if (openDropdownId === patient.id) {
+                      return
+                    }
+                    
+                    // Si el paciente ya está seleccionado, deseleccionarlo
+                    if (selectedPatient?.id === patient.id) {
+                      selectPatient(null)
+                      // Limpiar el contexto del paciente en el sistema global
+                      onClearPatientContext?.()
+                      return
+                    }
+                    
+                    // Seleccionar e iniciar conversación con el nuevo paciente
+                    if (onStartConversation) {
+                      handlePatientClick(patient)
+                      onStartConversation(patient)
+                    }
+                  }}
                   className={cn(
-                    "w-full p-3 h-auto text-left transition-all duration-200 rounded-lg",
+                    "w-full p-4 h-auto rounded-xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
                     selectedPatient?.id === patient.id
-                      ? "bg-primary/10"
-                      : "hover:bg-secondary"
+                      ? "bg-primary/10 border-primary/20 shadow-sm hover:shadow-md"
+                      : "bg-secondary/30 border-border/20 hover:bg-secondary/50 hover:border-border/40 hover:shadow-sm",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2"
                   )}
-                  onClick={() => handlePatientClick(patient)}
                 >
-                  <div className="flex items-start gap-3 w-full">
+                  {/* Accent border on active */}
+                  {selectedPatient?.id === patient.id && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 bg-primary rounded-r-full" />
+                  )}
+                  
+                  
+                  <div className="flex items-start gap-3 w-full pr-12 pl-2">
                     <div className="flex-1 min-w-0">
-                      <div className="font-serif text-sm text-foreground truncate">
-                        {patient.displayName}
+                      {/* Header con nombre */}
+                      <div className="mb-2">
+                        <div className="font-serif text-sm text-foreground truncate font-semibold leading-snug">
+                          {patient.displayName}
+                        </div>
                       </div>
                       
-                      {patient.tags && patient.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {patient.tags.slice(0, 2).map((tag, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0.5 font-sans">
-                              {tag}
-                            </Badge>
-                          ))}
-                          {patient.tags.length > 2 && (
-                            <Badge variant="secondary" className="text-xs px-1.5 py-0.5 font-sans">
-                              +{patient.tags.length - 2}
-                            </Badge>
+                      {/* Información demográfica */}
+                      {(patient.demographics?.ageRange || patient.demographics?.gender || patient.demographics?.occupation) && (
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mb-2 font-sans">
+                          {patient.demographics.ageRange && (
+                            <span className="flex items-center gap-1">
+                              <User className="h-3 w-3 opacity-60" />
+                              {patient.demographics.ageRange} años
+                            </span>
+                          )}
+                          {patient.demographics.gender && (
+                            <span>• {patient.demographics.gender}</span>
+                          )}
+                          {patient.demographics.occupation && (
+                            <span>• {patient.demographics.occupation}</span>
                           )}
                         </div>
                       )}
                       
-                      <div className="text-xs text-muted-foreground mt-1 font-sans">
+                      {/* Áreas de enfoque - compactas */}
+                      {patient.tags && patient.tags.length > 0 && (
+                        <div className="text-xs text-muted-foreground mb-2 font-sans truncate">
+                          <span className="opacity-70">Enfoque: </span>
+                          <span className="font-medium">{patient.tags.slice(0, 3).join(', ')}</span>
+                          {patient.tags.length > 3 && <span> +{patient.tags.length - 3}</span>}
+                        </div>
+                      )}
+                      
+                      {/* Notas clínicas - preview */}
+                      {patient.notes && (
+                        <div className="text-xs text-muted-foreground/80 mb-2 font-sans line-clamp-2 italic">
+                          "{patient.notes}"
+                        </div>
+                      )}
+                      
+                      {/* Timestamp */}
+                      <div className="text-xs text-muted-foreground/60 font-sans flex items-center gap-1.5">
+                        <Clock className="h-3 w-3 opacity-60" />
                         {formatDistanceToNow(patient.updatedAt, { 
                           addSuffix: true, 
                           locale: es 
@@ -473,83 +626,98 @@ export function PatientLibrarySection({
                       </div>
                     </div>
                   </div>
-                </Button>
+                </button>
                 
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                  {onStartConversation && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onStartConversation(patient)
-                      }}
-                      title="Iniciar conversación"
+                {/* Dropdown menu for secondary actions */}
+                <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu
+                    onOpenChange={(open) => {
+                      setOpenDropdownId(open ? patient.id : null)
+                    }}
+                  >
+                    <TooltipProvider delayDuration={300}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-all duration-200 opacity-60 group-hover:opacity-100"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="text-xs">
+                          Más opciones
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <DropdownMenuContent 
+                      align="end" 
+                      className="w-52" 
+                      onClick={(e) => e.stopPropagation()}
+                      onCloseAutoFocus={(e) => e.preventDefault()}
                     >
-                      <MessageSquare className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                  
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      // First select the patient, then show conversation history
-                      handlePatientClick(patient)
-                      setShowConversationHistory(true)
-                    }}
-                    title="Ver historial de conversaciones"
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleEditPatient(patient)
-                    }}
-                    title="Editar paciente"
-                  >
-                    <Edit className="h-3.5 w-3.5" />
-                  </Button>
-                  
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => e.stopPropagation()}
-                        title="Eliminar paciente"
+                      <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // Abrir historial sin seleccionar visualmente la card
+                            handleOpenHistoryForPatient(patient)
+                            setOpenDropdownId(null) // Cerrar dropdown al seleccionar
+                          }}
+                        className="gap-2 cursor-pointer"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>¿Eliminar paciente?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Esta acción no se puede deshacer. El registro de "{patient.displayName}" 
-                          será eliminado permanentemente.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeletePatient(patient.id)}
-                          className="bg-destructive hover:bg-destructive/90"
-                        >
-                          Eliminar
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                        <Clock className="h-4 w-4" />
+                        <span>Historial de conversaciones</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEditPatient(patient)
+                          setOpenDropdownId(null) // Cerrar dropdown al seleccionar
+                        }}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Edit className="h-4 w-4" />
+                        <span>Editar paciente</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <DropdownMenuItem
+                            onSelect={(e) => e.preventDefault()}
+                            className="gap-2 cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span>Eliminar paciente</span>
+                          </DropdownMenuItem>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Eliminar paciente?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta acción no se puede deshacer. El registro de "{patient.displayName}" 
+                              será eliminado permanentemente.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeletePatient(patient.id)
+                              }}
+                              className="bg-destructive hover:bg-destructive/90"
+                            >
+                              Eliminar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             ))
@@ -559,96 +727,117 @@ export function PatientLibrarySection({
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="w-[95vw] max-w-[425px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-serif">Editar Paciente</DialogTitle>
-            <DialogDescription className="font-sans">
+        <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise">
+          <DialogHeader className="space-y-3">
+            <DialogTitle className="font-serif text-2xl">Editar Paciente</DialogTitle>
+            <DialogDescription className="font-sans text-muted-foreground">
               Modifica la información del paciente.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4 font-sans">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-displayName">Nombre de identificación *</Label>
+          <div className="grid gap-5 py-6 font-sans">
+            <div className="grid gap-3">
+              <Label htmlFor="edit-displayName" className="text-sm font-semibold text-foreground">
+                Nombre de identificación *
+              </Label>
               <Input
                 id="edit-displayName"
                 value={formData.displayName}
                 onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
                 placeholder="ej. Paciente A, Caso 001"
+                className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
               />
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-ageRange">Rango de edad</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-3">
+                <Label htmlFor="edit-ageRange" className="text-sm font-semibold text-foreground">
+                  Rango de edad
+                </Label>
                 <Input
                   id="edit-ageRange"
                   value={formData.ageRange}
                   onChange={(e) => setFormData(prev => ({ ...prev, ageRange: e.target.value }))}
                   placeholder="ej. 25-30"
+                  className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-gender">Género</Label>
+              <div className="grid gap-3">
+                <Label htmlFor="edit-gender" className="text-sm font-semibold text-foreground">
+                  Género
+                </Label>
                 <Input
                   id="edit-gender"
                   value={formData.gender}
                   onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value }))}
                   placeholder="ej. Femenino"
+                  className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
                 />
               </div>
             </div>
             
-            <div className="grid gap-2">
-              <Label htmlFor="edit-occupation">Ocupación</Label>
+            <div className="grid gap-3">
+              <Label htmlFor="edit-occupation" className="text-sm font-semibold text-foreground">
+                Ocupación
+              </Label>
               <Input
                 id="edit-occupation"
                 value={formData.occupation}
                 onChange={(e) => setFormData(prev => ({ ...prev, occupation: e.target.value }))}
                 placeholder="ej. Estudiante"
+                className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
               />
             </div>
             
-            <div className="grid gap-2">
-              <Label htmlFor="edit-tags">Áreas de enfoque</Label>
+            <div className="grid gap-3">
+              <Label htmlFor="edit-tags" className="text-sm font-semibold text-foreground">
+                Áreas de enfoque
+              </Label>
               <Input
                 id="edit-tags"
                 value={formData.tags}
                 onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
                 placeholder="ej. ansiedad, trauma, relaciones"
+                className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
               />
+              <p className="text-xs text-muted-foreground mt-1">Separa múltiples áreas con comas</p>
             </div>
             
-            <div className="grid gap-2">
-              <Label htmlFor="edit-confidentiality">Nivel de confidencialidad</Label>
+            <div className="grid gap-3">
+              <Label htmlFor="edit-confidentiality" className="text-sm font-semibold text-foreground">
+                Nivel de confidencialidad
+              </Label>
               <Select
                 value={formData.confidentialityLevel}
                 onValueChange={(value: "high" | "medium" | "low") => 
                   setFormData(prev => ({ ...prev, confidentialityLevel: value }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-xl border-border/60 focus:ring-primary/20 focus:border-primary/40 transition-all">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high">Alto</SelectItem>
-                  <SelectItem value="medium">Medio</SelectItem>
-                  <SelectItem value="low">Bajo</SelectItem>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="high" className="rounded-lg">Alto</SelectItem>
+                  <SelectItem value="medium" className="rounded-lg">Medio</SelectItem>
+                  <SelectItem value="low" className="rounded-lg">Bajo</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
-            <div className="grid gap-2">
-              <Label htmlFor="edit-notes">Notas clínicas</Label>
+            <div className="grid gap-3">
+              <Label htmlFor="edit-notes" className="text-sm font-semibold text-foreground">
+                Notas clínicas
+              </Label>
               <Textarea
                 id="edit-notes"
                 value={formData.notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                 placeholder="Información relevante del caso..."
-                rows={3}
+                rows={4}
+                className="rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all resize-none"
               />
             </div>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4 border-t border-border/40">
             <Button
               variant="outline"
               onClick={() => {
@@ -656,14 +845,14 @@ export function PatientLibrarySection({
                 setEditingPatient(null)
                 resetForm()
               }}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto h-11 rounded-xl border-border/60 hover:bg-secondary/80 transition-all"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleUpdatePatient}
               disabled={!formData.displayName.trim()}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto h-11 rounded-xl bg-foreground text-background hover:bg-foreground/90 shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Guardar Cambios
             </Button>
@@ -721,13 +910,18 @@ export function PatientLibrarySection({
       )}
 
       {/* Patient Conversation History */}
-      {selectedPatient && (
-        <Dialog open={showConversationHistory} onOpenChange={setShowConversationHistory}>
+      {historyPatient && (
+        <Dialog open={showConversationHistory} onOpenChange={(open) => {
+          setShowConversationHistory(open)
+          if (!open) {
+            setHistoryPatient(null) // Limpiar paciente del historial al cerrar
+          }
+        }}>
           <DialogContent className="w-[100vw] max-w-none h-[100svh] p-0 sm:w-full sm:max-w-4xl sm:h-auto sm:max-h-[80vh] sm:p-0">
             <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 py-3 border-b sm:px-6 sm:py-4 pt-[env(safe-area-inset-top)]">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <DialogTitle className="text-base sm:text-lg truncate">Historial de Conversaciones - {selectedPatient.displayName}</DialogTitle>
+                  <DialogTitle className="text-base sm:text-lg truncate">Historial de Conversaciones - {historyPatient.displayName}</DialogTitle>
                   <DialogDescription className="hidden sm:block">
                     Revisa las conversaciones anteriores con este paciente
                   </DialogDescription>
@@ -742,9 +936,9 @@ export function PatientLibrarySection({
                 </DialogClose>
               </div>
             </DialogHeader>
-            <div className="px-4 pb-4 sm:px-6 sm:pb-6 overflow-y-auto max-h-[calc(100svh-7rem)] sm:max-h-[60vh] overscroll-contain touch-pan-y pb-[env(safe-area-inset-bottom)]">
+            <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 overflow-y-auto max-h-[calc(100svh-7rem)] sm:max-h-[60vh] overscroll-contain touch-pan-y">
               <PatientConversationHistory
-                patient={selectedPatient}
+                patient={historyPatient}
                 userId={"demo_user"}
                 className="pb-2"
                 onConversationSelect={async (sessionId: string) => {
@@ -752,22 +946,12 @@ export function PatientLibrarySection({
                     
                     // Cerrar el modal inmediatamente para mejor UX
                     setShowConversationHistory(false);
+                    setHistoryPatient(null); // Limpiar paciente del historial
                     
-                    try {
-                      // Usar el singleton para obtener el estado de la sesión
-                      const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
-                      const instance = await HopeAISystemSingleton.getInitializedInstance();
-                      const chatState = await instance.getChatState(sessionId);
-                      console.log('✅ Estado de sesión obtenido exitosamente:', sessionId);
-                      
-                      // Notificar al componente padre que se ha seleccionado una conversación
-                      // Esto debería cerrar sidebar/mobile nav y mostrar el chat
-                      if (onConversationSelect) {
-                        await onConversationSelect(sessionId);
-                      }
-                    } catch (error) {
-                      console.error('❌ Error obteniendo estado de sesión:', error);
-                      // En caso de error, mantener el modal cerrado pero mostrar error
+                    // Delegar completamente la carga de la sesión al handleConversationSelect
+                    // No necesitamos getChatState aquí ya que handleConversationSelect usa loadSession
+                    if (onConversationSelect) {
+                      await onConversationSelect(sessionId);
                     }
                   }}
               />
