@@ -8,7 +8,7 @@ import { IBM_Plex_Serif, IBM_Plex_Sans } from 'next/font/google'
 const ibmPlexSerif = IBM_Plex_Serif({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
-  variable: '--font-serif',
+  variable: '--font-sans',
   display: 'swap',
 })
 
@@ -33,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head />
-      <body className={`${ibmPlexSerif.variable} ${ibmPlexSans.variable}`}>
+      <body className={`${ibmPlexSans.variable} ${ibmPlexSans.variable}`}>
         <DisplayPreferencesProvider>
           <ThemeProvider
             attribute="class"

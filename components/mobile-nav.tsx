@@ -148,7 +148,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
               {/* Header with refined spacing */}
               <div className="flex flex-col border-b border-border/40 flex-shrink-0 p-3 py-4 gap-4">
                 <SheetHeader className="p-0">
-                  <SheetTitle className="text-left font-serif text-foreground text-lg">Historial</SheetTitle>
+                  <SheetTitle className="text-left font-sans text-foreground text-lg">Historial</SheetTitle>
                 </SheetHeader>
 
                 <Button
@@ -267,7 +267,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                                       "ring-2 ring-background"
                                     )} />
                                     <div className="flex-1 min-w-0">
-                                      <div className="font-serif text-sm leading-tight text-foreground font-medium line-clamp-2 break-words">
+                                      <div className="font-sans text-sm leading-tight text-foreground font-medium line-clamp-2 break-words">
                                         {conversation.title}
                                       </div>
                                       <div className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">

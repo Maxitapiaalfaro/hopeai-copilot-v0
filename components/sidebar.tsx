@@ -432,7 +432,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                                 "ring-2 ring-background"
                               )} />
                               <div className="flex-1 min-w-0">
-                                <div className="font-serif text-sm truncate leading-snug text-foreground font-medium">
+                                <div className="font-sans text-sm truncate leading-snug text-foreground font-medium">
                                   {conversation.title}
                                 </div>
                                 <div className="text-xs text-muted-foreground mt-1.5 truncate flex items-center gap-1.5">

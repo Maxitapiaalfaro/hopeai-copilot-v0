@@ -87,7 +87,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0">
             <div className="flex items-center gap-2">
               <Settings className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">Ajustes de visualización</span>
+              <span className="font-sans text-sm font-semibold">Ajustes de visualización</span>
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -111,7 +111,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {/* Tamaño de Texto - Compacto */}
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Label className="font-sans text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                 <Type className="h-3 w-3" />
                 Texto
               </Label>
@@ -121,7 +121,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
                     key={option.value}
                     onClick={() => updatePreference('fontSize', option.value)}
                     className={cn(
-                      "flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
+                      "font-sans flex-1 py-1.5 rounded-md text-xs font-medium transition-all",
                       preferences.fontSize === option.value
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
@@ -135,7 +135,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
 
             {/* Ancho - Compacto */}
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Label className="font-sans text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                 <Maximize2 className="h-3 w-3" />
                 Ancho
               </Label>
@@ -159,7 +159,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
 
             {/* Espaciado - Compacto */}
             <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Label className="font-sans text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                 <Space className="h-3 w-3" />
                 Espaciado
               </Label>
@@ -169,7 +169,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
                     key={option.value}
                     onClick={() => updatePreference('messageSpacing', option.value)}
                     className={cn(
-                      "flex-1 py-1.5 rounded-md text-sm transition-all",
+                      "font-sans flex-1 py-1.5 rounded-md text-sm transition-all",
                       preferences.messageSpacing === option.value
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
@@ -183,7 +183,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
 
             {/* Vista previa en vivo */}
             <div className="mt-6 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">
+              <Label className="font-sans text-xs font-medium text-muted-foreground">
                 Vista Previa
               </Label>
               <div className="border border-border/50 rounded-lg p-3 bg-muted/20 flex flex-col items-center">
@@ -206,7 +206,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
                     preferences.fontSize === 'large' && 'text-base',
                     preferences.fontSize === 'x-large' && 'text-lg'
                   )}>
-                    <p className="text-foreground/80 transition-all duration-300 ease-out">Tu mensaje</p>
+                    <p className="font-sans text-foreground/80 transition-all duration-300 ease-out">Tu mensaje</p>
                   </div>
                   <div className={cn(
                     "bg-secondary rounded-md p-2 transition-all duration-300 ease-out",
@@ -217,7 +217,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
                     preferences.fontSize === 'large' && 'text-base',
                     preferences.fontSize === 'x-large' && 'text-lg'
                   )}>
-                    <p className="text-foreground/80 transition-all duration-300 ease-out">Respuesta del especialista</p>
+                    <p className="font-sans text-foreground/80 transition-all duration-300 ease-out">Respuesta del especialista</p>
                   </div>
                 </div>
               </div>
@@ -227,7 +227,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
           {/* Footer con información - Solo desktop */}
           {!isMobile && (
             <div className="px-4 py-3 border-t border-border/50 shrink-0">
-              <p className="text-xs text-muted-foreground leading-relaxed">
+              <p className="font-sans text-xs text-muted-foreground leading-relaxed">
                 Los cambios se aplican en tiempo real. Observa el chat mientras ajustas.
               </p>
             </div>

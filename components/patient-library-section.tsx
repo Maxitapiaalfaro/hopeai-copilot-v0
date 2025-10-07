@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -61,17 +61,81 @@ import {
   RefreshCw,
   X,
   Clock,
-  MoreVertical
+  MoreVertical,
+  BarChart3,
+  FileText
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePatientLibrary } from "@/hooks/use-patient-library"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
+import { useToast } from "@/hooks/use-toast"
 import type { PatientRecord } from "@/types/clinical-types"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { FichaClinicaPanel } from "@/components/patient-library/FichaClinicaPanel"
 import { PatientConversationHistory } from "@/components/patient-conversation-history"
 import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
+
+/**
+ * Component to display session count for a patient
+ */
+function PatientSessionCount({ patient }: { patient: PatientRecord }) {
+  const [sessionCount, setSessionCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const { systemState } = useHopeAISystem()
+
+  useEffect(() => {
+    const loadSessionCount = async () => {
+      try {
+        setLoading(true)
+        const { clinicalStorage } = await import('@/lib/clinical-context-storage')
+        await clinicalStorage.initialize()
+        
+        const allSessions = await clinicalStorage.getUserSessions(systemState.userId || 'demo_user')
+        const patientSessions = allSessions.filter(session => 
+          session.clinicalContext?.patientId === patient.id
+        )
+        
+        // Count user messages across all sessions
+        let userMessageCount = 0
+        patientSessions.forEach(session => {
+          if (session.history) {
+            userMessageCount += session.history.filter(msg => msg.role === 'user').length
+          }
+        })
+        
+        setSessionCount(userMessageCount)
+      } catch (err) {
+        console.error('Error loading session count:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadSessionCount()
+  }, [patient.id, systemState.userId])
+
+  if (loading) return null
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground/70 mb-2">
+      <MessageSquare className="h-3 w-3" />
+      <span>{sessionCount} sesiones</span>
+      
+      {/* Milestone indicator */}
+      {sessionCount >= 3 && sessionCount < 4 && (
+        <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+          1 sesión más para insights
+        </Badge>
+      )}
+      {sessionCount >= 4 && (
+        <Badge variant="outline" className="text-xs text-purple-600 border-purple-300">
+          Listo para análisis
+        </Badge>
+      )}
+    </div>
+  )
+}
 
 interface PatientLibrarySectionProps {
   isOpen: boolean
@@ -113,6 +177,7 @@ export function PatientLibrarySection({
     fichasClinicas
   } = usePatientLibrary()
   const { systemState } = useHopeAISystem()
+  const { toast } = useToast()
   const [isFichaOpen, setIsFichaOpen] = useState(false)
   const [showConversationHistory, setShowConversationHistory] = useState(false)
 
@@ -121,6 +186,7 @@ export function PatientLibrarySection({
   const [editingPatient, setEditingPatient] = useState<PatientRecord | null>(null)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
   const [historyPatient, setHistoryPatient] = useState<PatientRecord | null>(null)
+  const [patientInsights, setPatientInsights] = useState<Map<string, number>>(new Map())
 
   // Notificar al componente padre cuando se abre/cierra un diálogo o dropdown
   useEffect(() => {
@@ -152,6 +218,41 @@ export function PatientLibrarySection({
       resetForm()
     }
   }, [isEditDialogOpen, editingPatient])
+
+  // Load Longitudinal Analysis insights count per patient
+  useEffect(() => {
+    const loadInsightCounts = async () => {
+      try {
+        const { getPatternAnalysisStorage } = await import('@/lib/pattern-analysis-storage')
+        const storage = getPatternAnalysisStorage()
+        await storage.initialize()
+        
+        const pending = await storage.getPendingReviewAnalyses()
+        const countMap = new Map<string, number>()
+        
+        pending.forEach(analysis => {
+          const current = countMap.get(analysis.patientId) || 0
+          countMap.set(analysis.patientId, current + 1)
+        })
+        
+        setPatientInsights(countMap)
+      } catch (err) {
+        console.error('Failed to load insight counts:', err)
+      }
+    }
+    
+    if (isOpen) {
+      loadInsightCounts()
+      // Refresh counts every 30 seconds
+      const interval = setInterval(loadInsightCounts, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [isOpen])
+
+  // Helper function to check if patient has pending insights
+  const hasPatientInsights = useCallback((patientId: string): boolean => {
+    return (patientInsights.get(patientId) || 0) > 0
+  }, [patientInsights])
 
   // CRÍTICO: Asegurar que solo un diálogo esté abierto a la vez
   // Si se abre el diálogo de creación, cerrar el de edición
@@ -285,6 +386,20 @@ export function PatientLibrarySection({
   }
 
   const handleOpenFicha = async (patient: PatientRecord) => {
+    // Si el paciente no está seleccionado, propagamos el estado completo
+    // como si se hubiera hecho click en la card
+    if (selectedPatient?.id !== patient.id) {
+      selectPatient(patient)
+      onPatientSelect?.(patient)
+      
+      // CRÍTICO: Propagar al sistema HopeAI para establecer el contexto clínico completo
+      // Esto asegura que cualquier actualización de ficha ocurra en el contexto correcto
+      if (onStartConversation) {
+        onStartConversation(patient)
+      }
+    }
+    
+    // Cargar y abrir la ficha
     await loadFichasClinicas(patient.id)
     setIsFichaOpen(true)
   }
@@ -325,6 +440,7 @@ export function PatientLibrarySection({
       console.error('Error generating ficha clínica:', err)
     }
   }
+
 
   if (!isOpen) {
     return (
@@ -367,7 +483,7 @@ export function PatientLibrarySection({
             </DialogTrigger>
             <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise">
               <DialogHeader className="space-y-3">
-                <DialogTitle className="font-serif text-2xl">Agregar Paciente</DialogTitle>
+                <DialogTitle className="font-sans text-2xl">Agregar Paciente</DialogTitle>
                 <DialogDescription className="font-sans text-muted-foreground">
                   Crea un nuevo registro de paciente para conversaciones contextualizadas.
                 </DialogDescription>
@@ -517,18 +633,18 @@ export function PatientLibrarySection({
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
                 <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground font-medium">Cargando pacientes...</span>
+                <span className="font-sans text-sm text-muted-foreground font-medium">Cargando pacientes...</span>
               </div>
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="text-center py-12 px-4 text-muted-foreground">
               <div className="bg-secondary/40 rounded-xl p-6 border border-border/40">
                 <User className="h-10 w-10 mx-auto mb-3 opacity-40" />
-                <p className="text-sm font-medium">
+                <p className="font-sans text-sm font-medium">
                   {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
                 </p>
                 {!searchQuery && (
-                  <p className="text-xs mt-1 opacity-70">
+                  <p className="font-sans text-xs mt-1 opacity-70">
                     Crea tu primer paciente
                   </p>
                 )}
@@ -577,7 +693,7 @@ export function PatientLibrarySection({
                     <div className="flex-1 min-w-0">
                       {/* Header con nombre */}
                       <div className="mb-2">
-                        <div className="font-serif text-sm text-foreground truncate font-semibold leading-snug">
+                        <div className="font-sans text-sm text-foreground truncate font-medium leading-snug">
                           {patient.displayName}
                         </div>
                       </div>
@@ -615,14 +731,30 @@ export function PatientLibrarySection({
                           "{patient.notes}"
                         </div>
                       )}
+
+                      {/* Session count and insights status */}
+                      {selectedPatient?.id === patient.id && <PatientSessionCount patient={patient} />}
                       
-                      {/* Timestamp */}
-                      <div className="text-xs text-muted-foreground/60 font-sans flex items-center gap-1.5">
-                        <Clock className="h-3 w-3 opacity-60" />
-                        {formatDistanceToNow(patient.updatedAt, { 
-                          addSuffix: true, 
-                          locale: es 
-                        })}
+                      {/* Timestamp and Insights Badge */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs text-muted-foreground/60 font-sans flex items-center gap-1.5">
+                          <Clock className="h-3 w-3 opacity-60" />
+                          {formatDistanceToNow(patient.updatedAt, { 
+                            addSuffix: true, 
+                            locale: es 
+                          })}
+                        </div>
+                        
+                        {/* Longitudinal Analysis Badge */}
+                        {hasPatientInsights(patient.id) && (
+                          <Badge 
+                            variant="secondary" 
+                            className="bg-purple-100 text-purple-700 text-xs font-medium border-purple-200 flex items-center gap-1"
+                          >
+                            <BarChart3 className="h-3 w-3" />
+                            Nuevo análisis
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -655,7 +787,7 @@ export function PatientLibrarySection({
                     </TooltipProvider>
                     <DropdownMenuContent 
                       align="end" 
-                      className="w-52" 
+                      className="w-52 font-sans" 
                       onClick={(e) => e.stopPropagation()}
                       onCloseAutoFocus={(e) => e.preventDefault()}
                     >
@@ -675,6 +807,18 @@ export function PatientLibrarySection({
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.stopPropagation()
+                          handleOpenFicha(patient)
+                          setOpenDropdownId(null) // Cerrar dropdown al seleccionar
+                        }}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <FileText className="h-4 w-4" />
+                        <span>Ver Ficha Clínica</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
                           handleEditPatient(patient)
                           setOpenDropdownId(null) // Cerrar dropdown al seleccionar
                         }}
@@ -688,7 +832,7 @@ export function PatientLibrarySection({
                         <AlertDialogTrigger asChild>
                           <DropdownMenuItem
                             onSelect={(e) => e.preventDefault()}
-                            className="gap-2 cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
+                            className="gap-2 cursor-pointer text-destructive focus:text-white focus:bg-destructive/90"
                           >
                             <Trash2 className="h-4 w-4" />
                             <span>Eliminar paciente</span>
@@ -729,7 +873,7 @@ export function PatientLibrarySection({
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise">
           <DialogHeader className="space-y-3">
-            <DialogTitle className="font-serif text-2xl">Editar Paciente</DialogTitle>
+            <DialogTitle className="font-sans text-2xl">Editar Paciente</DialogTitle>
             <DialogDescription className="font-sans text-muted-foreground">
               Modifica la información del paciente.
             </DialogDescription>

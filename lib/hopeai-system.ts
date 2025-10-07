@@ -691,6 +691,14 @@ export class HopeAISystem {
       // Save updated state
       await this.saveChatSessionBoth(currentState)
 
+      // 🔍 PATTERN MIRROR: Check if we should trigger automatic analysis
+      if (this.shouldTriggerPatternAnalysis(currentState)) {
+        this.triggerPatternAnalysisAsync(currentState).catch(error => {
+          console.error('❌ [Análisis Longitudinal] Automatic trigger failed:', error)
+          // Don't block user flow, just log the error
+        })
+      }
+
       // 📊 COMPLETE COMPREHENSIVE METRICS TRACKING for non-streaming
       const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
       
@@ -1088,6 +1096,85 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       metrics: sessionMetrics.snapshot,
       behavioralInsights: sessionMetrics.interactions
     };
+  }
+
+  /**
+   * 🔍 PATTERN MIRROR: Determine if we should trigger automatic pattern analysis
+   * Triggers at session milestones: 4, 8, 15, 30
+   */
+  private shouldTriggerPatternAnalysis(chatState: ChatState): boolean {
+    const patientId = chatState.clinicalContext?.patientId
+    if (!patientId) return false
+
+    // Count user messages for this patient (each represents a session interaction)
+    const userMessages = chatState.history.filter(msg => msg.role === 'user')
+    const sessionCount = userMessages.length
+
+    // Trigger at specific milestones
+    const milestones = [4, 8, 15, 30]
+    const shouldTrigger = milestones.includes(sessionCount)
+
+    if (shouldTrigger) {
+      console.log(`🔍 [Análisis Longitudinal] Milestone reached: ${sessionCount} sessions with patient ${patientId}`)
+    }
+
+    return shouldTrigger
+  }
+
+  /**
+   * 🔍 PATTERN MIRROR: Trigger pattern analysis asynchronously
+   * Non-blocking - runs in background and doesn't affect user flow
+   */
+  private async triggerPatternAnalysisAsync(chatState: ChatState): Promise<void> {
+    const patientId = chatState.clinicalContext?.patientId
+    if (!patientId) return
+
+    console.log(`🔍 [Análisis Longitudinal] Triggering automatic analysis for patient ${patientId}`)
+
+    try {
+      // Get patient info
+      const patientPersistence = getPatientPersistence()
+      const patient = await patientPersistence.loadPatientRecord(patientId)
+
+      if (!patient) {
+        console.warn(`⚠️ [Análisis Longitudinal] Patient not found: ${patientId}`)
+        return
+      }
+
+      // Get all messages for this patient
+      const patientHistory = chatState.history
+
+      // Call API to generate analysis in background
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/patients/${encodeURIComponent(patientId)}/pattern-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionHistory: patientHistory,
+          patientName: patient.displayName,
+          triggerReason: 'session_milestone',
+          culturalContext: 'general'
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to trigger pattern analysis')
+      }
+
+      console.log(`✅ [Análisis Longitudinal] Automatic analysis triggered successfully for patient ${patientId}`)
+
+    } catch (error) {
+      console.error(`❌ [Análisis Longitudinal] Error triggering automatic analysis:`, error)
+      
+      // Report to Sentry but don't throw - this is a background operation
+      Sentry.captureException(error, {
+        tags: {
+          component: 'pattern-mirror-trigger',
+          patient_id: patientId,
+          trigger_type: 'automatic'
+        }
+      })
+    }
   }
 }
 

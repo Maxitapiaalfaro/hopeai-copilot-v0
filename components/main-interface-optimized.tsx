@@ -59,6 +59,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const [previousFichaBackup, setPreviousFichaBackup] = useState<FichaClinicaState | null>(null)
   const [lastGeneratedFichaId, setLastGeneratedFichaId] = useState<string | null>(null)
   const [clearPatientSelectionTrigger, setClearPatientSelectionTrigger] = useState(0)
+  const [fichaInitialTab, setFichaInitialTab] = useState<"ficha" | "insights">("ficha")
   const isMobile = useMediaQuery("(max-width: 768px)")
 
   // Usar el sistema HopeAI
@@ -681,10 +682,11 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     }
   }
 
-  const handleOpenFichaFromChat = async () => {
+  const handleOpenFichaFromChat = async (tab: "ficha" | "insights" = "ficha") => {
     try {
       setIsFichaLoading(true)
       await refreshFichaList()
+      setFichaInitialTab(tab)
       setIsFichaOpen(true)
     } finally {
       setIsFichaLoading(false)
@@ -830,6 +832,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
                 onCancelGeneration={handleCancelFichaGeneration}
                 canRevert={!!lastGeneratedFichaId && !!previousFichaBackup}
                 onRevert={handleDiscardFichaAndRevert}
+                initialTab={fichaInitialTab}
               />
             )}
           </div>

@@ -30,9 +30,9 @@ function configureCustomRules(md: MarkdownIt) {
     const token = tokens[idx]
     const level = token.tag.slice(1) // h1 -> 1, h2 -> 2, etc.
     const classes = {
-      '1': 'text-xl font-serif font-semibold text-foreground mt-6 mb-3 border-b border-border pb-2 first:mt-0',
-      '2': 'text-lg font-serif font-semibold text-foreground mt-5 mb-2 first:mt-0',
-      '3': 'text-base font-serif font-semibold text-foreground mt-4 mb-1 first:mt-0',
+      '1': 'text-xl font-sans font-semibold text-foreground mt-6 mb-3 border-b border-border pb-2 first:mt-0',
+      '2': 'text-lg font-sans font-semibold text-foreground mt-5 mb-2 first:mt-0',
+      '3': 'text-base font-sans font-semibold text-foreground mt-4 mb-1 first:mt-0',
       '4': 'font-semibold text-foreground mt-3 mb-1 first:mt-0',
       '5': 'font-medium text-muted-foreground mt-2 mb-1 first:mt-0',
       '6': 'font-normal text-muted-foreground mt-1 mb-1 first:mt-0'

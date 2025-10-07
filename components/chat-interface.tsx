@@ -52,7 +52,7 @@ interface ChatInterfaceProps {
   onGenerateFichaClinica?: () => void
   onCancelFichaGeneration?: () => void
   onDiscardFicha?: () => void
-  onOpenFichaClinica?: () => void
+  onOpenFichaClinica?: (tab?: "ficha" | "insights") => void
   onOpenPatientLibrary?: () => void
   hasExistingFicha?: boolean
   fichaLoading?: boolean
@@ -101,9 +101,7 @@ function FichaClinicaDisabledButton({
         }}
         title="Crea o selecciona un paciente para acceder a la Ficha Clínica"
       >
-        {/* Mobile: Show text, Desktop: Show icon */}
-        <span className="md:hidden text-sm font-medium">Ficha Clínica</span>
-        <FileText className="hidden md:block h-5 w-5" />
+        <span className="text-sm font-medium">Ficha Clínica</span>
       </Button>
       
       {/* Puente invisible para mantener hover activo en desktop */}
@@ -129,7 +127,7 @@ function FichaClinicaDisabledButton({
                   <FileText className="h-5 w-5 text-amber-700 dark:text-amber-400" />
                 </div>
                 <div className="flex-1 pt-0.5">
-                  <h3 className="text-base font-serif font-semibold tracking-tight text-foreground mb-0.5">
+                  <h3 className="text-base font-sans font-semibold tracking-tight text-foreground mb-0.5">
                     Documentación Clínica
                   </h3>
                   <p className="text-xs text-muted-foreground font-sans">
@@ -714,7 +712,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   )
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-serif paper-noise">
+    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans paper-noise">
       <ScrollArea
         className={cn("flex-1 pt-0 overscroll-contain")}
         style={{
@@ -740,7 +738,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {/* Welcome greeting with minimal rotating capability hint */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
             <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-2">
-              <h1 className="font-serif text-5xl md:text-6xl tracking-tight text-foreground">
+              <h1 className="font-sans text-5xl md:text-6xl tracking-tight text-foreground">
                 Sistema de Asistencia Clínica
               </h1>
               <div className="mt-8 md:mt-12 flex items-center gap-2 text-sm font-sans max-w-xl animate-in fade-in duration-500 ease-out h-5">
@@ -1096,7 +1094,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 10 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="text-sm font-serif"
+                        className="text-sm font-sans"
                       >
                         {statusMessage}
                       </motion.span>
@@ -1300,9 +1298,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           )}
                           title="Ficha Clínica"
                         >
-                          {/* Mobile: Show text, Desktop: Show icon */}
-                          <span className="md:hidden text-sm font-medium">Ficha Clínica</span>
-                          <FileText className="hidden md:block h-5 w-5" />
+                          <span className="text-sm font-medium">Ficha Clínica</span>
                           {(fichaLoading || generateLoading) && (
                             <span className="absolute -top-1 -right-1 inline-flex h-2 w-2">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
@@ -1314,26 +1310,23 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       <DropdownMenuContent align="end" className="w-56 font-sans">
                         <DropdownMenuItem
                           disabled={!onOpenFichaClinica}
-                          onSelect={(e) => { e.preventDefault(); if (!fichaLoading) onOpenFichaClinica && onOpenFichaClinica() }}
+                          onSelect={() => { if (!fichaLoading) onOpenFichaClinica && onOpenFichaClinica("ficha") }}
                         >
                           {fichaLoading ? 'Abriendo…' : 'Ver Ficha Clínica'}
                         </DropdownMenuItem>
                         
-                        {!generateLoading && (
-                          <DropdownMenuItem
-                            disabled={!onGenerateFichaClinica}
-                            onSelect={(e) => { e.preventDefault(); if (!generateLoading) onGenerateFichaClinica && onGenerateFichaClinica() }}
-                            className={hasExistingFicha ? 'text-amber-700 focus:text-amber-800' : ''}
-                          >
-                            {hasExistingFicha ? 'Re-generar Ficha (sobrescribe)' : 'Generar Ficha Clínica'}
-                          </DropdownMenuItem>
-                        )}
+                        <DropdownMenuItem
+                          disabled={!onOpenFichaClinica}
+                          onSelect={() => { if (!fichaLoading) onOpenFichaClinica && onOpenFichaClinica("insights") }}
+                        >
+                          Ver Análisis Longitudinal
+                        </DropdownMenuItem>
                         
                         {generateLoading && (
                           <DropdownMenuItem
                             disabled={!onCancelFichaGeneration}
-                            onSelect={(e) => { e.preventDefault(); onCancelFichaGeneration && onCancelFichaGeneration() }}
-                            className="text-red-600 focus:text-red-700"
+                            onSelect={() => { onCancelFichaGeneration && onCancelFichaGeneration() }}
+                            className="text-red-600 focus:text-white"
                           >
                             ✋ Cancelar Generación
                           </DropdownMenuItem>
@@ -1342,8 +1335,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         {canRevertFicha && !generateLoading && (
                           <DropdownMenuItem
                             disabled={!onDiscardFicha}
-                            onSelect={(e) => { e.preventDefault(); onDiscardFicha && onDiscardFicha() }}
-                            className="text-orange-600 focus:text-orange-700"
+                            onSelect={() => { onDiscardFicha && onDiscardFicha() }}
+                            className="text-orange-600 focus:text-white"
                           >
                             ↩️ Descartar y Volver a Anterior
                           </DropdownMenuItem>

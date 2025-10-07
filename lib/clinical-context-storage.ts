@@ -2,7 +2,7 @@ import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinica
 
 export class ClinicalContextStorage {
   private dbName = "hopeai_clinical_db"
-  private version = 2
+  private version = 3
   private db: IDBDatabase | null = null
 
   async initialize(): Promise<void> {
@@ -52,6 +52,17 @@ export class ClinicalContextStorage {
           fichasStore.createIndex("pacienteId", "pacienteId", { unique: false })
           fichasStore.createIndex("estado", "estado", { unique: false })
           fichasStore.createIndex("ultimaActualizacion", "ultimaActualizacion", { unique: false })
+        }
+
+        // Store for pattern analysis (Pattern Mirror) - Added in v3
+        if (!db.objectStoreNames.contains("pattern_analyses")) {
+          const patternsStore = db.createObjectStore("pattern_analyses", {
+            keyPath: "analysisId",
+          })
+          patternsStore.createIndex("patientId", "patientId", { unique: false })
+          patternsStore.createIndex("status", "status", { unique: false })
+          patternsStore.createIndex("createdAt", "createdAt", { unique: false })
+          patternsStore.createIndex("viewedAt", "viewedAt", { unique: false })
         }
       }
     })

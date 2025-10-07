@@ -300,10 +300,10 @@ export function PatientConversationHistory({
             <CardContent className="pt-4 sm:pt-6">
               <div className="text-center text-muted-foreground px-4">
                 <MessageCircle className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-3 sm:mb-4 opacity-50" />
-                <p className="text-base sm:text-lg font-medium mb-2">
+                <p className="font-sans text-base sm:text-lg font-medium mb-2">
                   {searchQuery ? 'No se encontraron conversaciones' : 'Sin conversaciones'}
                 </p>
-                <p className="text-xs sm:text-sm">
+                <p className="font-sans text-xs sm:text-sm">
                   {searchQuery 
                     ? 'Intenta con otros términos de búsqueda o ajusta los filtros'
                     : 'Inicia una nueva conversación con este paciente'}
@@ -359,7 +359,7 @@ export function PatientConversationHistory({
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 group/title">
-                          <h4 className="font-semibold text-sm sm:text-base leading-tight text-foreground group-hover:text-primary transition-colors duration-200 mb-1 flex-1">
+                          <h4 className="font-sans font-medium text-sm sm:text-base leading-tight text-foreground group-hover:text-primary transition-colors duration-200 mb-1 flex-1">
                             {conversation.title}
                           </h4>
                           <Button

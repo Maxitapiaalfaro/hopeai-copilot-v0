@@ -268,15 +268,15 @@ export function ConversationHistoryList({
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-            <span>Cargando conversaciones...</span>
+            <span className="font-sans">Cargando conversaciones...</span>
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium mb-2">
+            <p className="font-sans text-lg font-medium mb-2">
               {conversations.length === 0 ? 'No hay conversaciones' : 'No se encontraron conversaciones'}
             </p>
-            <p className="text-sm">
+            <p className="font-sans text-sm">
               {conversations.length === 0 
                 ? 'Inicia una nueva conversación para comenzar'
                 : 'Intenta ajustar los filtros de búsqueda'
@@ -302,7 +302,7 @@ export function ConversationHistoryList({
                           >
                             {/* Título y badges */}
                             <div className="flex items-center gap-2 mb-2">
-                              <h3 className="font-medium text-sm truncate flex-1">
+                              <h3 className="font-sans font-medium text-sm truncate flex-1">
                                 {conversation.title}
                               </h3>
                               <Badge className={`text-xs ${agentStyle}`}>

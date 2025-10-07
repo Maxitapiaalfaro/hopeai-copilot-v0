@@ -107,10 +107,8 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
         </Button>
         
         <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-          <BookText className="h-5 w-5 md:h-6 md:w-6 text-foreground/70" />
           <div>
-            <h1 className="text-base md:text-lg font-semibold text-foreground tracking-wide font-serif">HopeAI</h1>
-            <p className="hidden md:block text-sm text-muted-foreground -mt-1 font-sans">Estudio Clínico</p>
+            <h1 className="text-base md:text-lg font-semibold text-foreground tracking-wide sans-serif">HopeAI</h1>
           </div>
         </div>
         

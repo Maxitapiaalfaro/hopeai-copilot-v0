@@ -50,7 +50,7 @@ const MarkdownRendererComponent = ({
   // Si no es contenido confiable, mostrar como texto plano
   if (!trusted) {
     return (
-      <div className={cn('text-base leading-relaxed whitespace-pre-wrap', className)}>
+      <div className={cn('font-sans text-base leading-relaxed whitespace-pre-wrap', className)}>
         {content}
       </div>
     )
@@ -59,9 +59,9 @@ const MarkdownRendererComponent = ({
   return (
     <div 
       className={cn(
-        'markdown-content text-base leading-relaxed',
+        'markdown-content text-base leading-relaxed font-sans',
         // Estilos base optimizados
-        'prose max-w-none paper-noise',
+        'prose prose-sans max-w-none paper-noise',
         // Personalización de colores para el tema clínico
         'dark:prose-invert',
         'prose-headings:text-foreground prose-p:text-foreground/90',
@@ -135,7 +135,7 @@ const StreamingMarkdownRendererComponent = ({
       {renderedContent ? (
         <div 
           className={cn(
-            'markdown-content text-base leading-relaxed prose max-w-none dark:prose-invert',
+            'markdown-content text-base leading-relaxed font-sans prose prose-sans max-w-none dark:prose-invert',
             // Estilos optimizados para streaming
             'prose-headings:text-foreground prose-p:text-foreground/90',
             'prose-strong:text-foreground prose-em:text-muted-foreground',
@@ -157,7 +157,7 @@ const StreamingMarkdownRendererComponent = ({
           dangerouslySetInnerHTML={{ __html: renderedContent }}
         />
       ) : (
-        <div className="text-base text-gray-500 italic">
+        <div className="font-sans text-base text-gray-500 italic">
           Escribiendo...
         </div>
       )}
