@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,12 +26,14 @@ import {
   AlertCircle,
   Loader2,
   Clock,
-  TrendingUp
+  TrendingUp,
+  Check
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "@/hooks/use-toast"
+import { parseMarkdown } from "@/lib/markdown-parser"
 import type { FichaClinicaState, PatientRecord } from "@/types/clinical-types"
 
 interface FichaClinicaPanelProps {
@@ -52,6 +54,8 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
   const [activeTab, setActiveTab] = useState<string>(initialTab)
   const { pendingCount, loadLatestAnalysis } = usePatternMirror()
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false)
+  const [copiedFicha, setCopiedFicha] = useState(false)
+  const copyResetTimeoutRef = useRef<number | null>(null)
   
   // Update tab when initialTab changes and panel opens
   useEffect(() => {
@@ -59,6 +63,85 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
       setActiveTab(initialTab)
     }
   }, [open, initialTab])
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current) {
+        window.clearTimeout(copyResetTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const copyFichaContent = async (markdownContent: string) => {
+    const htmlContent = parseMarkdown(markdownContent)
+
+    const fallbackCopyPlainText = (text: string): boolean => {
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.top = '0'
+        textarea.style.left = '0'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        const successful = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        return successful
+      } catch {
+        return false
+      }
+    }
+
+    let copied = false
+    try {
+      const clipboard: any = (navigator as any).clipboard
+      const ClipboardItemCtor: any = (window as any).ClipboardItem
+      if (clipboard && typeof clipboard.write === 'function' && ClipboardItemCtor) {
+        const htmlBlob = new Blob([htmlContent], { type: 'text/html' })
+        const textBlob = new Blob([markdownContent], { type: 'text/plain' })
+        const item = new ClipboardItemCtor({ 'text/html': htmlBlob, 'text/plain': textBlob })
+        await clipboard.write([item])
+        copied = true
+      }
+    } catch {
+      // ignore and try next method
+    }
+
+    if (!copied) {
+      try {
+        await navigator.clipboard.writeText(markdownContent)
+        copied = true
+      } catch {
+        copied = fallbackCopyPlainText(markdownContent)
+      }
+    }
+
+    if (copied) {
+      if (copyResetTimeoutRef.current) {
+        window.clearTimeout(copyResetTimeoutRef.current)
+      }
+      setCopiedFicha(true)
+      copyResetTimeoutRef.current = window.setTimeout(() => {
+        setCopiedFicha(false)
+        copyResetTimeoutRef.current = null
+      }, 1500)
+
+      toast({
+        title: "Contenido copiado",
+        description: "Se copió la ficha con formato clínico renderizado.",
+        variant: "default"
+      })
+    } else {
+      toast({
+        title: "No se pudo copiar",
+        description: "Intenta nuevamente o copia manualmente el contenido.",
+        variant: "destructive"
+      })
+    }
+  }
   
   const latest = useMemo(() => {
     if (!fichas || fichas.length === 0) return null
@@ -247,6 +330,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
     if (!latest?.estado) return null
     // Don't show badge for completed state
     if (latest.estado === 'completado') return null
+
     
     const config = statusConfig[latest.estado]
     
@@ -405,12 +489,16 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(latest.contenido)
-                            }}
+                            onClick={() => copyFichaContent(latest.contenido)}
+                            aria-label={copiedFicha ? "Contenido copiado" : "Copiar ficha clínica"}
+                            title={copiedFicha ? "Contenido copiado" : "Copiar ficha clínica"}
                             className="h-9 w-9 p-0 rounded-lg hover:bg-secondary/80 transition-all"
                           >
-                            <Copy className="h-4 w-4" />
+                            {copiedFicha ? (
+                              <Check className="h-4 w-4 text-emerald-600 animate-in fade-in zoom-in-50 duration-150" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs" sideOffset={5}>

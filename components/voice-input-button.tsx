@@ -32,7 +32,7 @@ interface VoiceInputButtonProps {
   size?: 'sm' | 'md' | 'lg'
   /** Variante visual */
   variant?: 'default' | 'ghost' | 'outline'
-  /** Configuración de idioma (por defecto es-ES) */
+  /** Configuración de idioma (por defecto es-CL) */
   language?: string
   /** Clase CSS adicional */
   className?: string
@@ -45,7 +45,7 @@ export function VoiceInputButton({
   disabled = false,
   size = 'md',
   variant = 'ghost',
-  language = 'es-ES',
+  language = 'es-CL',
   className,
   iconClassName
 }: VoiceInputButtonProps) {

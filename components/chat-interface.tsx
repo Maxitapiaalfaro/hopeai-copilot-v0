@@ -220,9 +220,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   // Snapshot of reasoning bullets for current streaming response
   const bulletsSnapshotRef = useRef<ReasoningBullet[]>([])
   
-  // Hook para speech-to-text
+  // Hook para speech-to-text con Chilean Spanish
   const { isListening, interimTranscript, error: speechError} = useSpeechToText({
-    language: 'es-ES'
+    language: 'es-CL'
   })
 
   // Load files for messages with fileReferences
@@ -1359,7 +1359,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     disabled={isProcessing || isStreaming || isUploading}
                     size="lg"
                     variant="ghost"
-                    language="es-ES"
+                    language="es-CL"
                     className={cn("h-10 w-10 md:h-12 md:w-12", config.ghostButton.hoverBg, config.ghostButton.text)}
                     iconClassName={cn(config.ghostButton.text, 'group-hover:opacity-90 h-5 w-5')}
                   />

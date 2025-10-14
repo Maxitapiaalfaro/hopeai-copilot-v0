@@ -133,7 +133,7 @@ export function useMobileSpeechConfig() {
       continuous: true, // Habilitar modo continuo en todos los dispositivos para toggle functionality
       
       // Configuraciones específicas por plataforma
-      language: 'es-ES',
+      language: 'es-CL', // Chilean Spanish
       grammars: detection.isMobile ? [] : undefined, // Sin gramáticas complejas en móvil
       
       // Configuraciones de UI optimizadas

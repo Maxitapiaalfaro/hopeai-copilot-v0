@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition'
 import { useMobileDetection } from './use-mobile'
+import { useTranscriptPostProcessor } from './use-transcript-post-processor'
+import { HIGH_PRIORITY_TERMS_CL } from '@/lib/chilean-clinical-vocabulary'
 
 /**
  * Hook personalizado para Speech-to-Text integrado con HopeAI
@@ -48,7 +50,7 @@ interface SpeechToTextActions {
 }
 
 const DEFAULT_CONFIG: SpeechToTextConfig = {
-  language: 'es-ES', // Español por defecto para psicólogos hispanohablantes
+  language: 'es-CL', // Chilean Spanish por defecto para psicólogos chilenos
   continuous: true,
   interimResults: true,
   maxAlternatives: 1,
@@ -60,7 +62,13 @@ export function useSpeechToText(
 ): SpeechToTextState & SpeechToTextActions {
   // Detección móvil para optimizaciones adaptativas
   const mobileDetection = useMobileDetection()
-  
+
+  // Post-processor para correcciones de términos clínicos chilenos
+  const { getFinalTranscript } = useTranscriptPostProcessor({
+    enabled: true,
+    autoApply: true
+  })
+
   // Configuración adaptativa basada en el dispositivo
   const adaptiveConfig = {
     ...DEFAULT_CONFIG,
@@ -69,7 +77,7 @@ export function useSpeechToText(
     confidenceThreshold: mobileDetection.isMobile ? 0.6 : DEFAULT_CONFIG.confidenceThreshold,
     ...config
   }
-  
+
   const finalConfig = adaptiveConfig
   
   // Estados locales
@@ -306,16 +314,43 @@ export function useSpeechToText(
         console.log('No se pudo mutar el contexto de audio:', audioErr)
       }
       
-      // Configuración optimizada para toggle functionality
+      // Configuración optimizada para toggle functionality con vocabulario clínico chileno
       const options = {
         continuous: true, // Siempre continuo para permitir toggle manual
         language: finalConfig.language,
         interimResults: true,
         maxAlternatives: 1
       }
-      
-      console.log('🎤 Iniciando grabación en modo toggle (sin sonido):', options)
-      
+
+      console.log('🎤 Iniciando grabación en modo toggle (sin sonido) con vocabulario clínico chileno:', options)
+
+      // Intentar agregar gramática clínica si el navegador lo soporta
+      try {
+        const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        const SpeechGrammarList = (window as any).SpeechGrammarList || (window as any).webkitSpeechGrammarList
+
+        if (SpeechRecognitionAPI && SpeechGrammarList) {
+          const recognition = SpeechRecognition.getRecognition ? SpeechRecognition.getRecognition() : null
+
+          if (recognition) {
+            const grammarList = new SpeechGrammarList()
+
+            // Crear gramática JSGF con términos clínicos de alta prioridad
+            const clinicalTerms = HIGH_PRIORITY_TERMS_CL.join(' | ')
+            const grammar = `#JSGF V1.0; grammar clinical; public <term> = ${clinicalTerms};`
+
+            // Agregar gramática con peso alto (1.0 = máxima prioridad)
+            grammarList.addFromString(grammar, 1.0)
+            recognition.grammars = grammarList
+
+            console.log('✅ Gramática clínica chilena aplicada:', HIGH_PRIORITY_TERMS_CL.length, 'términos')
+          }
+        }
+      } catch (grammarError) {
+        console.log('⚠️ No se pudo aplicar gramática clínica (navegador no soporta):', grammarError)
+        // Continuar sin gramática - no es crítico
+      }
+
       SpeechRecognition.startListening(options)
       
       // Timeout de seguridad más largo para modo toggle
@@ -393,16 +428,19 @@ export function useSpeechToText(
     setIsProcessing(false)
   }, [resetSpeechTranscript])
 
-  // Función para integrar con el input del chat
+  // Función para integrar con el input del chat (con post-procesamiento)
   const appendToInput = useCallback((inputSetter: (value: string | ((prev: string) => string)) => void) => {
     if (finalTranscript.trim()) {
+      // Aplicar correcciones clínicas chilenas
+      const correctedTranscript = getFinalTranscript(finalTranscript.trim())
+
       inputSetter((prev: string) => {
-        const newValue = prev.trim() ? `${prev} ${finalTranscript.trim()}` : finalTranscript.trim()
+        const newValue = prev.trim() ? `${prev} ${correctedTranscript}` : correctedTranscript
         return newValue
       })
       resetTranscript()
     }
-  }, [finalTranscript, resetTranscript])
+  }, [finalTranscript, resetTranscript, getFinalTranscript])
 
   // Limpiar timeouts al desmontar
   useEffect(() => {
@@ -423,11 +461,11 @@ export function useSpeechToText(
     isMicrophoneAvailable: microphoneChecked ? actualMicAvailable : false,
     transcript,
     interimTranscript,
-    finalTranscript,
+    finalTranscript: getFinalTranscript(finalTranscript), // Aplicar correcciones al transcript final
     confidence,
     error,
     isProcessing,
-    
+
     // Acciones
     startListening,
     stopListening,

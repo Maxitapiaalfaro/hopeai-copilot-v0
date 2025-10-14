@@ -37,6 +37,7 @@ interface VoiceSettingsConfig {
 }
 
 const SUPPORTED_LANGUAGES = [
+  { code: 'es-CL', name: 'Español (Chile)', flag: '🇨🇱' },
   { code: 'es-ES', name: 'Español (España)', flag: '🇪🇸' },
   { code: 'es-MX', name: 'Español (México)', flag: '🇲🇽' },
   { code: 'es-AR', name: 'Español (Argentina)', flag: '🇦🇷' },
@@ -51,7 +52,7 @@ const SUPPORTED_LANGUAGES = [
 
 export function VoiceSettings({ onSettingsChange, className }: VoiceSettingsProps) {
   const [settings, setSettings] = useState<VoiceSettingsConfig>({
-    language: 'es-ES',
+    language: 'es-CL',
     confidenceThreshold: 0.7,
     continuousMode: true,
     interimResults: true
