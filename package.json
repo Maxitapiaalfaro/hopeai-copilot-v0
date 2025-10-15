@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "build:production": "node scripts/verify-production-security.js && next build",
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
@@ -11,12 +12,16 @@
     "monitor:orchestration": "curl -s http://localhost:3000/api/orchestration/health | jq",
     "metrics:orchestration": "curl -s http://localhost:3000/api/orchestration/metrics | jq",
     "reset:metrics": "curl -X POST -H 'Content-Type: application/json' -d '{\"action\":\"reset\"}' http://localhost:3000/api/orchestration/metrics",
-    "setup:sentry-mcp": "node scripts/setup-sentry-mcp.js"
+    "setup:sentry-mcp": "node scripts/setup-sentry-mcp.js",
+    "verify:security": "node scripts/verify-security.js",
+    "verify:security:old": "node scripts/verify-production-security.js",
+    "prebuild": "node scripts/verify-security.js || true"
   },
   "dependencies": {
     "@google/genai": "latest",
     "@hookform/resolvers": "^3.9.1",
     "@modelcontextprotocol/sdk": "latest",
+    "@phosphor-icons/react": "^2.1.10",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",

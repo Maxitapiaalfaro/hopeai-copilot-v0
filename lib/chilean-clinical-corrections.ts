@@ -17,7 +17,6 @@ export const CLINICAL_CORRECTIONS_CL: Record<string, string> = {
   // DSM-5 and Diagnostic Terms
   'ansiedad general Isadora': 'ansiedad generalizada',
   'ansiedad generalizada': 'ansiedad generalizada', // Ensure correct
-  'ansiedad generalizada': 'ansiedad generalizada',
   'ansiedad general lisada': 'ansiedad generalizada',
   'trastorno de presivo': 'trastorno depresivo',
   'trastorno depresivo': 'trastorno depresivo', // Ensure correct
@@ -84,7 +83,6 @@ export const CLINICAL_CORRECTIONS_CL: Record<string, string> = {
   'psicoeducación': 'psicoeducación', // Ensure correct
   'psico educación': 'psicoeducación',
   'regulación emocional': 'regulación emocional', // Ensure correct
-  'regulación emocional': 'regulación emocional',
   'ideación suicida': 'ideación suicida', // Ensure correct
   'idea ción suicida': 'ideación suicida',
   'crisis de pánico': 'crisis de pánico', // Ensure correct
@@ -128,7 +126,7 @@ export const CLINICAL_CORRECTIONS_CL: Record<string, string> = {
  */
 export const PATTERN_CORRECTIONS_CL: Array<{
   pattern: RegExp
-  replacement: string
+  replacement: string | ((match: string) => string)
   description: string
 }> = [
   {

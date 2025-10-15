@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Menu, User, BookText, Sun, Moon, FileText, Calendar, X } from "lucide-react"
+import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon } from "@phosphor-icons/react"
 import { useTheme } from "next-themes"
 import type { PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
@@ -95,20 +95,25 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   }, [patientId])
 
   return (
-    <header className="sticky top-0 left-0 right-0 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between bg-background/95 backdrop-blur-sm z-10 paper-noise border-b border-border/80">
-      <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
+    <header className="sticky top-0 left-0 right-0 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between z-50 border-b border-ash/60">
+      {/* Gradient background for subtle separation */}
+      <div className="absolute inset-0 bg-gradient-to-b from-cloud-white via-cloud-white to-cloud-white/0 pointer-events-none" />
+
+      <div className="relative flex items-center gap-2 md:gap-4 flex-1 min-w-0">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden h-8 w-8 flex-shrink-0"
+          className="md:hidden h-9 w-9 flex-shrink-0 text-mineral-gray-600 hover:text-clarity-blue-600 hover:bg-clarity-blue-50"
           onClick={onHistoryToggle}
         >
-          <Menu className="h-4 w-4" />
+          <ListIcon className="h-5 w-5" weight="bold" />
         </Button>
         
         <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
           <div>
-            <h1 className="text-base md:text-lg font-semibold text-foreground tracking-wide sans-serif">HopeAI</h1>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight bg-gradient-to-r from-clarity-blue-600 via-serene-teal-600 to-academic-plum-600 bg-clip-text text-transparent">
+              Aurora
+            </h1>
           </div>
         </div>
         
@@ -120,12 +125,12 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
               onMouseEnter={() => !isTouchDevice && canShowPreview && setShowFichaPreview(true)}
               onMouseLeave={() => !isTouchDevice && setShowFichaPreview(false)}
             >
-              <Badge 
-                variant="outline" 
+              <Badge
+                variant="outline"
                 className={cn(
                   "flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 cursor-help transition-all min-w-0",
-                  "bg-primary/10 border-primary/30 hover:bg-primary/15",
-                  showFichaPreview && "bg-primary/20"
+                  "bg-serene-teal-50 border-serene-teal-200 hover:bg-serene-teal-100",
+                  showFichaPreview && "bg-serene-teal-100"
                 )}
                 onClick={(e) => {
                   if (isTouchDevice) {
@@ -140,10 +145,10 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
                   setShowFichaPreview(!showFichaPreview)
                 }}
               >
-                <User className="h-3 w-3 md:h-3.5 md:w-3.5 text-primary flex-shrink-0" />
-                <span className="text-xs font-semibold text-foreground truncate max-w-[100px] md:max-w-none">{patientName}</span>
+                <UserCircleIcon className="h-3 w-3 md:h-3.5 md:w-3.5 text-serene-teal-600 flex-shrink-0" />
+                <span className="text-xs font-semibold text-deep-charcoal truncate max-w-[100px] md:max-w-none">{patientName}</span>
                 {ultimaFicha && (
-                  <FileText className="hidden md:block h-3.5 w-3.5 text-primary/60 flex-shrink-0" />
+                  <FileIcon className="hidden md:block h-3.5 w-3.5 text-serene-teal-500 flex-shrink-0" />
                 )}
               </Badge>
               
@@ -154,10 +159,10 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
                     e.stopPropagation()
                     onClearPatientContext()
                   }}
-                  className="group relative flex items-center justify-center w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary/5 hover:bg-destructive/10 border border-primary/10 hover:border-destructive/20 transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                  className="group relative flex items-center justify-center w-5 h-5 md:w-6 md:h-6 rounded-full bg-mineral-gray-100 hover:bg-destructive/10 border border-ash hover:border-destructive/20 transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
                   title="Remover contexto del paciente"
                 >
-                  <X className="h-2.5 w-2.5 md:h-3 md:w-3 text-primary/40 group-hover:text-destructive/70 transition-colors duration-200" />
+                  <XIcon className="h-2.5 w-2.5 md:h-3 md:w-3 text-mineral-gray-500 group-hover:text-destructive/70 transition-colors duration-200" />
                   
                   {/* Efecto de resplandor sutil al hover */}
                   <div className="absolute inset-0 rounded-full bg-destructive/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 blur-sm" />
@@ -166,13 +171,13 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
               
               {/* Puente invisible para mantener hover activo en desktop */}
               {ultimaFicha && showFichaPreview && canShowPreview && (
-                <div className="hidden md:block absolute top-full left-0 right-0 h-3 z-40" />
+                <div className="hidden md:block absolute top-full left-0 right-0 h-3 z-[60]" />
               )}
-              
+
               {/* Ficha Preview Popover - Interactivo y con Scroll */}
               {ultimaFicha && showFichaPreview && canShowPreview && (
-                <div 
-                  className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 md:absolute md:inset-auto md:top-full md:left-0 md:mt-2 md:pt-0 md:px-0"
+                <div
+                  className="fixed inset-0 z-[70] flex items-start justify-center pt-20 px-4 md:absolute md:inset-auto md:top-full md:left-0 md:mt-2 md:pt-0 md:px-0"
                   onMouseEnter={() => !isTouchDevice && setShowFichaPreview(true)}
                   onClick={(e) => {
                     // Cerrar al hacer clic en el overlay (solo mobile)
@@ -192,7 +197,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
                     {/* Header con botón de cerrar */}
                     <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/50">
                       <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <FileIcon className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm font-semibold font-sans">Ficha Clínica</span>
                       </div>
                       <div className="flex items-center gap-3">
@@ -210,7 +215,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
                           className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
                           aria-label="Cerrar"
                         >
-                          <X className="h-4 w-4" />
+                          <XIcon className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
@@ -251,19 +256,20 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+
+      <div className="relative flex items-center gap-1 md:gap-2 flex-shrink-0">
         <DisplaySettingsPopover />
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-9 w-9 text-mineral-gray-600 hover:text-academic-plum-600 hover:bg-academic-plum-50"
           onClick={() => setTheme((resolvedTheme === 'dark' || theme === 'dark') ? 'light' : 'dark')}
           title={(resolvedTheme === 'dark' || theme === 'dark') ? 'Cambiar a claro' : 'Cambiar a oscuro'}
         >
           {(resolvedTheme === 'dark' || theme === 'dark') ? (
-            <Sun className="h-4 w-4" />
+            <SunIcon className="h-5 w-5" />
           ) : (
-            <Moon className="h-4 w-4" />
+            <MoonIcon className="h-5 w-5" />
           )}
         </Button>
       </div>

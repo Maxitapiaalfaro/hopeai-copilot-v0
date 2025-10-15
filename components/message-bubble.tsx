@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card"
 import { Brain, BookOpen, Stethoscope, User, FileText, ImageIcon, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { AgentType } from "@/types/clinical-types"
+import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 
 interface Message {
   id: string
@@ -22,41 +23,10 @@ interface MessageBubbleProps {
   message: Message
 }
 
-const agentConfig = {
-  socratico: {
-    name: "Supervisor Clínico",
-    icon: Brain,
-    color: "text-blue-600",
-    bgColor: "bg-blue-50",
-    borderColor: "border-blue-200",
-  },
-  clinico: {
-    name: "Especialista en Documentación",
-    icon: Stethoscope,
-    color: "text-green-600",
-    bgColor: "bg-green-50",
-    borderColor: "border-green-200",
-  },
-  academico: {
-    name: "HopeAI Académico",
-    icon: BookOpen,
-    color: "text-purple-600",
-    bgColor: "bg-purple-50",
-    borderColor: "border-purple-200",
-  },
-  orquestador: {
-    name: "HopeAI Orquestador",
-    icon: Zap,
-    color: "text-orange-600",
-    bgColor: "bg-orange-50",
-    borderColor: "border-orange-200",
-  },
-}
-
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.sender === "user"
-  const config = message.agent ? agentConfig[message.agent] : null
-  const IconComponent = config?.icon || User
+  const config = message.agent ? getAgentVisualConfigSafe(message.agent) : getAgentVisualConfigSafe()
+  const IconComponent = config.icon
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes"
@@ -77,24 +47,24 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         <div
           className={cn(
             "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 border",
-            config?.bgColor || "bg-[hsl(var(--agent-orquestador-bg))]",
-            config?.borderColor || "border-[hsl(var(--agent-orquestador-border))]",
+            config.bgColor,
+            config.borderColor,
           )}
         >
-          <IconComponent className={cn("h-4 w-4", config?.color || "text-[hsl(var(--agent-orquestador-text))]")} />
+          <IconComponent className={cn("h-4 w-4", config.textColor)} />
         </div>
       )}
 
       <div className={cn("max-w-[70%] space-y-1", isUser && "items-end")}>
-        {!isUser && config && <div className="text-xs font-medium text-gray-600 px-1">{config.name}</div>}
+        {!isUser && <div className={cn("text-xs font-medium px-1", config.textColor)}>{config.name}</div>}
 
         <Card
           className={cn(
-            "p-4 shadow-sm paper-noise transition-colors ring-1 ring-transparent",
+            "p-4 shadow-sm transition-colors ring-1 ring-transparent",
             isUser
               ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-0 shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
-              : config?.bgColor || "bg-[hsl(var(--agent-orquestador-bg))]",
-            !isUser && (config?.borderColor ? `${`border ${config.borderColor}`} brush-border color-fragment hover:bg-secondary/40` : "border border-[hsl(var(--agent-orquestador-border))] brush-border color-fragment hover:bg-secondary/40"),
+              : config.bgColor,
+            !isUser && `border ${config.borderColor} hover:bg-secondary/40`,
           )}
         >
           <div className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</div>

@@ -729,9 +729,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   return (
-    <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-background font-sans">
+    <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-cloud-white font-sans">
       {!isMobile && (
-        <Sidebar 
+        <Sidebar
           isOpen={sidebarOpen} 
           onToggle={() => setSidebarOpen(!sidebarOpen)}
           activeTab={sidebarActiveTab}

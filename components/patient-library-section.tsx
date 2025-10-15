@@ -145,16 +145,18 @@ interface PatientLibrarySectionProps {
   onConversationSelect?: (sessionId: string) => void
   onDialogOpenChange?: (isOpen: boolean) => void
   clearSelectionTrigger?: number // Trigger para limpiar selección desde fuera
+  onOpenFicha?: (patient: PatientRecord) => void // Callback específico para abrir ficha (usado en mobile para no cerrar el nav)
 }
 
-export function PatientLibrarySection({ 
-  isOpen, 
-  onPatientSelect, 
+export function PatientLibrarySection({
+  isOpen,
+  onPatientSelect,
   onStartConversation,
   onClearPatientContext,
   onConversationSelect,
   onDialogOpenChange,
-  clearSelectionTrigger
+  clearSelectionTrigger,
+  onOpenFicha: onOpenFichaFromParent
 }: PatientLibrarySectionProps) {
   const {
     patients,
@@ -386,19 +388,25 @@ export function PatientLibrarySection({
   }
 
   const handleOpenFicha = async (patient: PatientRecord) => {
+    // Si hay un callback específico del padre (ej. mobile), usarlo en lugar de la lógica local
+    if (onOpenFichaFromParent) {
+      onOpenFichaFromParent(patient)
+      return
+    }
+
     // Si el paciente no está seleccionado, propagamos el estado completo
     // como si se hubiera hecho click en la card
     if (selectedPatient?.id !== patient.id) {
       selectPatient(patient)
       onPatientSelect?.(patient)
-      
+
       // CRÍTICO: Propagar al sistema HopeAI para establecer el contexto clínico completo
       // Esto asegura que cualquier actualización de ficha ocurra en el contexto correcto
       if (onStartConversation) {
         onStartConversation(patient)
       }
     }
-    
+
     // Cargar y abrir la ficha
     await loadFichasClinicas(patient.id)
     setIsFichaOpen(true)
@@ -442,40 +450,23 @@ export function PatientLibrarySection({
   }
 
 
-  if (!isOpen) {
-    return (
-      <div className="flex justify-center py-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-10 w-10 p-0 hover:bg-secondary transition-colors"
-          title="Biblioteca de Pacientes"
-        >
-          <Users className="h-5 w-5 text-muted-foreground" />
-        </Button>
-      </div>
-    )
-  }
-
   return (
-    <div className="border-t border-border/80 mt-4 pt-4">
-      {/* Header */}
-      <div className="px-4 mb-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground font-sans">Pacientes</span>
-            <Badge variant="secondary" className="text-xs">
-              {getPatientCount()}
-            </Badge>
-          </div>
-          
+    <div
+      className="flex flex-col h-full"
+      style={{
+        clipPath: isOpen ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
+        transition: 'clip-path 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+      }}
+    >
+      {/* Actions bar */}
+      <div className="px-4 pb-3 flex-shrink-0">
+        <div className="flex items-center justify-between gap-3">
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 flex-shrink-0"
                 title="Agregar paciente"
               >
                 <Plus className="h-4 w-4" />
@@ -498,7 +489,7 @@ export function PatientLibrarySection({
                     value={formData.displayName}
                     onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
                     placeholder="ej. Paciente A, Caso 001"
-                    className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                    className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
                   />
                 </div>
                 
@@ -512,7 +503,7 @@ export function PatientLibrarySection({
                       value={formData.ageRange}
                       onChange={(e) => setFormData(prev => ({ ...prev, ageRange: e.target.value }))}
                       placeholder="ej. 25-30"
-                      className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                      className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
                     />
                   </div>
                   <div className="grid gap-3">
@@ -524,11 +515,11 @@ export function PatientLibrarySection({
                       value={formData.gender}
                       onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value }))}
                       placeholder="ej. Femenino"
-                      className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                      className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
                     />
                   </div>
                 </div>
-                
+
                 <div className="grid gap-3">
                   <Label htmlFor="occupation" className="text-sm font-semibold text-foreground">
                     Ocupación
@@ -538,7 +529,7 @@ export function PatientLibrarySection({
                     value={formData.occupation}
                     onChange={(e) => setFormData(prev => ({ ...prev, occupation: e.target.value }))}
                     placeholder="ej. Estudiante"
-                    className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                    className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
                   />
                 </div>
                 
@@ -551,22 +542,22 @@ export function PatientLibrarySection({
                     value={formData.tags}
                     onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
                     placeholder="ej. ansiedad, trauma, relaciones"
-                    className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                    className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
                   />
                   <p className="text-xs text-muted-foreground mt-1">Separa múltiples áreas con comas</p>
                 </div>
-                
+
                 <div className="grid gap-3">
                   <Label htmlFor="confidentiality" className="text-sm font-semibold text-foreground">
                     Nivel de confidencialidad
                   </Label>
                   <Select
                     value={formData.confidentialityLevel}
-                    onValueChange={(value: "high" | "medium" | "low") => 
+                    onValueChange={(value: "high" | "medium" | "low") =>
                       setFormData(prev => ({ ...prev, confidentialityLevel: value }))
                     }
                   >
-                    <SelectTrigger className="h-11 rounded-xl border-border/60 focus:ring-primary/20 focus:border-primary/40 transition-all">
+                    <SelectTrigger className="h-11 rounded-xl border-border/60 focus:ring-clarity-blue-200 focus:border-clarity-blue-400 transition-all">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
@@ -587,7 +578,7 @@ export function PatientLibrarySection({
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Información relevante del caso..."
                     rows={4}
-                    className="rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all resize-none"
+                    className="rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all resize-none"
                   />
                 </div>
               </div>
@@ -598,7 +589,7 @@ export function PatientLibrarySection({
                     setIsCreateDialogOpen(false)
                     resetForm()
                   }}
-                  className="w-full sm:w-auto h-11 rounded-xl border-border/60 hover:bg-secondary/80 transition-all"
+                  className="w-full sm:w-auto h-11 rounded-xl border-border/60 hover:bg-ash transition-all"
                 >
                   Cancelar
                 </Button>
@@ -612,10 +603,18 @@ export function PatientLibrarySection({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Badge de conteo - siempre renderizado, sin animación para evitar compensación */}
+          <Badge
+            variant="secondary"
+            className="text-xs font-sans ml-auto"
+          >
+            {getPatientCount()} {getPatientCount() === 1 ? 'paciente' : 'pacientes'}
+          </Badge>
         </div>
-        
-        {/* Search */}
-        <div className="relative">
+
+        {/* Search - siempre renderizado, sin animación para evitar compensación */}
+        <div className="relative mt-3">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar pacientes..."
@@ -627,18 +626,18 @@ export function PatientLibrarySection({
       </div>
 
       {/* Patient List */}
-      <ScrollArea className="h-64">
-        <div className="px-4 space-y-1.5">
+      <ScrollArea className="flex-1">
+        <div className="px-4 py-3 space-y-1.5">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
-                <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                <RefreshCw className="h-5 w-5 animate-spin text-clarity-blue-600" />
                 <span className="font-sans text-sm text-muted-foreground font-medium">Cargando pacientes...</span>
               </div>
             </div>
           ) : filteredPatients.length === 0 ? (
-            <div className="text-center py-12 px-4 text-muted-foreground">
-              <div className="bg-secondary/40 rounded-xl p-6 border border-border/40">
+            <div className="text-center py-12 px-4 text-mineral-gray-600">
+              <div className="bg-ash rounded-xl p-6 border border-ash">
                 <User className="h-10 w-10 mx-auto mb-3 opacity-40" />
                 <p className="font-sans text-sm font-medium">
                   {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
@@ -678,14 +677,14 @@ export function PatientLibrarySection({
                   className={cn(
                     "w-full p-4 h-auto rounded-xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
                     selectedPatient?.id === patient.id
-                      ? "bg-primary/10 border-primary/20 shadow-sm hover:shadow-md"
-                      : "bg-secondary/30 border-border/20 hover:bg-secondary/50 hover:border-border/40 hover:shadow-sm",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2"
+                      ? "bg-clarity-blue-50 border-clarity-blue-200 shadow-sm hover:shadow-md"
+                      : "bg-cloud-white border-ash hover:bg-ash hover:border-mineral-gray-300 hover:shadow-sm",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clarity-blue-200 focus-visible:ring-offset-2"
                   )}
                 >
                   {/* Accent border on active */}
                   {selectedPatient?.id === patient.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 bg-primary rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 bg-clarity-blue-600 rounded-r-full" />
                   )}
                   
                   
@@ -702,26 +701,30 @@ export function PatientLibrarySection({
                       {(patient.demographics?.ageRange || patient.demographics?.gender || patient.demographics?.occupation) && (
                         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mb-2 font-sans">
                           {patient.demographics.ageRange && (
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 flex-shrink-0">
                               <User className="h-3 w-3 opacity-60" />
                               {patient.demographics.ageRange} años
                             </span>
                           )}
                           {patient.demographics.gender && (
-                            <span>• {patient.demographics.gender}</span>
+                            <span className="flex-shrink-0">• {patient.demographics.gender}</span>
                           )}
                           {patient.demographics.occupation && (
-                            <span>• {patient.demographics.occupation}</span>
+                            <span className="truncate max-w-[150px]" title={patient.demographics.occupation}>
+                              • {patient.demographics.occupation}
+                            </span>
                           )}
                         </div>
                       )}
                       
                       {/* Áreas de enfoque - compactas */}
                       {patient.tags && patient.tags.length > 0 && (
-                        <div className="text-xs text-muted-foreground mb-2 font-sans truncate">
+                        <div className="text-xs text-muted-foreground mb-2 font-sans min-w-0">
                           <span className="opacity-70">Enfoque: </span>
-                          <span className="font-medium">{patient.tags.slice(0, 3).join(', ')}</span>
-                          {patient.tags.length > 3 && <span> +{patient.tags.length - 3}</span>}
+                          <span className="font-medium truncate inline-block max-w-[180px] align-bottom" title={patient.tags.slice(0, 3).join(', ')}>
+                            {patient.tags.slice(0, 3).join(', ')}
+                          </span>
+                          {patient.tags.length > 3 && <span className="flex-shrink-0"> +{patient.tags.length - 3}</span>}
                         </div>
                       )}
                       
@@ -774,7 +777,7 @@ export function PatientLibrarySection({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-all duration-200 opacity-60 group-hover:opacity-100"
+                              className="h-8 w-8 rounded-lg text-mineral-gray-600 hover:text-deep-charcoal hover:bg-ash transition-all duration-200 opacity-60 group-hover:opacity-100"
                             >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
@@ -888,10 +891,10 @@ export function PatientLibrarySection({
                 value={formData.displayName}
                 onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
                 placeholder="ej. Paciente A, Caso 001"
-                className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
               />
             </div>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-3">
                 <Label htmlFor="edit-ageRange" className="text-sm font-semibold text-foreground">
@@ -902,7 +905,7 @@ export function PatientLibrarySection({
                   value={formData.ageRange}
                   onChange={(e) => setFormData(prev => ({ ...prev, ageRange: e.target.value }))}
                   placeholder="ej. 25-30"
-                  className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                  className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
                 />
               </div>
               <div className="grid gap-3">
@@ -914,7 +917,7 @@ export function PatientLibrarySection({
                   value={formData.gender}
                   onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value }))}
                   placeholder="ej. Femenino"
-                  className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                  className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
                 />
               </div>
             </div>
@@ -928,10 +931,10 @@ export function PatientLibrarySection({
                 value={formData.occupation}
                 onChange={(e) => setFormData(prev => ({ ...prev, occupation: e.target.value }))}
                 placeholder="ej. Estudiante"
-                className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
               />
             </div>
-            
+
             <div className="grid gap-3">
               <Label htmlFor="edit-tags" className="text-sm font-semibold text-foreground">
                 Áreas de enfoque
@@ -941,7 +944,7 @@ export function PatientLibrarySection({
                 value={formData.tags}
                 onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
                 placeholder="ej. ansiedad, trauma, relaciones"
-                className="h-11 rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all"
+                className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
               />
               <p className="text-xs text-muted-foreground mt-1">Separa múltiples áreas con comas</p>
             </div>
@@ -956,7 +959,7 @@ export function PatientLibrarySection({
                   setFormData(prev => ({ ...prev, confidentialityLevel: value }))
                 }
               >
-                <SelectTrigger className="h-11 rounded-xl border-border/60 focus:ring-primary/20 focus:border-primary/40 transition-all">
+                <SelectTrigger className="h-11 rounded-xl border-border/60 focus:ring-clarity-blue-200 focus:border-clarity-blue-400 transition-all">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
@@ -966,7 +969,7 @@ export function PatientLibrarySection({
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="grid gap-3">
               <Label htmlFor="edit-notes" className="text-sm font-semibold text-foreground">
                 Notas clínicas
@@ -977,7 +980,7 @@ export function PatientLibrarySection({
                 onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                 placeholder="Información relevante del caso..."
                 rows={4}
-                className="rounded-xl border-border/60 focus-visible:ring-primary/20 focus-visible:border-primary/40 transition-all resize-none"
+                className="rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all resize-none"
               />
             </div>
           </div>
@@ -989,7 +992,7 @@ export function PatientLibrarySection({
                 setEditingPatient(null)
                 resetForm()
               }}
-              className="w-full sm:w-auto h-11 rounded-xl border-border/60 hover:bg-secondary/80 transition-all"
+              className="w-full sm:w-auto h-11 rounded-xl border-border/60 hover:bg-ash transition-all"
             >
               Cancelar
             </Button>

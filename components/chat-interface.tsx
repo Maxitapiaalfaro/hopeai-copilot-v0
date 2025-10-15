@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Paperclip, Mic, MicOff, User, Zap, ChevronDown, Brain, Search, Stethoscope, BookOpen, Maximize2, Minimize2, FileText, Copy, Check, ThumbsUp, ThumbsDown, ChevronRight } from "lucide-react"
+import { PaperPlaneRightIcon, PaperclipIcon, MicrophoneIcon, MicrophoneSlashIcon, UserIcon, LightningIcon, CaretDownIcon, BrainIcon, MagnifyingGlassIcon, StethoscopeIcon, BookOpenIcon, ArrowsOutIcon, ArrowsInIcon, FileTextIcon, CopyIcon, CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CaretRightIcon } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import type { AgentType, ChatState, ClinicalFile, ReasoningBullet } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
@@ -26,6 +26,7 @@ import { ReasoningBullets } from "@/components/reasoning-bullets"
 import type { ReasoningBulletsState } from "@/types/clinical-types"
 import { useDisplayPreferences, getFontSizeClass, getMessageWidthClass, getMessageSpacingClass, getChatContainerWidthClass } from "@/providers/display-preferences-provider"
 import { motion } from "framer-motion"
+import { useUIPreferences } from "@/hooks/use-ui-preferences"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -124,7 +125,7 @@ function FichaClinicaDisabledButton({
               {/* Header con diseño académico */}
               <div className="flex items-start gap-3 mb-4">
                 <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-50/80 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-700/40 shadow-sm">
-                  <FileText className="h-5 w-5 text-amber-700 dark:text-amber-400" />
+                  <FileTextIcon className="h-5 w-5 text-amber-700 dark:text-amber-400" />
                 </div>
                 <div className="flex-1 pt-0.5">
                   <h3 className="text-base font-sans font-semibold tracking-tight text-foreground mb-0.5">
@@ -154,11 +155,11 @@ function FichaClinicaDisabledButton({
                     onOpenPatientLibrary();
                   }
                 }}
-                className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold rounded-xl bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/25 ring-1 ring-primary/30"
+                className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold rounded-xl bg-clarity-blue-600 hover:bg-clarity-blue-700 text-white shadow-lg shadow-clarity-blue-600/25 ring-1 ring-clarity-blue-600/30"
               >
-                <User className="h-3.5 w-3.5 text-white" />
+                <UserIcon className="h-3.5 w-3.5 text-white" />
                 <span className="tracking-wide">Abrir Biblioteca de Pacientes</span>
-                <ChevronRight className="h-3.5 w-3.5 text-white" />
+                <CaretRightIcon className="h-3.5 w-3.5 text-white" />
               </button>
             </div>
             
@@ -192,29 +193,30 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [previewAgent, setPreviewAgent] = useState<AgentType | null>(null)
-  // Collapse states for reasoning bullets
-  const [areBulletsCollapsed, setAreBulletsCollapsed] = useState(false)
+  // Collapse states for reasoning bullets - CLOSED BY DEFAULT
+  const [areBulletsCollapsed, setAreBulletsCollapsed] = useState(true)
   const [collapsedMessageBullets, setCollapsedMessageBullets] = useState<Record<string, boolean>>({})
   const [shouldScrollOnce, setShouldScrollOnce] = useState(false)
 
   const toggleExternalBullets = () => setAreBulletsCollapsed(prev => !prev)
   const toggleMessageBullets = (id: string) => setCollapsedMessageBullets(prev => ({ ...prev, [id]: !prev[id] }))
-  
+
   // Hook para preferencias de visualización
   const { preferences } = useDisplayPreferences()
   const fontSizeClass = getFontSizeClass(preferences.fontSize)
-  const messageWidthClass = getMessageWidthClass(preferences.messageWidth)
   const messageSpacingClass = getMessageSpacingClass(preferences.messageSpacing)
   const chatContainerWidthClass = getChatContainerWidthClass(preferences.messageWidth)
-  
-  // AUTO-COLAPSAR bullets INMEDIATAMENTE cuando comienza el streaming
-  // y RESETEAR cuando termina para el siguiente mensaje
+
+  // Hook para preferencias de UI (sugerencias dinámicas)
+  const { shouldShowDynamicSuggestions, hideDynamicSuggestions, isLoading: isLoadingUIPreferences } = useUIPreferences()
+
+  // MANTENER bullets COLAPSADOS - siempre cerrados por defecto
   useEffect(() => {
     if (isStreaming) {
       setAreBulletsCollapsed(true)
     } else {
-      // Reset para que el siguiente mensaje muestre bullets expandidos inicialmente
-      setAreBulletsCollapsed(false)
+      // Mantener colapsado después del streaming (usuario debe hacer clic para ver)
+      setAreBulletsCollapsed(true)
     }
   }, [isStreaming])
   // Snapshot of reasoning bullets for current streaming response
@@ -311,24 +313,37 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
   // Minimal, unobtrusive rotating capability hint for new sessions
   const capabilityHints = [
-    // Documentación clínica estructurada - Muestra organización y síntesis profesional
-    '"Sintetiza: sesión inicial, ansiedad, 25 años."',
-    '"Crea una nota SOAP: progreso depresión."',
-    '"Estructura plan de tratamiento para TEPT."',
-    // Investigación académica basada en evidencia - Demuestra búsqueda y validación científica
-    '"Investigación: EMDR vs exposición para trauma."',
-    '"Meta-análisis sobre mindfulness en depresión."',
-    '"Estudios recientes: TCC para trastorno bipolar."',
-    // Exploración socrática reflexiva - Demuestra análisis profundo y preguntas reflexivas
-    '"Analiza este patrón: paciente evita hablar."',
-    '"¿Qué revela mi frustración mi paciente?"',
-    '"Explora hipótesis: apego ansioso en adolescente."'
+    // Perspectiva adicional sobre casos difíciles - con contexto suficiente
+    'Paciente de 28 años con depresión no responde a TCC tras 8 sesiones. ¿Qué hipótesis alternativas considerar?',
+    'Adolescente de 16 años evita hablar de conflictos familiares y desvía con humor. ¿Cómo abordar esta resistencia?',
+    'Paciente con ansiedad mejora en sesión pero no aplica técnicas en casa. ¿Qué podría estar bloqueando la generalización?',
+    // Cuestionar suposiciones y aprender - con contexto clínico
+    'Paciente llega tarde, cancela sesiones y me critica sutilmente. ¿Es transferencia negativa o algo más?',
+    'Mujer de 35 años con relaciones inestables y miedo al abandono. ¿Apego ansioso o patrón borderline?',
+    '¿Cuál es la diferencia práctica entre reestructuración cognitiva y defusión cognitiva en ACT?',
+    // Estructurar sesiones y planificación - casos concretos
+    'Primera sesión con adolescente de 15 años derivado por colegio, no quiere estar aquí. ¿Cómo estructurarla?',
+    'Paciente con trauma de abuso infantil, lista para procesamiento. ¿Cómo planificar protocolo EMDR en 6 sesiones?',
+    'Paciente intelectualiza todo y evita emociones. ¿Qué intervenciones experienciales usar en terapia cognitiva?'
   ]
+
+  // Resetear animación cuando se ocultan las sugerencias
+  useEffect(() => {
+    if (!shouldShowDynamicSuggestions) {
+      setTypedHint("")
+      setIsDeleting(false)
+      setCapabilityIndex(0)
+    }
+  }, [shouldShowDynamicSuggestions])
 
   useEffect(() => {
     const isNewSession = !currentSession?.history || currentSession.history.length === 0
     if (!isNewSession) return
     if (inputValue.trim()) return
+    // No iniciar animación hasta que las preferencias estén cargadas
+    if (isLoadingUIPreferences) return
+    // No animar si el usuario no quiere ver sugerencias
+    if (!shouldShowDynamicSuggestions) return
 
     const fullText = capabilityHints[capabilityIndex]
     let timeoutId: any
@@ -354,7 +369,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     }
 
     return () => clearTimeout(timeoutId)
-  }, [capabilityIndex, typedHint, isDeleting, currentSession?.history, inputValue])
+  }, [capabilityIndex, typedHint, isDeleting, currentSession?.history, inputValue, isLoadingUIPreferences, shouldShowDynamicSuggestions])
 
   // Manejar scroll manual para detectar si el usuario está en el fondo
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -712,22 +727,19 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   )
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans paper-noise">
+    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans bg-cloud-white relative">
       <ScrollArea
         className={cn("flex-1 pt-0 overscroll-contain")}
         style={{
-          paddingBottom:
-            (isInputFocused || viewportInset > 20)
-              ? `calc(env(safe-area-inset-bottom) + ${Math.min(120, viewportInset + 12)}px)`
-              : `calc(env(safe-area-inset-bottom) + 4px)`
+          paddingBottom: '0px' // Remove padding to allow content to extend behind input gradient
         }}
         onScrollCapture={handleScroll}
       >
-        <div className={cn("w-full mx-auto h-full flex flex-col space-y-4 md:space-y-8 pt-1 md:pt-2", chatContainerWidthClass)}>
+        <div className={cn("w-full mx-auto h-full flex flex-col space-y-4 md:space-y-8 pt-1 md:pt-2 pb-32", chatContainerWidthClass)}>
           {/* Indicador de mensajes anteriores */}
           {currentSession?.history && currentSession.history.length > visibleMessageCount && (
             <div className="text-center py-2">
-              <div className="text-sm text-muted-foreground bg-secondary/50 rounded-lg p-2">
+              <div className="text-sm text-mineral-gray-600 bg-ash rounded-lg p-2">
                 Mostrando {visibleMessageCount} de {currentSession.history.length} mensajes
                 <br />
                 <span className="text-xs">Desplázate hacia arriba para cargar más</span>
@@ -738,32 +750,58 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {/* Welcome greeting with minimal rotating capability hint */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
             <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-2">
-              <h1 className="font-sans text-5xl md:text-6xl tracking-tight text-foreground">
-                Sistema de Asistencia Clínica
+              <h1 className="font-sans text-4xl md:text-5xl tracking-tight text-deep-charcoal mb-4">
+                ¿En qué piensas?
               </h1>
-              <div className="mt-8 md:mt-12 flex items-center gap-2 text-sm font-sans max-w-xl animate-in fade-in duration-500 ease-out h-5">
-                <p
-                  className="text-muted-foreground cursor-pointer hover:underline underline-offset-4 decoration-muted-foreground/50 hover:text-foreground transition-colors duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-border rounded-sm px-0.5"
-                  role="button"
-                  tabIndex={0}
-                  onClick={handleSelectHint}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectHint() } }}
-                  title="Usar este ejemplo"
-                >
-                  {typedHint || '\u00A0'}
-                </p>
-                {typedHint && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none"
+              {!isLoadingUIPreferences && shouldShowDynamicSuggestions && (
+                <div className="mt-8 md:mt-12 w-full max-w-3xl mx-auto px-4">
+                  <div
+                    className="group relative bg-cloud-white border border-ash rounded-xl overflow-hidden cursor-pointer hover:border-clarity-blue-200 hover:shadow-sm transition-all duration-200 flex items-stretch"
                     onClick={handleSelectHint}
-                    aria-label="Usar este ejemplo"
-                    title="Usar este ejemplo"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectHint() } }}
                   >
-                    <Copy className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
+                    <div className="flex-1 p-4 md:p-5">
+                      <p className="text-base md:text-lg text-deep-charcoal font-sans leading-relaxed text-left">
+                        {typedHint || '\u00A0'}
+                        <span className="inline-block w-0.5 h-[1.2em] bg-clarity-blue-600 ml-0.5 align-text-bottom animate-cursor-blink" style={{ verticalAlign: '-0.1em' }} />
+                      </p>
+                    </div>
+                    {typedHint && (
+                      <div className="flex items-center justify-center px-4 border-l border-transparent group-hover:border-ash/40 group-hover:bg-ash/30 transition-all duration-200">
+                        <div className="flex items-center gap-1.5 text-xs text-mineral-gray-600 group-hover:text-deep-charcoal transition-colors">
+                          <CopyIcon className="h-3.5 w-3.5" />
+                          <span className="font-medium">Usar</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Checkbox "No mostrar de nuevo" */}
+                  <div className="mt-4 flex items-center justify-center">
+                    <label
+                      className="flex items-center gap-2 cursor-pointer group/checkbox"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-ash text-clarity-blue-600 focus:ring-2 focus:ring-clarity-blue-500 focus:ring-offset-0 cursor-pointer"
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            hideDynamicSuggestions()
+                          }
+                        }}
+                      />
+                      <span className="text-sm text-mineral-gray-600 group-hover/checkbox:text-deep-charcoal transition-colors select-none">
+                        No mostrar sugerencias de nuevo
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -776,70 +814,63 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             
             return (
               <div key={message.id} className={cn(
-                "flex items-start gap-4",
-                message.role === "user" ? "justify-end" : "justify-start",
+                "flex items-start justify-start",
                 isFirstMessage ? "pt-6" : messageSpacingClass
               )}>
-                {/* Desktop: Icon outside message, Mobile: Icon inside message corner */}
-                {message.role === "model" && (
-                  <div className={cn("hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 mt-1 border", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
-                    <MessageIconComponent className={cn("h-4 w-4", messageAgentConfig.textColor)} />
-                  </div>
-                )}
-
                 <div
                   className={cn(
-                    "relative rounded-lg border ring-1 ring-transparent overflow-visible",
-                    messageWidthClass,
+                    "relative rounded-lg border ring-1 ring-transparent overflow-visible w-full",
                     fontSizeClass,
                     message.role === "user"
                       ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-[hsl(var(--user-bubble-bg))] shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
                       : `${messageAgentConfig.bgColor} ${messageAgentConfig.borderColor}`,
                   )}
                 >
-                  {/* Mobile: Agent icon in corner */}
+                  {/* Agent Context Header - Aurora v2.0 Design */}
                   {message.role === "model" && (
-                    <div className={cn("mobile-icon-corner mobile-icon-left absolute -top-2.5 -left-2.5 sm:hidden w-5 h-5 rounded-full flex items-center justify-center border-2 border-background shadow-sm z-10", messageAgentConfig.bgColor, messageAgentConfig.borderColor)}>
-                      <MessageIconComponent className={cn("h-2.5 w-2.5", messageAgentConfig.textColor)} />
-                    </div>
-                  )}
-                  
-                  {/* Mobile: User icon in corner */}
-                  {message.role === "user" && (
-                    <div className="mobile-icon-corner mobile-icon-right absolute -top-2.5 -right-2.5 sm:hidden w-5 h-5 rounded-full flex items-center justify-center border-2 border-background bg-primary dark:bg-emerald-600 shadow-sm z-10">
-                      <User className="h-2.5 w-2.5 text-white" />
-                    </div>
-                  )}
-                  {/* Agent Context Header for AI responses */}
-                  {message.role === "model" && (
-                    <div className="px-3 md:px-4 pt-3 pb-2 border-b border-border/50">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className={cn("text-sm font-semibold font-sans tracking-wide", messageAgentConfig.textColor)}>
-                          {message.agent === 'socratico' && 'Análisis Psicoterapéutico'}
-                    {message.agent === 'clinico' && 'Documentación Clínica Especializada'}
-                          {message.agent === 'academico' && 'Revisión de Literatura Científica'}
-                          {message.agent === 'orquestador' && 'Sistema de Coordinación'}
-                          {!message.agent && 'Sistema de Coordinación'}
-                        </span>
-                        {message.reasoningBullets && message.reasoningBullets.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => toggleMessageBullets(message.id)}
-                            className="inline-flex items-center justify-center h-7 px-2 text-xs rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
-                            aria-label={collapsedMessageBullets[message.id] ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
-                            title={collapsedMessageBullets[message.id] ? 'Mostrar razonamiento' : 'Ocultar razonamiento'}
-                          >
-                            {collapsedMessageBullets[message.id] ? 'Mostrar razonamiento' : 'Ocultar razonamiento'}
-                          </button>
-                        )}
+                    <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
+                      <div className="flex items-start gap-3">
+                        {/* Agent Icon - Larger, more prominent */}
+                        <div className={cn(
+                          "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
+                          messageAgentConfig.bgColor,
+                          "ring-1 ring-inset",
+                          messageAgentConfig.borderColor
+                        )}>
+                          <MessageIconComponent
+                            className={cn("w-5 h-5", messageAgentConfig.textColor)}
+                            weight="duotone"
+                          />
+                        </div>
+
+                        {/* Agent Info */}
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <h3 className={cn(
+                              "text-base font-semibold font-sans tracking-tight",
+                              messageAgentConfig.textColor
+                            )}>
+                              {messageAgentConfig.name}
+                            </h3>
+                            {message.reasoningBullets && message.reasoningBullets.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleMessageBullets(message.id)}
+                                className={cn(
+                                  "inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium rounded-lg transition-all",
+                                  "hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal"
+                                )}
+                                aria-label={collapsedMessageBullets[message.id] ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
+                              >
+                                {collapsedMessageBullets[message.id] ? 'Mostrar' : 'Ocultar'}
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground/80 font-sans leading-relaxed">
+                            {messageAgentConfig.description}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground font-sans leading-relaxed">
-                        {message.agent === 'socratico' && 'Análisis de proceso terapéutico y formulación de caso'}
-                        {message.agent === 'clinico' && 'Elaboración de documentación con estándares clínicos'}
-                        {message.agent === 'academico' && 'Integración de evidencia empírica y literatura revisada por pares'}
-                        {message.agent === 'orquestador' && 'Sistema de coordinación multi-agente'}
-                        {!message.agent && 'Respuesta del sistema'}
-                      </p>
                     </div>
                   )}
                   {/* Reasoning bullets at the top of AI message with per-message collapse */}
@@ -901,44 +932,38 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         <button
                           type="button"
                           onClick={() => copyMessageContent(message.content, message.id)}
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal transition-colors transition-transform active:scale-95 select-none touch-manipulation"
                           aria-label="Copiar contenido"
                           title="Copiar contenido"
                         >
                           {copiedMessageId === message.id ? (
-                            <Check className="h-4 w-4 text-green-600 animate-in fade-in zoom-in-50 duration-150" />
+                            <CheckIcon className="h-4 w-4 text-green-600 animate-in fade-in zoom-in-50 duration-150" />
                           ) : (
-                            <Copy className="h-4 w-4" />
+                            <CopyIcon className="h-4 w-4" />
                           )}
                         </button>
                         <button
                           type="button"
                           onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal transition-colors transition-transform active:scale-95 select-none touch-manipulation"
                           aria-label="Me gusta"
                           title="Me gusta"
                         >
-                          <ThumbsUp className="h-4 w-4" />
+                          <ThumbsUpIcon className="h-4 w-4" />
                         </button>
                         <button
                           type="button"
                           onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal transition-colors transition-transform active:scale-95 select-none touch-manipulation"
                           aria-label="No me gusta"
                           title="No me gusta"
                         >
-                          <ThumbsDown className="h-4 w-4" />
+                          <ThumbsDownIcon className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
                   )}
                 </div>
-
-                {message.role === "user" && (
-                  <div className="hidden sm:flex w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]">
-                    <User className="h-4 w-4 text-[hsl(var(--user-bubble-text))]" />
-                  </div>
-                )}
               </div>
             );
           })}
@@ -951,79 +976,82 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             const RealIconComponent = realConfig.icon
             
             return (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: "easeOut" }}
-                className={cn("flex items-start gap-4", messageSpacingClass)}
+                className={cn("flex items-start", messageSpacingClass)}
               >
-                {/* Desktop: Icon outside message - USA AGENTE REAL CON ANIMACIÓN */}
-                <motion.div 
-                  key={`desktop-icon-${realAgent}`}
-                  initial={{ scale: 0.8, rotate: -15 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ duration: 0.4, ease: "easeOut" }}
-                  className={cn("hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 mt-1 border", realConfig.bgColor, realConfig.borderColor)}
-                >
-                  <RealIconComponent className={cn("h-4 w-4 transition-colors duration-300", realConfig.textColor)} />
-                </motion.div>
-                <motion.div 
+                <motion.div
                   animate={{
                     borderColor: realConfig.borderColor,
                     backgroundColor: realConfig.bgColor
                   }}
                   transition={{ duration: 0.4, ease: "easeInOut" }}
-                  className={cn("relative rounded-lg border", messageWidthClass, fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
+                  className={cn("relative rounded-lg border w-full", fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
                 >
-                  {/* Mobile: Agent icon in corner - USA AGENTE REAL CON ANIMACIÓN */}
-                  <motion.div 
-                    key={`mobile-icon-${realAgent}`}
-                    initial={{ scale: 0.6, rotate: -20 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ duration: 0.4, ease: "easeOut" }}
-                    className={cn("mobile-icon-corner mobile-icon-left absolute -top-2 -left-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background", realConfig.bgColor, realConfig.borderColor)}
-                  >
-                    <RealIconComponent className={cn("h-3 w-3 transition-colors duration-300", realConfig.textColor)} />
-                  </motion.div>
-                  {/* Agent Context Header - MUESTRA AGENTE REAL CON ANIMACIÓN */}
-                  <div className="px-4 pt-3 pb-2 border-b border-border/50">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <motion.span 
-                        key={`agent-name-${realAgent}`}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="text-sm font-semibold font-sans tracking-wide"
+                  {/* Agent Context Header - Aurora v2.0 Design with Animation */}
+                  <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
+                    <div className="flex items-start gap-3">
+                      {/* Agent Icon - Animated */}
+                      <motion.div
+                        key={`agent-icon-${realAgent}`}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.4, ease: "easeOut" }}
+                        className={cn(
+                          "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
+                          realConfig.bgColor,
+                          "ring-1 ring-inset",
+                          realConfig.borderColor
+                        )}
                       >
-                        {realAgent === 'socratico' && 'Análisis Psicoterapéutico'}
-                        {realAgent === 'clinico' && 'Documentación Clínica Especializada'}
-                        {realAgent === 'academico' && 'Revisión de Literatura Científica'}
-                        {realAgent === 'orquestador' && 'Sistema de Coordinación'}
-                      </motion.span>
-                      {reasoningBullets && reasoningBullets.bullets.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setAreBulletsCollapsed(prev => !prev)}
-                          className="inline-flex items-center justify-center h-7 px-2 text-xs rounded-md hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label={areBulletsCollapsed ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
-                          title={areBulletsCollapsed ? 'Mostrar razonamiento' : 'Ocultar razonamiento'}
+                        <RealIconComponent
+                          className={cn("w-5 h-5", realConfig.textColor)}
+                          weight="duotone"
+                        />
+                      </motion.div>
+
+                      {/* Agent Info */}
+                      <div className="flex-1 min-w-0 pt-0.5">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <motion.h3
+                            key={`agent-name-${realAgent}`}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, ease: "easeOut" }}
+                            className={cn(
+                              "text-base font-semibold font-sans tracking-tight",
+                              realConfig.textColor
+                            )}
+                          >
+                            {realConfig.name}
+                          </motion.h3>
+                          {reasoningBullets && reasoningBullets.bullets.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setAreBulletsCollapsed(prev => !prev)}
+                              className={cn(
+                                "inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium rounded-lg transition-all",
+                                "hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal"
+                              )}
+                              aria-label={areBulletsCollapsed ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
+                            >
+                              {areBulletsCollapsed ? 'Mostrar' : 'Ocultar'}
+                            </button>
+                          )}
+                        </div>
+                        <motion.p
+                          key={`agent-desc-${realAgent}`}
+                          initial={{ opacity: 0, y: -5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, delay: 0.1, ease: "easeOut" }}
+                          className="text-xs text-muted-foreground/80 font-sans leading-relaxed"
                         >
-                          {areBulletsCollapsed ? 'Mostrar Razonamiento' : 'Ocultar Razonamiento'}
-                        </button>
-                      )}
+                          {realConfig.description}
+                        </motion.p>
+                      </div>
                     </div>
-                    <motion.p 
-                      key={`agent-desc-${realAgent}`}
-                      initial={{ opacity: 0, y: -5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: 0.1, ease: "easeOut" }}
-                      className="text-xs text-muted-foreground font-sans leading-relaxed"
-                    >
-                      {realAgent === 'socratico' && 'Análisis de proceso terapéutico y formulación de caso'}
-                      {realAgent === 'clinico' && 'Elaboración de documentación con estándares clínicos'}
-                      {realAgent === 'academico' && 'Integración de evidencia empírica y literatura revisada por pares'}
-                      {realAgent === 'orquestador' && 'Sistema de coordinación multi-agente'}
-                    </motion.p>
                   </div>
                 {/* Reasoning Bullets DENTRO de la burbuja de streaming */}
                 {reasoningBullets && reasoningBullets.bullets.length > 0 && !areBulletsCollapsed && (
@@ -1142,48 +1170,58 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {!isStreaming && reasoningBullets && (
             reasoningBullets.isGenerating || (reasoningBullets.bullets.length > 0 && !lastModelMessageHasBullets)
           ) && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
-              className="flex items-start gap-4 pt-4"
+              className="flex items-start pt-4"
             >
-              {/* Desktop: Icon outside message CON ANIMACIÓN */}
-              <motion.div 
-                initial={{ scale: 0.8, rotate: -10 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className={cn("hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 mt-1 border", config.bgColor, config.borderColor)}
-              >
-                <IconComponent className={cn("h-4 w-4 transition-colors duration-300", config.textColor)} />
-              </motion.div>
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.98 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
-                className={cn("relative rounded-lg border", messageWidthClass, fontSizeClass, config.bgColor, config.borderColor)}
+                className={cn("relative rounded-lg border w-full", fontSizeClass, config.bgColor, config.borderColor)}
               >
-                {/* Mobile: Agent icon in corner */}
-                <div className={cn("mobile-icon-corner mobile-icon-left absolute -top-2 -left-2 sm:hidden w-6 h-6 rounded-full flex items-center justify-center border-2 border-background", config.bgColor, config.borderColor)}>
-                  <IconComponent className={cn("h-3 w-3", config.textColor)} />
+                {/* Mobile: Agent icon in corner - Aurora v2.0 */}
+                <div className={cn(
+                  "mobile-icon-corner mobile-icon-left absolute -top-2.5 -left-2.5 sm:hidden",
+                  "w-7 h-7 rounded-lg flex items-center justify-center shadow-md",
+                  "ring-1 ring-inset border-2 border-cloud-white",
+                  config.bgColor,
+                  config.borderColor
+                )}>
+                  <IconComponent
+                    className={cn("w-3.5 h-3.5", config.textColor)}
+                    weight="duotone"
+                  />
                 </div>
-                {/* Agent Context Header */}
-                <div className="px-4 pt-3 pb-2 border-b border-border/50">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold font-sans tracking-wide">
-                      {activeAgent === 'socratico' && 'Análisis Psicoterapéutico'}
-                  {activeAgent === 'clinico' && 'Documentación Clínica Especializada'}
-                      {activeAgent === 'academico' && 'Revisión de Literatura Científica'}
-                      {activeAgent === 'orquestador' && 'Sistema de Coordinación'}
-                    </span>
+                {/* Agent Context Header - Aurora v2.0 */}
+                <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
+                      config.bgColor,
+                      "ring-1 ring-inset",
+                      config.borderColor
+                    )}>
+                      <IconComponent
+                        className={cn("w-5 h-5", config.textColor)}
+                        weight="duotone"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <h3 className={cn(
+                        "text-base font-semibold font-sans tracking-tight mb-1.5",
+                        config.textColor
+                      )}>
+                        {config.name}
+                      </h3>
+                      <p className="text-xs text-muted-foreground/80 font-sans leading-relaxed">
+                        {config.description}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground font-sans leading-relaxed">
-                    {activeAgent === 'socratico' && 'Análisis de proceso terapéutico y formulación de caso'}
-                    {activeAgent === 'clinico' && 'Elaboración de documentación con estándares clínicos'}
-                    {activeAgent === 'academico' && 'Integración de evidencia empírica y literatura revisada por pares'}
-                    {activeAgent === 'orquestador' && 'Sistema de coordinación multi-agente'}
-                  </p>
                 </div>
                 <div className="p-4">
                   <ReasoningBullets
@@ -1214,30 +1252,31 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             variant="default"
             title={isStreaming ? "Nuevo contenido - Ir al final" : "Ir al final de la conversación"}
           >
-            <ChevronDown className="h-6 w-6" />
+            <CaretDownIcon className="h-6 w-6" />
             {isStreaming && (
               <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-primary border-2 border-background"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-clarity-blue-600 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-clarity-blue-600 border-2 border-background"></span>
               </span>
             )}
           </Button>
         )}
       </ScrollArea>
 
-      {/* Input Area */}
-      <div className="py-3 md:py-4 pt-1">
+      {/* Input Area - Floating */}
+      <div className="absolute bottom-0 left-0 right-0 py-3 md:py-4 pt-6 z-20">
+
         {/* Ficha Clínica controls moved into input toolbar */}
-        <div className={cn("w-full mx-auto", chatContainerWidthClass)}>
+        <div className={cn("w-full mx-auto relative z-10", chatContainerWidthClass)}>
           <div className="relative">
             {/* Pending files compact bar (overlay above input, no extra bottom space) */}
             {pendingFiles.length > 0 && !isStreaming && (
               <div className="absolute -top-10 left-0 right-0 px-1 md:px-0">
                 <div className="max-w-full overflow-x-auto no-scrollbar">
-                  <div className="inline-flex items-center gap-2 bg-secondary/60 border border-border/80 rounded-lg px-2 py-1">
+                  <div className="inline-flex items-center gap-2 bg-ash border border-ash rounded-lg px-2 py-1">
                     {pendingFiles.map((file) => (
                       <div key={file.id} className="flex items-center gap-1 text-[11px] font-sans bg-card/70 border border-border/70 rounded px-1.5 py-0.5 whitespace-nowrap">
-                        <Paperclip className="h-3 w-3 text-muted-foreground" />
+                        <PaperclipIcon className="h-3 w-3 text-muted-foreground" />
                         <span className="max-w-[140px] truncate">{file.name}</span>
                       </div>
                     ))}
@@ -1246,8 +1285,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               </div>
             )}
             <div className={cn(
-                "rounded-lg border bg-card transition-all",
-                "border-border",
+                "rounded-[28px] border bg-cloud-white transition-all shadow-lg p-1",
+                "border-border/50",
                 config.focusWithinBorderColor
               )}>
               {/* Text Input Section */}
@@ -1260,17 +1299,17 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   onFocus={() => setIsInputFocused(true)}
                   onBlur={() => setIsInputFocused(false)}
                   placeholder="Escribe tu mensaje o pregunta..."
-                  className="w-full min-h-[52px] resize-none border-0 bg-transparent px-3 md:px-4 py-3 md:pr-32 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans"
+                  className="w-full min-h-[52px] resize-none border-0 bg-transparent px-4 md:px-5 py-3 md:pr-32 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans overflow-hidden"
                   rows={1}
                   disabled={isProcessing || isStreaming || isUploading}
-                  style={{ 
+                  style={{
                     boxShadow: 'none',
                   }}
                 />
               </div>
-              
+
               {/* Buttons Section - Both mobile and desktop: Full width row below input */}
-              <div className="flex items-center justify-between gap-2 md:gap-3 px-3 pb-3 border-t border-border/50 pt-3">
+              <div className="flex items-center justify-between gap-2 md:gap-3 px-4 md:px-5 pb-3 pt-3">
                 {/* Left side buttons (mobile) / All buttons (desktop) */}
                 <div className="flex items-center gap-1.5 md:gap-2">
                   <FileUploadButton
@@ -1301,8 +1340,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           <span className="text-sm font-medium">Ficha Clínica</span>
                           {(fichaLoading || generateLoading) && (
                             <span className="absolute -top-1 -right-1 inline-flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-clarity-blue-600 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-clarity-blue-600"></span>
                             </span>
                           )}
                         </Button>
@@ -1378,7 +1417,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     size="icon"
                     className={cn("h-10 w-10 md:h-12 md:w-12", config.button.bg, config.button.hoverBg, config.button.text)}
                   >
-                    <Send className="h-5 w-5" />
+                    <PaperPlaneRightIcon className="h-5 w-5" />
                   </Button>
                 </div>
               </div>

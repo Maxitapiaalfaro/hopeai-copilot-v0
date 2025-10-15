@@ -1,4 +1,5 @@
 import {withSentryConfig} from '@sentry/nextjs';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
@@ -10,36 +11,127 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+
+  // 🔒 SEGURIDAD: Habilitar instrumentation hook
+  experimental: {
+    instrumentationHook: true,
+  },
+
+  // 🔒 SEGURIDAD: Configuración de producción
+  productionBrowserSourceMaps: false, // No exponer source maps en producción
+
+  // 🔒 SEGURIDAD: Webpack configuration para eliminar logs en producción
+  webpack: (config, { dev, isServer }) => {
+    // En producción, eliminar console.log del código
+    if (!dev) {
+      // Usar Terser para eliminar console statements
+      const TerserPlugin = require('terser-webpack-plugin')
+
+      // REEMPLAZAR los minimizers existentes con nuestra configuración
+      config.optimization.minimizer = [
+        new TerserPlugin({
+          terserOptions: {
+            compress: {
+              // 🔒 Eliminar TODOS los console.* excepto console.error
+              drop_console: true,
+              pure_funcs: [
+                'console.log',
+                'console.info',
+                'console.debug',
+                'console.warn',
+                'console.trace',
+                'console.table',
+                'console.dir',
+                'console.dirxml',
+                'console.group',
+                'console.groupCollapsed',
+                'console.groupEnd',
+                'console.time',
+                'console.timeEnd',
+                'console.timeLog',
+                'console.count',
+                'console.countReset',
+                'console.assert',
+                'console.clear'
+              ],
+              // Eliminar código muerto
+              dead_code: true,
+              // Eliminar código no alcanzable
+              unused: true,
+            },
+            mangle: {
+              // Ofuscar nombres de variables
+              safari10: true,
+            },
+            format: {
+              // Eliminar comentarios
+              comments: false,
+            },
+          },
+          extractComments: false,
+        })
+      ];
+    }
+
+    return config
+  },
+
+  // 🔒 Headers de seguridad
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+        ],
+      },
+    ]
+  },
 }
 
 export default withSentryConfig(nextConfig, {
-// For all available options, see:
-// https://www.npmjs.com/package/@sentry/webpack-plugin#options
+  // For all available options, see:
+  // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
-org: "hopeai-rh",
-project: "sentry-indigo-umbrella",
+  org: "hopeai-rh",
+  project: "sentry-indigo-umbrella",
 
-// Only print logs for uploading source maps in CI
-silent: !process.env.CI,
+  // 🔒 SEGURIDAD: Solo mostrar logs en CI, silenciar en producción
+  silent: !process.env.CI,
 
-// For all available options, see:
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
+  // For all available options, see:
+  // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-// Upload a larger set of source maps for prettier stack traces (increases build time)
-widenClientFileUpload: true,
+  // 🔒 SEGURIDAD: NO subir source maps en producción (proteger código)
+  widenClientFileUpload: false,
 
-// Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
-// This can increase your server load as well as your hosting bill.
-// Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
-// side errors will fail.
-tunnelRoute: "/monitoring",
+  // 🔒 SEGURIDAD: Ocultar source maps del cliente
+  hideSourceMaps: true,
 
-// Automatically tree-shake Sentry logger statements to reduce bundle size
-disableLogger: true,
+  // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
+  tunnelRoute: "/monitoring",
 
-// Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
-// See the following for more information:
-// https://docs.sentry.io/product/crons/
-// https://vercel.com/docs/cron-jobs
-automaticVercelMonitors: true,
+  // 🔒 SEGURIDAD: Eliminar statements de logger de Sentry para reducir bundle
+  disableLogger: true,
+
+  // Enables automatic instrumentation of Vercel Cron Monitors.
+  automaticVercelMonitors: true,
+
+  // 🔒 SEGURIDAD: Deshabilitar telemetría de Sentry
+  telemetry: false,
 });

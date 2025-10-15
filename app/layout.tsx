@@ -1,3 +1,8 @@
+// 🔒 SEGURIDAD: Importar console blocker PRIMERO (antes que cualquier otro código)
+import '@/lib/security/console-blocker'
+// 🔒 SEGURIDAD: Importar logger para bloqueo global de console
+import '@/lib/logger'
+
 import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'

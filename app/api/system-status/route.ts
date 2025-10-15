@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSingletonStatus, getSingletonReport } from '@/lib/singleton-monitor'
 import { HopeAISystemSingleton } from '@/lib/hopeai-system'
+import { verifyAdminRequest } from '@/lib/security/admin-auth'
+import { createSanitizedErrorResponse } from '@/lib/security/error-sanitizer'
 
 /**
  * API Route para monitorear el estado del sistema HopeAI optimizado
@@ -13,6 +15,25 @@ import { HopeAISystemSingleton } from '@/lib/hopeai-system'
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🔒 SEGURIDAD: Verificar autenticación
+    const auth = verifyAdminRequest(request);
+    if (!auth.authenticated) {
+      return NextResponse.json(
+        {
+          error: 'Unauthorized',
+          message: 'This endpoint requires authentication',
+          hint: 'Include admin token in Authorization header: Bearer YOUR_TOKEN',
+          timestamp: new Date().toISOString()
+        },
+        {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Bearer realm="Admin API"'
+          }
+        }
+      );
+    }
+
     const { searchParams } = new URL(request.url)
     const detailed = searchParams.get('detailed') === 'true'
     const format = searchParams.get('format') || 'json'
@@ -73,16 +94,8 @@ export async function GET(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('❌ Error in system-status API:', error)
-    
-    return NextResponse.json(
-      {
-        error: 'Failed to get system status',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
-      },
-      { status: 500 }
-    )
+    const sanitizedError = createSanitizedErrorResponse(error, 'system-status-get');
+    return NextResponse.json(sanitizedError, { status: 500 });
   }
 }
 
@@ -91,8 +104,21 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🔒 SEGURIDAD: Verificar autenticación
+    const auth = verifyAdminRequest(request);
+    if (!auth.authenticated) {
+      return NextResponse.json(
+        {
+          error: 'Unauthorized',
+          message: 'This endpoint requires authentication',
+          timestamp: new Date().toISOString()
+        },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json()
-    const { action, ...params } = body
+    const { action } = body
 
     switch (action) {
       case 'reset_metrics':
@@ -131,15 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('❌ Error in system-status POST:', error)
-    
-    return NextResponse.json(
-      {
-        error: 'Failed to process system operation',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
-      },
-      { status: 500 }
-    )
+    const sanitizedError = createSanitizedErrorResponse(error, 'system-status-post');
+    return NextResponse.json(sanitizedError, { status: 500 });
   }
 }

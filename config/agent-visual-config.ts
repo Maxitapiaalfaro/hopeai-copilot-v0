@@ -1,104 +1,126 @@
-import { Brain, Stethoscope, BookOpen, Zap } from "lucide-react"
+// Aurora Visual Identity v2.0 - Phosphor Icons Integration
+import { Eye, Notebook, Microscope, Lightning, Spinner, CircleNotch } from "@phosphor-icons/react"
 import type { AgentType } from "@/types/clinical-types"
 
+/**
+ * Aurora Visual Identity v2.0
+ *
+ * Paleta de Facetas:
+ * - Perspectiva (Análisis): Clarity Blue #0D6EFD - Icono: Eye (observación profunda)
+ * - Memoria (Documentación): Serene Teal #20C997 - Icono: Notebook (registro estructurado)
+ * - Evidencia (Investigación): Academic Plum #6F42C1 - Icono: Microscope (investigación científica)
+ *
+ * Paleta Neutra:
+ * - Cloud White #F8F9FA (fondo principal)
+ * - Deep Charcoal #343A40 (texto principal)
+ * - Mineral Gray #6C757D (texto secundario)
+ * - Ash #E9ECEF (bordes y divisores)
+ *
+ * Iconografía: Phosphor Icons - Diseño moderno, minimalista y elegante
+ */
+
 const agentVisuals = {
-    // Iteration: Socrático → terracotta/ochre (amber cream)
+    // Aurora Facet: Perspectiva (Análisis Psicoterapéutico) - Clarity Blue
+    // Mantiene clave 'socratico' para compatibilidad con backend
     socratico: {
-        name: "Análisis Psicoterapéutico",
-        description: "Análisis de proceso terapéutico y formulación de caso",
-        icon: Brain,
-        textColor: 'text-amber-900 dark:text-amber-200',
-        bgColor: 'bg-amber-50 dark:bg-amber-950/40 paper-noise color-fragment',
-        borderColor: 'border-amber-200 dark:border-amber-800 brush-border',
-        focusWithinBorderColor: 'focus-within:border-amber-300 dark:focus-within:border-amber-700',
-        typingDotColor: 'bg-amber-500 dark:bg-amber-400',
+        name: "Perspectiva",
+        description: "Análisis reflexivo y exploración profunda del caso clínico",
+        icon: Eye,
+        textColor: 'text-clarity-blue-800 dark:text-clarity-blue-200',
+        bgColor: 'bg-clarity-blue-50 dark:bg-clarity-blue-950/40',
+        borderColor: 'border-clarity-blue-200 dark:border-clarity-blue-800',
+        focusWithinBorderColor: 'focus-within:border-clarity-blue-400 dark:focus-within:border-clarity-blue-600',
+        typingDotColor: 'bg-clarity-blue-500 dark:bg-clarity-blue-400',
         button: {
-            bg: 'bg-amber-200 dark:bg-amber-900/50',
-            hoverBg: 'hover:bg-amber-300 dark:hover:bg-amber-800/60',
-            text: 'text-amber-900 dark:text-amber-100',
+            bg: 'bg-clarity-blue-100 dark:bg-clarity-blue-900/50',
+            hoverBg: 'hover:bg-clarity-blue-200 dark:hover:bg-clarity-blue-800/60',
+            text: 'text-clarity-blue-900 dark:text-clarity-blue-100',
         },
         ghostButton: {
-            text: 'text-amber-800 dark:text-amber-200',
-            hoverBg: 'hover:bg-amber-100 dark:hover:bg-amber-900/40',
+            text: 'text-clarity-blue-700 dark:text-clarity-blue-300',
+            hoverBg: 'hover:bg-clarity-blue-100 dark:hover:bg-clarity-blue-900/40',
         }
     },
-    // Iteration: Clínico → sage/olive cream (lime family)
+    // Aurora Facet: Memoria (Documentación Clínica) - Serene Teal
+    // Mantiene clave 'clinico' para compatibilidad con backend
     clinico: {
-        name: "Documentación Clínica Especializada",
-        description: "Elaboración de documentación con estándares clínicos",
-        icon: Stethoscope,
-        textColor: 'text-lime-900 dark:text-lime-200',
-        bgColor: 'bg-lime-50 dark:bg-lime-950/40 paper-noise color-fragment',
-        borderColor: 'border-lime-200 dark:border-lime-800 brush-border',
-        focusWithinBorderColor: 'focus-within:border-lime-200 dark:focus-within:border-lime-700',
-        typingDotColor: 'bg-lime-600 dark:bg-lime-400',
+        name: "Memoria",
+        description: "Documentación estructurada y síntesis clínica profesional",
+        icon: Notebook,
+        textColor: 'text-serene-teal-800 dark:text-serene-teal-200',
+        bgColor: 'bg-serene-teal-50 dark:bg-serene-teal-950/40',
+        borderColor: 'border-serene-teal-200 dark:border-serene-teal-800',
+        focusWithinBorderColor: 'focus-within:border-serene-teal-400 dark:focus-within:border-serene-teal-600',
+        typingDotColor: 'bg-serene-teal-500 dark:bg-serene-teal-400',
         button: {
-            bg: 'bg-lime-200 dark:bg-lime-900/50',
-            hoverBg: 'hover:bg-lime-300 dark:hover:bg-lime-800/60',
-            text: 'text-lime-900 dark:text-lime-100',
+            bg: 'bg-serene-teal-100 dark:bg-serene-teal-900/50',
+            hoverBg: 'hover:bg-serene-teal-200 dark:hover:bg-serene-teal-800/60',
+            text: 'text-serene-teal-900 dark:text-serene-teal-100',
         },
         ghostButton: {
-            text: 'text-lime-800 dark:text-lime-200',
-            hoverBg: 'hover:bg-lime-50 dark:hover:bg-lime-900/40',
+            text: 'text-serene-teal-700 dark:text-serene-teal-300',
+            hoverBg: 'hover:bg-serene-teal-100 dark:hover:bg-serene-teal-900/40',
         }
     },
-    // Iteration: Académico → taupe/stone cream (earthy, dark academic)
+    // Aurora Facet: Evidencia (Investigación Académica) - Academic Plum
+    // Mantiene clave 'academico' para compatibilidad con backend
     academico: {
-        name: "Revisión de Literatura Científica",
-        description: "Integración de evidencia empírica y literatura revisada por pares",
-        icon: BookOpen,
-        textColor: 'text-stone-700 dark:text-stone-200',
-        bgColor: 'bg-stone-50 dark:bg-stone-900/40 paper-noise color-fragment',
-        borderColor: 'border-stone-200 dark:border-stone-700 brush-border',
-        focusWithinBorderColor: 'focus-within:border-stone-200 dark:focus-within:border-stone-600',
-        typingDotColor: 'bg-stone-500 dark:bg-stone-300',
+        name: "Evidencia",
+        description: "Investigación científica y validación empírica rigurosa",
+        icon: Microscope,
+        textColor: 'text-academic-plum-800 dark:text-academic-plum-200',
+        bgColor: 'bg-academic-plum-50 dark:bg-academic-plum-950/40',
+        borderColor: 'border-academic-plum-200 dark:border-academic-plum-800',
+        focusWithinBorderColor: 'focus-within:border-academic-plum-400 dark:focus-within:border-academic-plum-600',
+        typingDotColor: 'bg-academic-plum-500 dark:bg-academic-plum-400',
         button: {
-            bg: 'bg-stone-200 dark:bg-stone-800/50',
-            hoverBg: 'hover:bg-stone-300 dark:hover:bg-stone-700/60',
-            text: 'text-stone-900 dark:text-stone-100',
+            bg: 'bg-academic-plum-100 dark:bg-academic-plum-900/50',
+            hoverBg: 'hover:bg-academic-plum-200 dark:hover:bg-academic-plum-800/60',
+            text: 'text-academic-plum-900 dark:text-academic-plum-100',
         },
         ghostButton: {
-            text: 'text-stone-800 dark:text-stone-200',
-            hoverBg: 'hover:bg-stone-50 dark:hover:bg-stone-800/40',
+            text: 'text-academic-plum-700 dark:text-academic-plum-300',
+            hoverBg: 'hover:bg-academic-plum-100 dark:hover:bg-academic-plum-900/40',
         }
     },
+    // Orquestador - Neutral palette (Mineral Gray / Ash)
     orquestador: {
         name: "Sistema de Coordinación",
-        description: "Sistema de coordinación multi-agente",
-        icon: Zap,
-        // Neutral warm stone to sit between amber and cool agents
-        textColor: 'text-stone-800 dark:text-stone-200',
-        bgColor: 'bg-stone-100 dark:bg-stone-900/40 paper-noise color-fragment',
-        borderColor: 'border-stone-200 dark:border-stone-700 brush-border',
-        focusWithinBorderColor: 'focus-within:border-stone-300 dark:focus-within:border-stone-600',
-        typingDotColor: 'bg-stone-500 dark:bg-stone-300',
+        description: "Coordinación inteligente entre especialistas",
+        icon: Lightning,
+        textColor: 'text-deep-charcoal dark:text-mineral-gray',
+        bgColor: 'bg-ash dark:bg-gray-900/40',
+        borderColor: 'border-mineral-gray dark:border-gray-700',
+        focusWithinBorderColor: 'focus-within:border-mineral-gray dark:focus-within:border-gray-600',
+        typingDotColor: 'bg-mineral-gray dark:bg-gray-400',
         button: {
-            bg: 'bg-stone-200 dark:bg-stone-800/50',
-            hoverBg: 'hover:bg-stone-300 dark:hover:bg-stone-700/60',
-            text: 'text-stone-900 dark:text-stone-100',
+            bg: 'bg-mineral-gray/20 dark:bg-gray-800/50',
+            hoverBg: 'hover:bg-mineral-gray/30 dark:hover:bg-gray-700/60',
+            text: 'text-deep-charcoal dark:text-gray-100',
         },
         ghostButton: {
-            text: 'text-stone-700 dark:text-stone-200',
-            hoverBg: 'hover:bg-stone-200 dark:hover:bg-stone-800/40',
+            text: 'text-mineral-gray dark:text-gray-300',
+            hoverBg: 'hover:bg-ash dark:hover:bg-gray-800/40',
         }
     },
+    // Desconocido - Neutral palette
     desconocido: {
         name: "Sistema de Asistencia Clínica",
         description: "Procesando consulta clínica...",
-        icon: Brain,
-        textColor: 'text-stone-800 dark:text-stone-200',
-        bgColor: 'bg-stone-100 dark:bg-stone-900/40 paper-noise color-fragment',
-        borderColor: 'border-stone-200 dark:border-stone-700 brush-border',
-        focusWithinBorderColor: 'focus-within:border-stone-300 dark:focus-within:border-stone-600',
-        typingDotColor: 'bg-stone-500 dark:bg-stone-300',
+        icon: CircleNotch,
+        textColor: 'text-deep-charcoal dark:text-mineral-gray',
+        bgColor: 'bg-ash dark:bg-gray-900/40',
+        borderColor: 'border-mineral-gray dark:border-gray-700',
+        focusWithinBorderColor: 'focus-within:border-mineral-gray dark:focus-within:border-gray-600',
+        typingDotColor: 'bg-mineral-gray dark:bg-gray-400',
         button: {
-            bg: 'bg-stone-700 dark:bg-stone-800',
-            hoverBg: 'hover:bg-stone-800 dark:hover:bg-stone-700',
-            text: 'text-stone-50 dark:text-stone-100',
+            bg: 'bg-deep-charcoal dark:bg-gray-800',
+            hoverBg: 'hover:bg-deep-charcoal/90 dark:hover:bg-gray-700',
+            text: 'text-cloud-white dark:text-gray-100',
         },
         ghostButton: {
-            text: 'text-stone-700 dark:text-stone-200',
-            hoverBg: 'hover:bg-stone-200 dark:hover:bg-stone-800/40',
+            text: 'text-mineral-gray dark:text-gray-300',
+            hoverBg: 'hover:bg-ash dark:hover:bg-gray-800/40',
         }
     }
 };

@@ -1,17 +1,17 @@
 /**
- * Puente de Integración del Orquestador Dinámico con HopeAI
- * 
+ * Puente de Integración del Orquestador Dinámico con Aurora
+ *
  * Sistema que integra el nuevo Orquestador Dinámico con la arquitectura
- * existente de HopeAI, manteniendo compatibilidad hacia atrás mientras
+ * existente de Aurora, manteniendo compatibilidad hacia atrás mientras
  * introduce las nuevas capacidades de selección dinámica de herramientas.
- * 
+ *
  * Responsabilidades:
  * - Adaptación de interfaces entre sistemas legacy y nuevos
  * - Gestión de transiciones graduales
  * - Mantenimiento de compatibilidad con agentes existentes
  * - Logging y monitoreo de la integración
- * 
- * @author HopeAI Development Team
+ *
+ * @author Aurora Development Team
  * @version 2.0.0
  */
 
@@ -71,8 +71,8 @@ interface BridgePerformanceMetrics {
 
 /**
  * Puente de Integración del Orquestador Dinámico
- * 
- * Actúa como capa de abstracción entre el sistema HopeAI existente
+ *
+ * Actúa como capa de abstracción entre el sistema Aurora existente
  * y el nuevo Orquestador Dinámico, permitiendo una migración gradual
  * y manteniendo compatibilidad con componentes legacy.
  */
@@ -115,8 +115,8 @@ export class HopeAIOrchestrationBridge {
       errorRate: 0,
       toolSelectionAccuracy: 0
     };
-    
-    this.log('info', 'HopeAI Orchestration Bridge inicializado');
+
+    this.log('info', 'Aurora Orchestration Bridge inicializado');
   }
 
   /**

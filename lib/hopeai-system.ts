@@ -79,7 +79,7 @@ export class HopeAISystem {
           asyncRecommendations: false,          // 🚀 Performance optimization
           toolContinuityThreshold: 3,         // 🛠️ Smart tool persistence
           dominantTopicsUpdateInterval: 5,    // 📊 Optimized update frequency
-          maxToolsPerSession: 8,
+          maxToolsPerSession: 20,
           confidenceThreshold: 0.75,
           sessionTimeoutMinutes: 60,
           logLevel: 'info'
@@ -785,21 +785,21 @@ export class HopeAISystem {
    */
   private createAgentConfirmationPrompt(targetAgent: string, originalMessage: string): string {
     const agentConfirmationPrompts = {
-      socratico: `El usuario me ha solicitado activar el modo socrático con el mensaje: "${originalMessage}". 
+      socratico: `El usuario me ha solicitado activar el modo socrático con el mensaje: "${originalMessage}".
 
-Como Supervisor Clínico, núcleo reflexivo de la plataforma integral HopeAI, debo confirmar mi activación de manera cálida y contextual. Mi respuesta debe reflejar naturalmente mi capacidad de exploración reflexiva profunda, desarrollo de insights terapéuticos y análisis de casos clínicos, mientras mantengo una conciencia implícita de formar parte de un ecosistema más amplio de apoyo clínico. Luego debo hacer una pregunta reflexiva que invite al usuario a comenzar nuestra exploración socrática.
+Como Supervisor Clínico, núcleo reflexivo de la plataforma integral Aurora, debo confirmar mi activación de manera cálida y contextual. Mi respuesta debe reflejar naturalmente mi capacidad de exploración reflexiva profunda, desarrollo de insights terapéuticos y análisis de casos clínicos, mientras mantengo una conciencia implícita de formar parte de un ecosistema más amplio de apoyo clínico. Luego debo hacer una pregunta reflexiva que invite al usuario a comenzar nuestra exploración socrática.
 
 Por favor, genera una confirmación natural y empática que refleje mi personalidad socrática integrada.`,
       
       clinico: `El usuario me ha solicitado activar el modo clínico con el mensaje: "${originalMessage}".
 
-Como Especialista en Documentación, núcleo organizacional de la plataforma integral HopeAI, debo confirmar mi activación de manera profesional y estructurada. Mi respuesta debe reflejar naturalmente mi capacidad de documentación clínica, resúmenes de sesión, notas SOAP y estructuración de información profesional, mientras mantengo una conciencia implícita de formar parte de un ecosistema que integra exploración reflexiva, documentación estructurada y validación empírica. Luego debo preguntar específicamente qué tipo de documentación o tarea clínica necesita.
+Como Especialista en Documentación, núcleo organizacional de la plataforma integral Aurora, debo confirmar mi activación de manera profesional y estructurada. Mi respuesta debe reflejar naturalmente mi capacidad de documentación clínica, resúmenes de sesión, notas SOAP y estructuración de información profesional, mientras mantengo una conciencia implícita de formar parte de un ecosistema que integra exploración reflexiva, documentación estructurada y validación empírica. Luego debo preguntar específicamente qué tipo de documentación o tarea clínica necesita.
 
 Por favor, genera una confirmación clara y profesional que refleje mi enfoque clínico organizativo integrado.`,
       
       academico: `El usuario me ha solicitado activar el modo académico con el mensaje: "${originalMessage}".
 
-Como HopeAI Académico, núcleo científico de la plataforma integral HopeAI, debo confirmar mi activación de manera rigurosa y científica. Mi respuesta debe reflejar naturalmente mi capacidad de búsqueda de investigación científica, evidencia empírica y revisión de literatura especializada, mientras mantengo una conciencia implícita de formar parte de un ecosistema que conecta rigor científico con exploración reflexiva y documentación profesional. Luego debo preguntar específicamente qué tema de investigación o evidencia científica necesita explorar.
+Como Aurora Académico, núcleo científico de la plataforma integral Aurora, debo confirmar mi activación de manera rigurosa y científica. Mi respuesta debe reflejar naturalmente mi capacidad de búsqueda de investigación científica, evidencia empírica y revisión de literatura especializada, mientras mantengo una conciencia implícita de formar parte de un ecosistema que conecta rigor científico con exploración reflexiva y documentación profesional. Luego debo preguntar específicamente qué tema de investigación o evidencia científica necesita explorar.
 
 Por favor, genera una confirmación precisa y académica que refleje mi enfoque científico integrado.`
     }

@@ -4,19 +4,24 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Plus, 
-  Clock, 
-  Brain, 
-  BookOpen, 
-  Stethoscope, 
-  MessageSquare,
-  Trash2,
-  RefreshCw,
-  Zap,
-  Menu,
-  Users
-} from "lucide-react"
+import {
+  PlusIcon,
+  ClockIcon,
+  ChatsCircleIcon,
+  TrashIcon,
+  ArrowClockwiseIcon,
+  FoldersIcon,
+  EyeIcon,
+  NotebookIcon,
+  MicroscopeIcon,
+  LightningIcon
+} from "@phosphor-icons/react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -54,10 +59,10 @@ interface SidebarProps {
 
 // Mapeo de agentes para compatibilidad con el sistema anterior
 const agentIcons = {
-  'socratico': Brain,
-  'clinico': Stethoscope,
-  'academico': BookOpen,
-  'orquestador': Zap,
+  'socratico': EyeIcon,
+  'clinico': NotebookIcon,
+  'academico': MicroscopeIcon,
+  'orquestador': LightningIcon,
 }
 
 const agentLabels = {
@@ -190,9 +195,9 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
   return (
     <div
       className={cn(
-        "flex flex-col relative backdrop-blur-sm border-r paper-noise overflow-hidden",
-        "bg-gradient-to-b from-secondary/40 via-secondary/30 to-secondary/20",
-        "border-border/60 shadow-sm h-full",
+        "flex flex-col relative backdrop-blur-sm overflow-hidden",
+        "bg-cloud-white border-r border-ash/60",
+        "h-full",
         isOpen ? "w-80" : "w-16",
       )}
       style={{
@@ -201,182 +206,186 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       onMouseEnter={() => !isOpen && onToggle()}
       onMouseLeave={() => isOpen && !shouldPreventAutoClose && onToggle()}
     >
-      {/* Subtle accent line */}
-      <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
-      {/* Header with refined spacing */}
-      <div className="flex flex-col border-b border-border/40 flex-shrink-0 p-3 py-4 gap-4 overflow-visible"> 
-        {/* Toggle button - always visible at left */}
-        <Button 
-          variant="ghost" 
-          size="icon"
-          onClick={onToggle} 
-          className="h-10 w-10 hover:bg-primary/10 transition-all duration-200 hover:scale-105 relative z-10"
-          title={isOpen ? "Cerrar panel lateral" : "Abrir panel lateral"}
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-        
-        {/* Nueva consulta button - siempre renderizado, revelado por ancho */}
-        <Button 
-          onClick={isOpen ? handleNewConversation : onToggle}
-          disabled={isOpen && isCreatingSession}
-          className={cn(
-            "h-12 rounded-xl font-medium",
-            "bg-primary text-white hover:bg-primary/90",
-            "shadow-sm border border-primary/20",
-            isOpen 
-              ? "w-full px-5 gap-3 justify-start" 
-              : "w-10 px-0 justify-center"
-          )}
-          style={{
-            transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 400ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
-          }}
-          title={isOpen ? undefined : "Nueva consulta"}
-        >
-          <Plus className="h-5 w-5 flex-shrink-0" />
-          {isOpen && (
-            <span 
-              className="text-sm whitespace-nowrap overflow-hidden"
-              style={{
-                transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
-              }}
-            >
-              Nueva consulta
-            </span>
-          )}
-        </Button>
+      {/* Navigation Icons - Always visible */}
+      <div className="flex flex-col flex-shrink-0 p-3 py-4 gap-2 overflow-visible border-b border-ash/50">
+        {/* Nueva consulta button */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip open={isOpen ? false : undefined}>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={isOpen ? handleNewConversation : onToggle}
+                disabled={isOpen && isCreatingSession}
+                onMouseEnter={(e) => {
+                  // Prevenir tooltip si está expandido
+                  if (isOpen) {
+                    e.preventDefault()
+                  }
+                }}
+                className={cn(
+                  "h-11 rounded-xl font-medium relative",
+                  "bg-clarity-blue-600 text-white hover:bg-clarity-blue-700",
+                  "shadow-sm",
+                  isOpen
+                    ? "w-full px-4 gap-3 justify-start"
+                    : "w-10 px-0 justify-center"
+                )}
+                style={{
+                  transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 400ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+                }}
+              >
+                <PlusIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
+                {isOpen && (
+                  <span
+                    className="text-sm whitespace-nowrap overflow-hidden"
+                    style={{
+                      transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
+                    }}
+                  >
+                    Nueva consulta
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            {!isOpen && (
+              <TooltipContent side="right" className="font-sans">
+                Nueva consulta
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Consultas (Historial) button */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip open={isOpen ? false : undefined}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setActiveTab('conversations')
+                  if (!isOpen) onToggle()
+                }}
+                onMouseEnter={(e) => {
+                  // Prevenir tooltip si está expandido
+                  if (isOpen) {
+                    e.preventDefault()
+                  }
+                }}
+                className={cn(
+                  "h-11 rounded-xl font-medium relative transition-all duration-200",
+                  isOpen
+                    ? "w-full px-4 gap-3 justify-start"
+                    : "w-10 px-0 justify-center",
+                  activeTab === 'conversations'
+                    ? "bg-clarity-blue-50 text-clarity-blue-600 hover:bg-clarity-blue-100"
+                    : "text-mineral-gray-600 hover:text-deep-charcoal hover:bg-ash"
+                )}
+                style={{
+                  transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 400ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+                }}
+              >
+                {/* Active indicator */}
+                {activeTab === 'conversations' && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-clarity-blue-600 rounded-r-full" />
+                )}
+                <ChatsCircleIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
+                {isOpen && (
+                  <span
+                    className="text-sm whitespace-nowrap overflow-hidden"
+                    style={{
+                      transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
+                    }}
+                  >
+                    Consultas
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            {!isOpen && (
+              <TooltipContent side="right" className="font-sans">
+                Historial de consultas
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Pacientes (Biblioteca) button */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip open={isOpen ? false : undefined}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setActiveTab('patients')
+                  if (!isOpen) onToggle()
+                }}
+                onMouseEnter={(e) => {
+                  // Prevenir tooltip si está expandido
+                  if (isOpen) {
+                    e.preventDefault()
+                  }
+                }}
+                className={cn(
+                  "h-11 rounded-xl font-medium relative transition-all duration-200",
+                  isOpen
+                    ? "w-full px-4 gap-3 justify-start"
+                    : "w-10 px-0 justify-center",
+                  activeTab === 'patients'
+                    ? "bg-clarity-blue-50 text-clarity-blue-600 hover:bg-clarity-blue-100"
+                    : "text-mineral-gray-600 hover:text-deep-charcoal hover:bg-ash"
+                )}
+                style={{
+                  transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 400ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+                }}
+              >
+                {/* Active indicator */}
+                {activeTab === 'patients' && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-clarity-blue-600 rounded-r-full" />
+                )}
+                <FoldersIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
+                {isOpen && (
+                  <span
+                    className="text-sm whitespace-nowrap overflow-hidden"
+                    style={{
+                      transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
+                    }}
+                  >
+                    Casos clínicos
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            {!isOpen && (
+              <TooltipContent side="right" className="font-sans">
+                Casos clínicos
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
-      {/* Section label with refined styling - siempre presente, revelado por ancho */}
-      {isOpen && activeTab === 'conversations' && filteredConversations.length > 0 && (
-        <div 
-          className="px-5 py-3 border-b border-border/30 flex-shrink-0"
-          style={{
-            animation: 'fadeIn 300ms cubic-bezier(0.25, 0.1, 0.25, 1) 250ms both'
-          }}
-        >
-          <span className="text-xs text-muted-foreground font-semibold tracking-wider uppercase whitespace-nowrap">
-            Conversaciones recientes
-          </span>
-        </div>
-      )}
-      
-      {/* Patient library section label */}
-      {isOpen && activeTab === 'patients' && (
-        <div 
-          className="px-5 py-3 border-b border-border/30 flex-shrink-0"
-          style={{
-            animation: 'fadeIn 300ms cubic-bezier(0.25, 0.1, 0.25, 1) 250ms both'
-          }}
-        >
-          <span className="text-xs text-muted-foreground font-semibold tracking-wider uppercase whitespace-nowrap">
-            Biblioteca de Pacientes
-          </span>
-        </div>
-      )}
+      {/* Section header - always rendered, visible only when expanded */}
+      <div
+        className={cn(
+          "px-5 py-3 flex-shrink-0 border-b border-ash/30 overflow-hidden",
+          isOpen ? "h-auto opacity-100" : "h-0 opacity-0"
+        )}
+        style={{
+          transition: 'height 400ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 300ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+        }}
+      >
+        <h2 className="text-xs text-mineral-gray-600 font-sans font-semibold tracking-wider uppercase whitespace-nowrap">
+          {activeTab === 'conversations' ? 'Conversaciones recientes' : 'Casos clínicos'}
+        </h2>
+      </div>
 
-      {/* Tab Navigation - solo visible cuando está expandido */}
-      {isOpen && (
-        <div 
-          className="relative flex border-b border-border/50 mx-5 my-2 flex-shrink-0"
-          style={{
-            animation: 'fadeIn 300ms cubic-bezier(0.25, 0.1, 0.25, 1) 200ms both'
-          }}
-        >
-          {/* Sliding indicator */}
-          <div 
-            className={cn(
-              "absolute bottom-0 h-0.5 bg-primary",
-              activeTab === 'conversations' ? "left-0 w-1/2" : "left-1/2 w-1/2"
-            )}
-            style={{
-              transition: 'left 300ms cubic-bezier(0.25, 0.1, 0.25, 1), width 300ms cubic-bezier(0.25, 0.1, 0.25, 1)'
-            }}
-          />
-          <Button
-            variant="ghost"
-            className={cn(
-              "flex-1 rounded-none h-10 text-sm font-medium",
-              activeTab === 'conversations'
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-            )}
-            style={{
-              transition: 'color 200ms cubic-bezier(0.25, 0.1, 0.25, 1), background-color 200ms cubic-bezier(0.25, 0.1, 0.25, 1)'
-            }}
-            onClick={() => setActiveTab('conversations')}
-          >
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Consultas
-          </Button>
-          <Button
-            variant="ghost"
-            className={cn(
-              "flex-1 rounded-none h-10 text-sm font-medium",
-              activeTab === 'patients'
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-            )}
-            style={{
-              transition: 'color 200ms cubic-bezier(0.25, 0.1, 0.25, 1), background-color 200ms cubic-bezier(0.25, 0.1, 0.25, 1)'
-            }}
-            onClick={() => setActiveTab('patients')}
-          >
-            <Users className="mr-2 h-4 w-4" />
-            Pacientes
-          </Button>
-        </div>
-      )}
-      
-      {/* Collapsed state icons - commented out per user request */}
-      {/* {!isOpen && (
-        <div className="flex flex-col items-center gap-1 py-2 border-b border-border/50"> 
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              title="Consultas"
-              onClick={() => handleCollapsedOpenTo('conversations')}
-              className={cn(
-                "h-10 w-10 transition-all duration-200 rounded-lg",
-                activeTab === 'conversations' 
-                  ? 'text-primary bg-primary/10' 
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-              )}
-            >
-              <MessageSquare className="h-5 w-5" />
-            </Button>
-            {activeTab === 'conversations' && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full -ml-3" />
-            )}
-          </div>
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              title="Pacientes"
-              onClick={() => handleCollapsedOpenTo('patients')}
-              className={cn(
-                "h-10 w-10 transition-all duration-200 rounded-lg",
-                activeTab === 'patients' 
-                  ? 'text-primary bg-primary/10' 
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-              )}
-            >
-              <Users className="h-5 w-5" />
-            </Button>
-            {activeTab === 'patients' && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full -ml-3" />
-            )}
-          </div>
-        </div>
-      )} */}
-
-      {/* Tab Content */}
-      <div className={cn(
-        "flex-1 overflow-hidden",
-        !isOpen && "pointer-events-none opacity-0"
-      )}>
+      {/* Tab Content - always rendered, visibility controlled by clip-path */}
+      <div
+        className="flex-1 overflow-hidden relative"
+        style={{
+          clipPath: isOpen ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
+          transition: 'clip-path 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+        }}
+      >
           {activeTab === 'conversations' ? (
             <ScrollArea className="h-full">
               <div onScroll={handleScroll} className="h-full overflow-auto">
@@ -384,15 +393,15 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 {isLoading && isOpen ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="flex flex-col items-center gap-3">
-                      <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                      <ArrowClockwiseIcon className="h-5 w-5 animate-spin text-clarity-blue-600" weight="bold" />
                       <span className="text-sm text-muted-foreground font-medium">Cargando conversaciones...</span>
                     </div>
                   </div>
                 ) : filteredConversations.length === 0 ? (
                   isOpen && (
-                    <div className="text-center py-12 px-4 text-muted-foreground">
-                      <div className="bg-secondary/40 rounded-xl p-6 border border-border/40">
-                        <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                    <div className="text-center py-12 px-4 text-mineral-gray-600">
+                      <div className="bg-ash rounded-xl p-6">
+                        <ChatsCircleIcon className="h-10 w-10 mx-auto mb-3 opacity-40" weight="duotone" />
                         <p className="text-sm font-medium">
                           No hay conversaciones aún
                         </p>
@@ -413,34 +422,36 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                           className={cn(
                             "w-full transition-all duration-200 relative overflow-hidden",
                             isOpen ? "justify-start p-4 h-auto text-left rounded-xl" : "justify-center p-2 h-10 rounded-lg",
-                            selectedConversation === conversation.sessionId 
-                              ? "bg-primary/10 hover:bg-primary/12 shadow-sm border border-primary/20" 
-                              : "hover:bg-secondary/80 hover:shadow-sm border border-transparent",
+                            selectedConversation === conversation.sessionId
+                              ? "bg-clarity-blue-50 hover:bg-clarity-blue-100 shadow-sm"
+                              : "hover:bg-ash hover:shadow-sm",
                           )}
                           onClick={() => handleConversationSelect(conversation.sessionId)}
                           title={!isOpen ? conversation.title : undefined}
                         >
                           {/* Accent border on active */}
                           {selectedConversation === conversation.sessionId && isOpen && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full" />
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-clarity-blue-600 rounded-r-full" />
                           )}
                           {isOpen ? (
-                            <div className="flex items-start gap-3 w-full pl-3">
+                            <div className="flex items-start gap-3 w-full pl-3 min-w-0">
                               <div className={cn(
                                 "mt-1 w-2 h-2 rounded-full flex-shrink-0",
                                 agentConfig.button.bg,
                                 "ring-2 ring-background"
                               )} />
                               <div className="flex-1 min-w-0">
-                                <div className="font-sans text-sm truncate leading-snug text-foreground font-medium">
+                                <div className="font-sans text-sm truncate leading-snug text-foreground font-medium min-w-0">
                                   {conversation.title}
                                 </div>
-                                <div className="text-xs text-muted-foreground mt-1.5 truncate flex items-center gap-1.5">
-                                  <Clock className="h-3 w-3 opacity-60" />
-                                  {formatDistanceToNow(new Date(conversation.lastUpdated), { 
-                                    addSuffix: true, 
-                                    locale: es 
-                                  })}
+                                <div className="text-xs text-muted-foreground mt-1.5 min-w-0 flex items-center gap-1.5">
+                                  <ClockIcon className="h-3 w-3 opacity-60 flex-shrink-0" weight="bold" />
+                                  <span className="truncate">
+                                    {formatDistanceToNow(new Date(conversation.lastUpdated), {
+                                      addSuffix: true,
+                                      locale: es
+                                    })}
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -462,7 +473,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                                 )}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <TrashIcon className="h-4 w-4" weight="bold" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -492,8 +503,8 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 
                 {isLoadingMore && (
                   <div className="flex items-center justify-center py-6">
-                    <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/40 px-4 py-2.5 rounded-full border border-border/40">
-                      <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                    <div className="flex items-center gap-2.5 text-sm text-mineral-gray-600 bg-cloud-white px-4 py-2.5 rounded-full border border-ash">
+                      <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-clarity-blue-600" weight="bold" />
                       <span className="font-medium">Cargando más...</span>
                     </div>
                   </div>

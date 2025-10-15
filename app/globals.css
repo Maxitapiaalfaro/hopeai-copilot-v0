@@ -6,7 +6,7 @@
   .text-balance {
     text-wrap: balance;
   }
-  
+
   /* Ocultar scrollbar en todos los navegadores */
   .scrollbar-hide {
     /* Firefox */
@@ -14,83 +14,101 @@
     /* IE and Edge */
     -ms-overflow-style: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     /* Chrome, Safari and Opera */
     display: none;
+  }
+
+  /* Animación de cursor tipo teclado - natural, lenta y pausada */
+  @keyframes cursor-blink {
+    0%, 45% {
+      opacity: 1;
+    }
+    50%, 95% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  .animate-cursor-blink {
+    animation: cursor-blink 1.2s ease-in-out infinite;
   }
 }
 
 @layer base {
   :root {
-    /* Align base UI with HopeAI cream/sage palette to avoid plain white/black */
-    --background: 40 33% 96%;
-    --foreground: 30 20% 25%;
-    --card: 40 50% 98%;
-    --card-foreground: 30 20% 25%;
-    --popover: 40 50% 98%;
-    --popover-foreground: 30 20% 25%;
-    --primary: 83 15% 56%;
-    --primary-foreground: 30 20% 20%;
-    --secondary: 40 33% 92%;
-    --secondary-foreground: 30 20% 25%;
-    --muted: 40 33% 92%;
-    --muted-foreground: 30 20% 45%;
-    --accent: 83 15% 56%;
-    --accent-foreground: 30 20% 20%;
+    /* Aurora Palette - Light Mode */
+    --background: 210 17% 98%; /* Cloud White #F8F9FA */
+    --foreground: 210 11% 25%; /* Deep Charcoal #343A40 */
+    --card: 210 17% 98%;
+    --card-foreground: 210 11% 25%;
+    --popover: 210 17% 98%;
+    --popover-foreground: 210 11% 25%;
+    --primary: 211 100% 50%; /* Clarity Blue #0D6EFD */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 17% 93%; /* Ash #E9ECEF */
+    --secondary-foreground: 210 11% 25%;
+    --muted: 210 17% 93%;
+    --muted-foreground: 210 11% 49%; /* Mineral Gray #6C757D */
+    --accent: 211 100% 50%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 40 20% 88%;
-    --input: 40 20% 88%;
-    --ring: 83 15% 56%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --border: 210 17% 93%; /* Ash */
+    --input: 210 17% 93%;
+    --ring: 211 100% 50%;
+    --chart-1: 211 100% 50%; /* Clarity Blue */
+    --chart-2: 162 76% 47%; /* Serene Teal */
+    --chart-3: 262 48% 51%; /* Academic Plum */
+    --chart-4: 210 11% 49%; /* Mineral Gray */
+    --chart-5: 210 11% 25%; /* Deep Charcoal */
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 210 17% 98%;
+    --sidebar-foreground: 210 11% 25%;
+    --sidebar-primary: 211 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 17% 93%;
+    --sidebar-accent-foreground: 210 11% 25%;
+    --sidebar-border: 210 17% 93%;
+    --sidebar-ring: 211 100% 50%;
   }
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Aurora Palette - Dark Mode */
+    --background: 210 11% 15%; /* Dark Deep Charcoal */
+    --foreground: 210 17% 98%; /* Light Cloud White */
+    --card: 210 11% 15%;
+    --card-foreground: 210 17% 98%;
+    --popover: 210 11% 15%;
+    --popover-foreground: 210 17% 98%;
+    --primary: 211 100% 65%; /* Lighter Clarity Blue for dark mode */
+    --primary-foreground: 210 11% 15%;
+    --secondary: 210 11% 20%; /* Darker Ash */
+    --secondary-foreground: 210 17% 98%;
+    --muted: 210 11% 20%;
+    --muted-foreground: 210 11% 65%; /* Lighter Mineral Gray */
+    --accent: 211 100% 65%;
+    --accent-foreground: 210 11% 15%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 210 17% 98%;
+    --border: 210 11% 25%;
+    --input: 210 11% 25%;
+    --ring: 211 100% 65%;
+    --chart-1: 211 100% 65%; /* Clarity Blue */
+    --chart-2: 162 76% 55%; /* Serene Teal */
+    --chart-3: 262 48% 65%; /* Academic Plum */
+    --chart-4: 210 11% 65%; /* Mineral Gray */
+    --chart-5: 210 17% 85%; /* Light Gray */
+    --sidebar-background: 210 11% 15%;
+    --sidebar-foreground: 210 17% 98%;
+    --sidebar-primary: 211 100% 65%;
+    --sidebar-primary-foreground: 210 11% 15%;
+    --sidebar-accent: 210 11% 20%;
+    --sidebar-accent-foreground: 210 17% 98%;
+    --sidebar-border: 210 11% 25%;
+    --sidebar-ring: 211 100% 65%;
   }
 }
 

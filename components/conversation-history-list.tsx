@@ -50,27 +50,30 @@ interface ConversationHistoryListProps {
   className?: string
 }
 
-// Mapeo de agentes a iconos y colores
+// Aurora Branding: Import centralized agent visual config
+import { getAgentVisualConfig } from "@/config/agent-visual-config"
+
+// Legacy mapping for backward compatibility - now uses Aurora palette
 const agentConfig = {
   'socratico': {
     icon: Brain,
-    label: 'Supervisor Clínico',
-    color: 'bg-blue-100 text-blue-800 border-blue-200'
+    label: 'Perspectiva',
+    color: 'bg-clarity-blue-100 text-clarity-blue-800 border-clarity-blue-200'
   },
   'clinico': {
     icon: FileText,
-    label: 'Especialista en Documentación',
-    color: 'bg-green-100 text-green-800 border-green-200'
+    label: 'Memoria',
+    color: 'bg-serene-teal-100 text-serene-teal-800 border-serene-teal-200'
   },
   'academico': {
     icon: Microscope,
-    label: 'Investigador Académico',
-    color: 'bg-purple-100 text-purple-800 border-purple-200'
+    label: 'Evidencia',
+    color: 'bg-academic-plum-100 text-academic-plum-800 border-academic-plum-200'
   },
   'orquestador': {
     icon: Zap,
-    label: 'Orquestador',
-    color: 'bg-orange-100 text-orange-800 border-orange-200'
+    label: 'Coordinación',
+    color: 'bg-mineral-gray/20 text-deep-charcoal border-mineral-gray'
   }
 } as const
 
