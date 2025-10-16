@@ -118,7 +118,7 @@ export class SessionMetricsComprehensiveTracker {
   }
 
   private constructor() {
-    console.log('📊 [SessionMetrics] Comprehensive tracker initialized');
+    // 🔒 SECURITY: Console logging disabled in production
   }
 
   /**
@@ -153,8 +153,8 @@ export class SessionMetricsComprehensiveTracker {
     };
     
     this.activeInteractions.set(interactionId, interaction);
-    
-    console.log(`📊 [SessionMetrics] Started tracking interaction: ${interactionId}`);
+
+    // 🔒 SECURITY: Console logging disabled in production
     return interactionId;
   }
 
@@ -181,8 +181,8 @@ export class SessionMetricsComprehensiveTracker {
     if (!interaction.behavioral) interaction.behavioral = {} as any;
     interaction.behavioral!.agentSwitched = previousAgent ? previousAgent !== agent : false;
     interaction.behavioral!.previousAgent = previousAgent;
-    
-    console.log(`🎯 [SessionMetrics] Orchestration complete for ${interactionId}: ${agent} with ${tools.length} tools`);
+
+    // 🔒 SECURITY: Console logging disabled in production
   }
 
   /**
@@ -208,8 +208,8 @@ export class SessionMetricsComprehensiveTracker {
       } as any;
     }
     interaction.tokens!.contextTokens = contextTokens;
-    
-    console.log(`🤖 [SessionMetrics] Model call started for ${interactionId}: ${model} with ${contextTokens} context tokens`);
+
+    // 🔒 SECURITY: Console logging disabled in production
   }
 
   /**
@@ -252,8 +252,8 @@ export class SessionMetricsComprehensiveTracker {
     if (interaction.behavioral) {
       interaction.behavioral.responseLength = responseText.length;
     }
-    
-    console.log(`✅ [SessionMetrics] Model response complete for ${interactionId}: ${inputTokens}→${outputTokens} tokens, $${(interaction.tokens.estimatedCost || 0).toFixed(6)} cost`);
+
+    // 🔒 SECURITY: Console logging disabled in production
   }
 
   /**
@@ -287,9 +287,9 @@ export class SessionMetricsComprehensiveTracker {
     
     // Clean up active tracking
     this.activeInteractions.delete(interactionId);
-    
-    console.log(`🎉 [SessionMetrics] Interaction completed: ${interactionId} | ${interaction.timing.totalResponseTime}ms | ${interaction.tokens.totalTokens} tokens | $${(interaction.tokens.estimatedCost || 0).toFixed(6)}`);
-    
+
+    // 🔒 SECURITY: Console logging disabled in production
+
     return completedInteraction;
   }
 

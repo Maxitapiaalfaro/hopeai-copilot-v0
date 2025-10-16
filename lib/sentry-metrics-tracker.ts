@@ -71,7 +71,7 @@ export class SentryMetricsTracker {
   private initializeMetricsTracking(): void {
     // Las métricas ya están habilitadas en la configuración de Sentry
     // Solo necesitamos asegurar que el sistema esté listo
-    console.log('📊 Sistema de métricas Sentry inicializado');
+    // 🔒 SECURITY: Console logging disabled in production
   }
 
   /**
@@ -224,12 +224,7 @@ export class SentryMetricsTracker {
       this.sessionMessageCounts.set(sessionId, currentCount + 1);
       this.sessionLastActivity.set(sessionId, timestamp);
 
-      console.log('📊 Mensaje registrado en métricas:', {
-        userId,
-        agentType,
-        messageLength,
-        weekKey
-      });
+      // 🔒 SECURITY: Console logging disabled in production
 
     } catch (error) {
       console.error('❌ Error al registrar métrica de mensaje:', error);
@@ -269,12 +264,7 @@ export class SentryMetricsTracker {
         }
       });
 
-      console.log('📊 Sesión iniciada para tracking:', {
-        userId,
-        sessionId,
-        agentType,
-        startTime
-      });
+      // 🔒 SECURITY: Console logging disabled in production
 
     } catch (error) {
       console.error('❌ Error al iniciar tracking de sesión:', error);
@@ -397,14 +387,7 @@ export class SentryMetricsTracker {
           }
         });
 
-        console.log('📊 Sesión finalizada - métricas registradas:', {
-          userId,
-          sessionId,
-          totalDurationSeconds,
-          messageCount,
-          agentSwitches,
-          weekKey
-        });
+        // 🔒 SECURITY: Console logging disabled in production
       }
 
       // Limpiar datos de la sesión
@@ -479,14 +462,7 @@ export class SentryMetricsTracker {
         }
       });
 
-      console.log('📊 Cambio de agente registrado:', {
-        userId,
-        sessionId,
-        fromAgent,
-        toAgent,
-        switchType,
-        confidence
-      });
+      // 🔒 SECURITY: Console logging disabled in production
 
     } catch (error) {
       console.error('❌ Error al registrar cambio de agente:', error);

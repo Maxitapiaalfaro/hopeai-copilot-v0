@@ -1,0 +1,193 @@
+{
+  "timestamp": "2025-10-16T01:03:32.129Z",
+  "totals": {
+    "passed": 26,
+    "failed": 0,
+    "warnings": 0,
+    "total": 26
+  },
+  "details": [
+    {
+      "test": "Archivo lib/hopeai-system.ts",
+      "status": "PASS",
+      "details": "Tamaño 70.07 KB",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.115Z"
+    },
+    {
+      "test": "Archivo lib/intelligent-intent-router.ts",
+      "status": "PASS",
+      "details": "Tamaño 57.42 KB",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.116Z"
+    },
+    {
+      "test": "Archivo lib/clinical-agent-router.ts",
+      "status": "PASS",
+      "details": "Tamaño 71.25 KB",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.117Z"
+    },
+    {
+      "test": "Archivo types/clinical-types.ts",
+      "status": "PASS",
+      "details": "Tamaño 7.29 KB",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.117Z"
+    },
+    {
+      "test": "Definición del agente \"roleplay\"",
+      "status": "PASS",
+      "details": "El agente debe registrarse en ClinicalAgentRouter",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.119Z"
+    },
+    {
+      "test": "Identidad Paciente Simulado",
+      "status": "PASS",
+      "details": "La instrucción base debe reflejar la identidad del roleplay",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.119Z"
+    },
+    {
+      "test": "Actualización de RoleplayPatientState",
+      "status": "PASS",
+      "details": "Las instrucciones deben indicar cómo evolucionar el estado interno",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.119Z"
+    },
+    {
+      "test": "Resguardo de confidencialidad en roleplay",
+      "status": "PASS",
+      "details": "El agente debe mantener límites clínicos explícitos",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.120Z"
+    },
+    {
+      "test": "Función activar_modo_roleplay",
+      "status": "PASS",
+      "details": "La función debe existir en la lista de intenciones",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.121Z"
+    },
+    {
+      "test": "Parámetros de roleplay",
+      "status": "PASS",
+      "details": "Se esperan parámetros dedicados al contexto de simulación",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.121Z"
+    },
+    {
+      "test": "Mapeo agente roleplay",
+      "status": "PASS",
+      "details": "El router debe mapear la intención al agente roleplay",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.121Z"
+    },
+    {
+      "test": "Pesos de confianza para roleplay",
+      "status": "PASS",
+      "details": "El cálculo de confianza contempla el nuevo modo",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.122Z"
+    },
+    {
+      "test": "Contexto enriquecido roleplay",
+      "status": "PASS",
+      "details": "EnrichedContext expone perfil y estado del paciente simulado",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.122Z"
+    },
+    {
+      "test": "Método ensureRoleplayContext",
+      "status": "PASS",
+      "details": "Debe existir el método que hidrata el contexto de roleplay",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.123Z"
+    },
+    {
+      "test": "Método buildRoleplayContext",
+      "status": "PASS",
+      "details": "Se requiere la construcción inicial del contexto",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.124Z"
+    },
+    {
+      "test": "Derivación de RoleplayPatientState",
+      "status": "PASS",
+      "details": "El estado del paciente simulado debe derivarse automáticamente",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.124Z"
+    },
+    {
+      "test": "Inyección de roleplay_profile en enrichedContext",
+      "status": "PASS",
+      "details": "El perfil debe propagarse para routing y trazabilidad",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.124Z"
+    },
+    {
+      "test": "Inyección de roleplay_state en enrichedSessionContext",
+      "status": "PASS",
+      "details": "El estado debe persistir en la sesión",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.124Z"
+    },
+    {
+      "test": "Persistencia de ficha clínica en roleplay",
+      "status": "PASS",
+      "details": "La ficha clínica debe acompañar la simulación",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.125Z"
+    },
+    {
+      "test": "AgentType incluye roleplay",
+      "status": "PASS",
+      "details": "El nuevo agente debe estar tipado",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.126Z"
+    },
+    {
+      "test": "ChatState con roleplayContext",
+      "status": "PASS",
+      "details": "El estado de chat debe almacenar la simulación",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.126Z"
+    },
+    {
+      "test": "Definición RoleplaySessionContext",
+      "status": "PASS",
+      "details": "El contrato del contexto debe existir",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.126Z"
+    },
+    {
+      "test": "RoleplayPatientProfile tipado",
+      "status": "PASS",
+      "details": "El perfil del paciente simulado debe estar definido",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.126Z"
+    },
+    {
+      "test": "RoleplayPatientState tipado",
+      "status": "PASS",
+      "details": "El estado dinámico del paciente debe estar definido",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.126Z"
+    },
+    {
+      "test": "Detección de foco terapéutico",
+      "status": "PASS",
+      "details": "La simulación debe actualizar el foco según el mensaje del terapeuta",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.128Z"
+    },
+    {
+      "test": "Palabras clave para activar roleplay",
+      "status": "PASS",
+      "details": "El router debe reconocer solicitudes explícitas de simulación",
+      "data": null,
+      "timestamp": "2025-10-16T01:03:32.129Z"
+    }
+  ]
+}

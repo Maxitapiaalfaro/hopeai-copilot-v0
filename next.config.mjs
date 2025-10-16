@@ -1,5 +1,66 @@
 import {withSentryConfig} from '@sentry/nextjs';
 
+// 🔒 SEGURIDAD CRÍTICA: Bloquear console.log ANTES de que Next.js importe cualquier módulo
+// Esto se ejecuta durante el build, ANTES de que se carguen los módulos de la aplicación
+const isProduction = process.env.NODE_ENV === 'production' ||
+                     process.env.VERCEL_ENV === 'production' ||
+                     process.env.NEXT_PUBLIC_FORCE_PRODUCTION_MODE === 'true';
+
+const FORCE_ENABLE_LOGS = process.env.NEXT_PUBLIC_ENABLE_PRODUCTION_LOGS === 'true';
+
+if (isProduction && !FORCE_ENABLE_LOGS) {
+  const originalLog = console.log;
+  const originalInfo = console.info;
+  const noop = () => {};
+
+  const shouldAllowLog = (args) => {
+    const message = args.join(' ');
+
+    // Permitir SOLO logs del sistema Next.js
+    if (message.includes('▲ Next.js') ||
+        message.includes('Compiled') ||
+        message.includes('Ready in') ||
+        message.includes('✓') ||
+        message.includes('○') ||
+        message.includes('ƒ') ||
+        message.includes('Route (') ||
+        message.includes('Middleware') ||
+        message.includes('Creating an optimized') ||
+        message.includes('Collecting page data') ||
+        message.includes('Generating static pages') ||
+        message.includes('Finalizing page optimization')) {
+      return true;
+    }
+
+    // Permitir SOLO logs de seguridad
+    if (message.includes('🔒 SECURITY')) {
+      return true;
+    }
+
+    return false;
+  };
+
+  console.log = (...args) => {
+    if (shouldAllowLog(args)) {
+      originalLog(...args);
+    }
+  };
+
+  console.info = (...args) => {
+    if (shouldAllowLog(args)) {
+      originalInfo(...args);
+    }
+  };
+
+  console.debug = noop;
+  console.warn = noop;
+  console.trace = noop;
+  console.table = noop;
+  console.dir = noop;
+
+  originalLog('🔒 SECURITY: Console logging blocked at build time');
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {

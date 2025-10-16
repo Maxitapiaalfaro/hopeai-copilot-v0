@@ -84,11 +84,11 @@ export class HopeAISystem {
           sessionTimeoutMinutes: 60,
           logLevel: 'info'
         })
-        console.log("🧠 DynamicOrchestrator initialized with cross-session learning capabilities")
+        // 🔒 SECURITY: Console logging disabled in production
       }
-      
+
       this._initialized = true
-      console.log("✅ HopeAI System initialized successfully with Advanced Orchestration")
+      // 🔒 SECURITY: Console logging disabled in production
     } catch (error) {
       console.error("Failed to initialize HopeAI System:", error)
       throw error
@@ -1197,7 +1197,7 @@ export class HopeAISystemSingleton {
    */
   public static getInstance(): HopeAISystem {
     if (!HopeAISystemSingleton.instance) {
-      console.log('🔧 Creating new HopeAISystem singleton instance')
+      // 🔒 SECURITY: Console logging disabled in production
       HopeAISystemSingleton.instance = new HopeAISystem()
     }
     return HopeAISystemSingleton.instance
@@ -1236,15 +1236,13 @@ export class HopeAISystemSingleton {
     }
 
     HopeAISystemSingleton.isInitializing = true
-    console.log('🔄 Starting HopeAI System initialization...')
-    const startTime = Date.now()
+    // 🔒 SECURITY: Console logging disabled in production
 
     try {
       const instance = HopeAISystemSingleton.getInstance()
       await instance.initialize()
-      
-      const initTime = Date.now() - startTime
-      console.log(`🚀 HopeAI Singleton System initialized successfully in ${initTime}ms`)
+
+      // 🔒 SECURITY: Console logging disabled in production
       return instance
     } catch (error) {
       console.error('❌ Failed to initialize HopeAI Singleton System:', error)
