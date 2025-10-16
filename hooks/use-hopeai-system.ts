@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 
 // ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
@@ -112,7 +112,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       }
 
       // Reconstruct sessionMeta if session has patient context
-      let reconstructedSessionMeta = undefined
+      let reconstructedSessionMeta: PatientSessionMeta | undefined = undefined
       if (chatState.clinicalContext?.patientId) {
         try {
           const { getPatientPersistence } = await import('@/lib/patient-persistence')

@@ -774,7 +774,7 @@ ${(() => {
    - Alta confianza (0.85-1.0): Intención clara y unívoca
    - Confianza moderada (0.7-0.84): Intención probable con contexto de apoyo
    - Baja confianza (0.5-0.69): Intención ambigua, requiere clarificación
-4. **DECISIÓN ÚNICA**: Ejecuta EXACTAMENTE UNA función de clasificación
+4. **LLAMADAS A FUNCIONES**: Ejecuta EXACTAMENTE UNA función de intención ('activar_modo_socratico', 'activar_modo_clinico' o 'activar_modo_academico') y, DESPUÉS de esa llamada, invoca TODAS las funciones de extracción de entidades que sean relevantes (pueden ser varias). Nunca omitas la llamada de intención.
 
 **EJEMPLOS DE CLASIFICACIÓN OPTIMIZADA:**
 
@@ -796,17 +796,33 @@ ${(() => {
       return 'Inicio de conversación';
     }
 
+    const totalMessages = contextResult.processedContext.length;
+    const tokenEstimate = contextResult.metrics.tokensEstimated;
+    const preserveExchanges = tokenEstimate > 6000 ? 2 : 4;
+    const preserveCount = Math.min(preserveExchanges * 2, totalMessages);
+    const fullStartIndex = Math.max(totalMessages - preserveCount, 0);
+
     const formattedMessages = contextResult.processedContext.map((content, index) => {
       const role = content.role || 'unknown';
-      const text = content.parts && content.parts.length > 0 && 'text' in content.parts[0] 
-        ? content.parts[0].text || '' 
-        : '';
-      
-      const preview = text.length > 100 ? text.substring(0, 100) + '...' : text;
       const roleLabel = role === 'user' ? 'Usuario' : role === 'model' ? 'Asistente' : 'Sistema';
-      
-      return `[${index + 1}] ${roleLabel}: ${preview}`;
-    }).join('\n');
+      const textParts = (content.parts || [])
+        .map(part => ('text' in part && part.text) ? part.text : '')
+        .filter(partText => partText && partText.length > 0);
+      const combinedText = textParts.join('\n');
+      const hasContent = combinedText.length > 0;
+      const displayFull = index >= fullStartIndex || index === 0;
+
+      if (!hasContent) {
+        return `[${index + 1}] ${roleLabel}: [sin contenido]`;
+      }
+
+      if (displayFull) {
+        return `[${index + 1}] ${roleLabel}:\n${combinedText}`;
+      }
+
+      const truncated = combinedText.length > 200 ? combinedText.substring(0, 200) + '…' : combinedText;
+      return `[${index + 1}] ${roleLabel}: ${truncated}`;
+    }).join('\n\n');
 
     // Obtener referencias contextuales detectadas
     const contextualRefs = this.contextWindowManager.getContextualReferences();

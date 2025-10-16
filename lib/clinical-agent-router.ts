@@ -698,8 +698,8 @@ Tu análisis debe hacer sentir al terapeuta que:
       tools: [{
         googleSearch: {
           timeRangeFilter: {
-            startTime: "2023-01-01T00:00:00Z", // Fixed start date
-            endTime: "2024-12-31T23:59:59Z" // Fixed end date
+            startTime: "2024-01-01T00:00:00Z", // Fixed start date
+            endTime: "2025-12-31T23:59:59Z" // Fixed end date
           }
         }
       }],
@@ -1359,27 +1359,33 @@ Como especialista en evidencia científica, puedes utilizar este material para i
    */
   private extractUrlsFromGroundingMetadata(groundingMetadata: any): Array<{title: string, url: string, domain?: string}> {
     const urls: Array<{title: string, url: string, domain?: string}> = []
+    const seen = new Set<string>()
     
     try {
-      // Acceder a groundingChunks según la documentación del SDK
       if (groundingMetadata.groundingChunks && Array.isArray(groundingMetadata.groundingChunks)) {
         groundingMetadata.groundingChunks.forEach((chunk: any) => {
-          // Verificar si el chunk contiene información web
           if (chunk.web && chunk.web.uri) {
-            urls.push({
-              title: chunk.web.title || 'Fuente académica',
-              url: chunk.web.uri,
-              domain: chunk.web.domain
-            })
+            const sanitized = this.sanitizeAcademicUrl(chunk.web.uri)
+            if (sanitized && !seen.has(sanitized)) {
+              seen.add(sanitized)
+              urls.push({
+                title: chunk.web.title || 'Fuente académica',
+                url: sanitized,
+                domain: new URL(sanitized).hostname
+              })
+            }
           }
           
-          // También verificar retrievedContext para RAG
           if (chunk.retrievedContext && chunk.retrievedContext.uri) {
-            urls.push({
-              title: chunk.retrievedContext.title || 'Contexto recuperado',
-              url: chunk.retrievedContext.uri,
-              domain: new URL(chunk.retrievedContext.uri).hostname
-            })
+            const sanitized = this.sanitizeAcademicUrl(chunk.retrievedContext.uri)
+            if (sanitized && !seen.has(sanitized)) {
+              seen.add(sanitized)
+              urls.push({
+                title: chunk.retrievedContext.title || 'Contexto recuperado',
+                url: sanitized,
+                domain: new URL(sanitized).hostname
+              })
+            }
           }
         })
       }
@@ -1390,6 +1396,29 @@ Como especialista en evidencia científica, puedes utilizar este material para i
     }
     
     return urls
+  }
+
+  private sanitizeAcademicUrl(rawUrl: string): string | null {
+    if (!rawUrl) return null
+    let normalized = rawUrl.trim()
+    const compact = normalized.replace(/\s+/g, '')
+    const doiMatch = compact.match(/^(?:https?:\/\/)?(?:doi\.org\/)?(10\.\d{4,9}\/.+)$/i)
+    if (doiMatch) {
+      normalized = `https://doi.org/${doiMatch[1]}`
+    } else {
+      normalized = compact
+    }
+    if (!/^https?:\/\//i.test(normalized)) {
+      normalized = `https://${normalized}`
+    }
+    try {
+      const parsed = new URL(normalized)
+      if (!/^https?:$/.test(parsed.protocol)) return null
+      parsed.protocol = 'https:'
+      return parsed.toString()
+    } catch {
+      return null
+    }
   }
 }
 

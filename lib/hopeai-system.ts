@@ -362,7 +362,7 @@ export class HopeAISystem {
       }
 
       // Determinar si usar orquestación avanzada o routing directo
-      let routingResult; 
+      let routingResult: { enrichedContext: any; targetAgent: any }; 
       let orchestrationResult = null;
       
       if (suggestedAgent) {
