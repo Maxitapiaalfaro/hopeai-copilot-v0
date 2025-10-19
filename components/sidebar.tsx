@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import {
   PlusIcon,
@@ -196,7 +195,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
     <div
       className={cn(
         "flex flex-col relative backdrop-blur-sm overflow-hidden",
-        "bg-cloud-white border-r border-ash/60",
+        "bg-sidebar border-r border-sidebar-border",
         "h-full",
         isOpen ? "w-80" : "w-16",
       )}
@@ -387,9 +386,9 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
         }}
       >
           {activeTab === 'conversations' ? (
-            <ScrollArea className="h-full">
-              <div onScroll={handleScroll} className="h-full overflow-auto">
-              <div className="p-5 space-y-1.5">
+            <div className="h-full overflow-hidden relative">
+              <div onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide">
+              <div className="px-3 py-5 space-y-1.5">
                 {isLoading && isOpen ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="flex flex-col items-center gap-3">
@@ -420,21 +419,21 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                         <Button
                           variant="ghost"
                           className={cn(
-                            "w-full transition-all duration-200 relative overflow-hidden",
-                            isOpen ? "justify-start p-4 h-auto text-left rounded-xl" : "justify-center p-2 h-10 rounded-lg",
+                            "w-full transition-all duration-200 relative overflow-visible",
+                            isOpen ? "justify-start p-3 pr-12 h-auto text-left rounded-xl" : "justify-center p-2 h-10 rounded-lg",
                             selectedConversation === conversation.sessionId
-                              ? "bg-clarity-blue-50 hover:bg-clarity-blue-100 shadow-sm"
-                              : "hover:bg-ash hover:shadow-sm",
+                              ? "bg-clarity-blue-50 dark:bg-clarity-blue-900/40 hover:bg-clarity-blue-100 dark:hover:bg-clarity-blue-800/50 shadow-sm"
+                              : "hover:bg-secondary hover:shadow-sm",
                           )}
                           onClick={() => handleConversationSelect(conversation.sessionId)}
                           title={!isOpen ? conversation.title : undefined}
                         >
                           {/* Accent border on active */}
                           {selectedConversation === conversation.sessionId && isOpen && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-clarity-blue-600 rounded-r-full" />
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-clarity-blue-600 dark:bg-clarity-blue-400 rounded-r-full" />
                           )}
                           {isOpen ? (
-                            <div className="flex items-start gap-3 w-full pl-3 min-w-0">
+                            <div className="flex items-start gap-3 w-full pl-2 min-w-0">
                               <div className={cn(
                                 "mt-1 w-2 h-2 rounded-full flex-shrink-0",
                                 agentConfig.button.bg,
@@ -467,7 +466,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                                 variant="ghost" 
                                 size="icon"
                                 className={cn(
-                                  "absolute top-1/2 -translate-y-1/2 right-3 h-8 w-8 rounded-lg",
+                                  "absolute top-1/2 -translate-y-1/2 right-2 h-8 w-8 rounded-lg z-10",
                                   "opacity-0 group-hover:opacity-100 transition-all duration-200",
                                   "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                 )}
@@ -503,7 +502,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 
                 {isLoadingMore && (
                   <div className="flex items-center justify-center py-6">
-                    <div className="flex items-center gap-2.5 text-sm text-mineral-gray-600 bg-cloud-white px-4 py-2.5 rounded-full border border-ash">
+                    <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-card px-4 py-2.5 rounded-full border border-border">
                       <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-clarity-blue-600" weight="bold" />
                       <span className="font-medium">Cargando más...</span>
                     </div>
@@ -511,7 +510,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 )}
               </div>
               </div>
-            </ScrollArea>
+            </div>
           ) : (
             <PatientLibrarySection 
               isOpen={isOpen}

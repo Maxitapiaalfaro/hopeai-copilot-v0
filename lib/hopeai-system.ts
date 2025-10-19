@@ -617,6 +617,7 @@ export class HopeAISystem {
       }
 
       // Send message through agent router with enriched context
+      // La búsqueda académica ahora es manejada por el agente como herramienta (tool)
       // Session files are handled through conversation history, not as attachments
       // 🏥 PATIENT CONTEXT: Include patient context from sessionMeta
       const enrichedAgentContext = {
@@ -626,12 +627,12 @@ export class HopeAISystem {
         patient_reference: patientReference,
         patient_summary: patientSummary
       }
-      
+
       console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
-      
+
       const response = await clinicalAgentRouter.sendMessage(
-        sessionId, 
-        message, 
+        sessionId,
+        message,
         useStreaming,
         enrichedAgentContext,
         interactionId  // 📊 Pass interaction ID for metrics tracking

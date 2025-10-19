@@ -77,19 +77,19 @@ const agentConfig = {
   }
 } as const
 
-// Mapeo de modos clínicos
+// Mapeo de modos clínicos - Aurora palette
 const modeConfig = {
   'therapeutic_assistance': {
     label: 'Asistencia Terapéutica',
-    color: 'bg-orange-100 text-orange-800'
+    color: 'bg-clarity-blue-100 dark:bg-clarity-blue-900/30 text-clarity-blue-800 dark:text-clarity-blue-200'
   },
   'clinical_supervision': {
     label: 'Supervisión Clínica',
-    color: 'bg-teal-100 text-teal-800'
+    color: 'bg-serene-teal-100 dark:bg-serene-teal-900/30 text-serene-teal-800 dark:text-serene-teal-200'
   },
   'research_support': {
     label: 'Soporte de Investigación',
-    color: 'bg-indigo-100 text-indigo-800'
+    color: 'bg-academic-plum-100 dark:bg-academic-plum-900/30 text-academic-plum-800 dark:text-academic-plum-200'
   }
 } as const
 

@@ -78,7 +78,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                     key={index}
                     className={cn(
                       "flex items-center gap-2 p-2 rounded border",
-                      isUser ? "bg-blue-500 border-blue-400" : "bg-gray-50 border-gray-200",
+                      isUser ? "bg-clarity-blue-500 dark:bg-clarity-blue-600 border-clarity-blue-400 dark:border-clarity-blue-500" : "bg-secondary border-border",
                     )}
                   >
                     <FileIcon className="h-4 w-4 flex-shrink-0" />
@@ -93,7 +93,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           )}
         </Card>
 
-        <div className={cn("text-xs text-gray-500 px-1", isUser && "text-right")}>
+        <div className={cn("text-xs text-muted-foreground px-1", isUser && "text-right")}>
           {message.timestamp.toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",

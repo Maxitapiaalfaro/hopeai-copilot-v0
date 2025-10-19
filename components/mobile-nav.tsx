@@ -11,7 +11,6 @@ import {
 } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import {
   Sheet,
@@ -252,9 +251,9 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
 
               <div className="flex-1 overflow-hidden">
                 {activeTab === 'conversations' ? (
-                  <ScrollArea className="h-full">
-                    <div onScroll={handleScroll} className="h-full overflow-auto">
-                      <div className="p-5 space-y-1.5">
+                  <div className="h-full overflow-hidden relative">
+                    <div onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide">
+                      <div className="px-3 py-5 space-y-1.5">
                         {isLoading ? (
                           <div className="flex items-center justify-center py-12">
                             <div className="flex flex-col items-center gap-3">
@@ -283,13 +282,13 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                                 <Button
                                   variant="ghost"
                                   className={cn(
-                                    "w-full transition-all duration-200 relative overflow-hidden",
-                                    "justify-start p-4 h-auto text-left rounded-xl",
-                                    "hover:bg-ash hover:shadow-sm active:scale-[0.98]"
+                                    "w-full transition-all duration-200 relative overflow-visible",
+                                    "justify-start p-3 pr-12 h-auto text-left rounded-xl",
+                                    "hover:bg-secondary hover:shadow-sm active:scale-[0.98]"
                                   )}
                                   onClick={() => handleConversationSelect(conversation.sessionId)}
                                 >
-                                  <div className="flex items-start gap-3 w-full pr-10">
+                                  <div className="flex items-start gap-3 w-full pl-2 min-w-0">
                                     <div className={cn(
                                       "mt-1 w-2 h-2 rounded-full flex-shrink-0",
                                       agentConfig.button.bg,
@@ -318,7 +317,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                                       variant="ghost"
                                       size="icon"
                                       className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 right-3 h-8 w-8 rounded-lg",
+                                        "absolute top-1/2 -translate-y-1/2 right-2 h-8 w-8 rounded-lg z-10",
                                         "opacity-0 group-hover:opacity-100 transition-all duration-200",
                                         "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                       )}
@@ -361,7 +360,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                         )}
                       </div>
                     </div>
-                  </ScrollArea>
+                  </div>
                 ) : (
                   <div className="h-full overflow-auto">
                     <PatientLibrarySection

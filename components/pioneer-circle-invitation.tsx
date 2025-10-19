@@ -23,7 +23,7 @@ const CustomDialogContent = React.forwardRef<
       onOpenAutoFocus={(e) => e.preventDefault()}
       onCloseAutoFocus={(e) => e.preventDefault()}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border-0 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border-0 bg-card p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
         className
       )}
       {...props}
@@ -145,7 +145,7 @@ export function PioneerCircleInvitation({
       <CustomDialogContent className="sm:max-w-[420px] p-0 overflow-hidden">
         {/* Header de la carta - solo mostrar en la pantalla inicial */}
         {!showConfirmation && !showContactForm && (
-          <div className="bg-white px-6 py-4 border-b border-gray-100">
+          <div className="bg-card px-6 py-4 border-b border-border">
             <div className="text-center">
               <DialogTitle className="text-sm font-medium text-gray-800 mb-0.5">
                 De parte del Equipo HopeAI
@@ -223,7 +223,7 @@ export function PioneerCircleInvitation({
                 <button
                   onClick={() => handleResponse('interested')}
                   disabled={isLoading}
-                  className="text-gray-700 hover:text-gray-800 font-medium bg-white hover:bg-gray-50 px-6 py-3 rounded border border-gray-200 hover:border-gray-300 cursor-pointer focus:outline-none transition-all duration-200 shadow-sm text-sm"
+                  className="text-foreground hover:text-foreground font-medium bg-card hover:bg-secondary px-6 py-3 rounded border border-border hover:border-muted-foreground cursor-pointer focus:outline-none transition-all duration-200 shadow-sm text-sm"
                 >
                   {isLoading ? 'Conectando...' : 'Quiero ser parte'}
                 </button>

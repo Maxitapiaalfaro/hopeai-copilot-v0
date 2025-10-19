@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { PaperPlaneRightIcon, PaperclipIcon, MicrophoneIcon, MicrophoneSlashIcon, UserIcon, LightningIcon, CaretDownIcon, BrainIcon, MagnifyingGlassIcon, StethoscopeIcon, BookOpenIcon, ArrowsOutIcon, ArrowsInIcon, FileTextIcon, CopyIcon, CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CaretRightIcon } from "@phosphor-icons/react"
+import { PaperPlaneRightIcon, PaperclipIcon, MicrophoneIcon, MicrophoneSlashIcon, UserIcon, LightningIcon, CaretDownIcon, BrainIcon, MagnifyingGlassIcon, StethoscopeIcon, BookOpenIcon, ArrowsOutIcon, ArrowsInIcon, FileTextIcon, CopyIcon, CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CaretRightIcon, FoldersIcon } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import type { AgentType, ChatState, ClinicalFile, ReasoningBullet } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
@@ -92,15 +92,15 @@ function FichaClinicaDisabledButton({
           "h-10 md:h-12 px-3 w-auto", 
           config.ghostButton.hoverBg, 
           config.ghostButton.text,
-          "opacity-50 cursor-not-allowed"
+          isTouchDevice ? "opacity-100" : "opacity-50 cursor-not-allowed"
         )}
-        disabled={true}
+        disabled={!isTouchDevice}
         onClick={() => isTouchDevice && setShowTooltip(!showTooltip)}
         onTouchStart={(e) => {
           e.preventDefault()
           setShowTooltip(!showTooltip)
         }}
-        title="Crea o selecciona un paciente para acceder a la Ficha Clínica"
+        title={!isTouchDevice ? "Crea o selecciona un paciente para acceder a la Ficha Clínica" : undefined}
       >
         <span className="text-sm font-medium">Ficha Clínica</span>
       </Button>
@@ -124,25 +124,25 @@ function FichaClinicaDisabledButton({
             <div className="relative p-5">
               {/* Header con diseño académico */}
               <div className="flex items-start gap-3 mb-4">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-50/80 dark:bg-amber-900/20 ring-1 ring-amber-200/60 dark:ring-amber-700/40 shadow-sm">
-                  <FileTextIcon className="h-5 w-5 text-amber-700 dark:text-amber-400" />
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-clarity-blue-50 dark:bg-clarity-blue-900/30 ring-1 ring-clarity-blue-200 dark:ring-clarity-blue-700/50 shadow-sm">
+                  <FoldersIcon className="h-5 w-5 text-clarity-blue-700 dark:text-clarity-blue-300" weight="bold" />
                 </div>
                 <div className="flex-1 pt-0.5">
                   <h3 className="text-base font-sans font-semibold tracking-tight text-foreground mb-0.5">
-                    Documentación Clínica
+                    Casos Clínicos
                   </h3>
                   <p className="text-xs text-muted-foreground font-sans">
-                    Requiere paciente activo
+                    Requiere caso activo
                   </p>
                 </div>
               </div>
               
               {/* Divider sutil con tono cálido academia */}
-              <div className="h-px bg-gradient-to-r from-transparent via-amber-200/40 dark:via-amber-700/30 to-transparent mb-4" />
+              <div className="h-px bg-gradient-to-r from-transparent via-academic-plum-200/40 dark:via-academic-plum-700/40 to-transparent mb-4" />
               
               {/* Descripción */}
               <p className="text-[13px] text-muted-foreground font-sans leading-relaxed mb-5">
-                Selecciona un paciente de tu biblioteca para acceder a herramientas de documentación clínica profesional
+                Selecciona un caso clínico para acceder a herramientas de documentación clínica profesional
               </p>
               
               {/* Action button con verde sage academia */}
@@ -155,10 +155,9 @@ function FichaClinicaDisabledButton({
                     onOpenPatientLibrary();
                   }
                 }}
-                className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold rounded-xl bg-clarity-blue-600 hover:bg-clarity-blue-700 text-white shadow-lg shadow-clarity-blue-600/25 ring-1 ring-clarity-blue-600/30"
+                className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 text-[13px] font-semibold rounded-xl bg-clarity-blue-600 hover:bg-clarity-blue-700 active:bg-clarity-blue-800 text-white shadow-lg shadow-clarity-blue-600/25 ring-1 ring-clarity-blue-600/30 transition-colors"
               >
-                <UserIcon className="h-3.5 w-3.5 text-white" />
-                <span className="tracking-wide">Abrir Biblioteca de Pacientes</span>
+                <span className="tracking-wide">Abrir Casos Clínicos</span>
                 <CaretRightIcon className="h-3.5 w-3.5 text-white" />
               </button>
             </div>
@@ -178,6 +177,27 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
   const [forceUpdate, setForceUpdate] = useState(0)
+  // 🎨 UX: Estado para indicador de búsqueda académica
+  const [academicSearchState, setAcademicSearchState] = useState<'idle' | 'searching' | 'analyzing' | 'complete'>('idle')
+  const [academicSearchQuery, setAcademicSearchQuery] = useState("")
+  const [academicSearchResults, setAcademicSearchResults] = useState<{
+    found: number
+    validated: number
+  } | null>(null)
+  const academicSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 🔄 Resetear estado del indicador académico cuando cambia la sesión
+  useEffect(() => {
+    // Limpiar timeout pendiente
+    if (academicSearchTimeoutRef.current) {
+      clearTimeout(academicSearchTimeoutRef.current)
+      academicSearchTimeoutRef.current = null
+    }
+
+    setAcademicSearchState('idle')
+    setAcademicSearchQuery("")
+    setAcademicSearchResults(null)
+  }, [currentSession?.sessionId])
   const [autoScroll, setAutoScroll] = useState(true)
   const [visibleMessageCount, setVisibleMessageCount] = useState(20)
   const [streamingGroundingUrls, setStreamingGroundingUrls] = useState<Array<{title: string, url: string, domain?: string}>>([])  
@@ -386,6 +406,51 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     }
   }
 
+  // Attach scroll listener to the ScrollArea viewport (Radix UI)
+  useEffect(() => {
+    // Find the Radix ScrollArea viewport element
+    const scrollAreaRoot = scrollAreaRef.current
+    if (!scrollAreaRoot) {
+      console.log('🔍 ScrollArea ref not found')
+      return
+    }
+    
+    const viewport = scrollAreaRoot.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement
+    if (!viewport) {
+      console.log('🔍 Viewport not found in ScrollArea')
+      return
+    }
+
+    console.log('✅ Scroll listener attached to viewport')
+
+    const handleScrollEvent = () => {
+      const { scrollTop, scrollHeight, clientHeight } = viewport
+      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50
+      const isAtTop = scrollTop < 100
+      
+      console.log('📜 Scroll event:', { scrollTop, scrollHeight, clientHeight, isAtBottom })
+      
+      setAutoScroll(isAtBottom)
+      
+      // Cargar más mensajes cuando se llega al top
+      if (isAtTop && currentSession?.history && visibleMessageCount < currentSession.history.length) {
+        setVisibleMessageCount(prev => Math.min(prev + 10, currentSession.history?.length || 0))
+      }
+    }
+
+    viewport.addEventListener('scroll', handleScrollEvent)
+    
+    // Initial check
+    handleScrollEvent()
+    
+    return () => viewport.removeEventListener('scroll', handleScrollEvent)
+  }, [currentSession?.history, visibleMessageCount])
+
+  // Debug autoScroll state
+  useEffect(() => {
+    console.log('🎯 AutoScroll state changed:', autoScroll, 'Messages:', currentSession?.history?.length || 0)
+  }, [autoScroll, currentSession?.history?.length])
+
 
 
   // Función para ir al final de la conversación
@@ -409,13 +474,26 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     }
 
     const message = messageToSend
-    
+
     // Limpiar input y preparar UI para streaming
     setInputValue("")
     setIsStreaming(true)
     bulletsSnapshotRef.current = []
     setStreamingResponse("")
-    
+
+    // 🔄 Resetear indicador académico para el nuevo mensaje
+    console.log('🔄 Frontend: Reseteando indicador académico antes de enviar mensaje', {
+      estadoAnterior: academicSearchState,
+      resultadosAnteriores: academicSearchResults
+    })
+    if (academicSearchTimeoutRef.current) {
+      clearTimeout(academicSearchTimeoutRef.current)
+      academicSearchTimeoutRef.current = null
+    }
+    setAcademicSearchState('idle')
+    setAcademicSearchQuery("")
+    setAcademicSearchResults(null)
+
     // Activar scroll único para mostrar el mensaje del usuario
     setShouldScrollOnce(true)
 
@@ -479,16 +557,85 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             const streamingStartTime = Date.now()
             
             try {
+              let hasReceivedText = false
+              let isAcademicSearch = false // Flag local para tracking
+
               for await (const chunk of response) {
                 chunkCount++
                 if (chunk.text) {
                   fullResponse += chunk.text
                   setStreamingResponse(fullResponse)
+
+                  // 🎯 Cuando empieza el streaming, programar ocultación del indicador
+                  if (!hasReceivedText && isAcademicSearch) {
+                    hasReceivedText = true
+                    console.log('📝 Frontend: Streaming iniciado, programando ocultación del indicador')
+
+                    // Transición a 'complete' para mostrar brevemente el estado final
+                    setAcademicSearchState('complete')
+
+                    // Limpiar timeout anterior si existe
+                    if (academicSearchTimeoutRef.current) {
+                      clearTimeout(academicSearchTimeoutRef.current)
+                    }
+
+                    // Ocultar después de 1.5 segundos (da tiempo a ver el número final)
+                    academicSearchTimeoutRef.current = setTimeout(() => {
+                      console.log('📝 Frontend: Ocultando indicador académico después del delay')
+                      setAcademicSearchState('idle')
+                      setAcademicSearchQuery("")
+                      setAcademicSearchResults(null)
+                      academicSearchTimeoutRef.current = null
+                    }, 1500)
+
+                    isAcademicSearch = false // Reset flag
+                  }
                 }
                 // Capturar groundingUrls de los chunks
                 if (chunk.groundingUrls && chunk.groundingUrls.length > 0) {
                   accumulatedGroundingUrls = [...accumulatedGroundingUrls, ...chunk.groundingUrls]
                   setStreamingGroundingUrls(accumulatedGroundingUrls)
+                }
+                // 🎨 UX: Capturar eventos de tool calls
+                if (chunk.metadata) {
+                  console.log('📦 Frontend: Metadata recibida:', chunk.metadata)
+
+                  if (chunk.metadata.type === "tool_call_start" && chunk.metadata.toolName === "search_academic_literature") {
+                    console.log('🔍 Frontend: Búsqueda académica iniciada:', chunk.metadata.query)
+                    isAcademicSearch = true // Activar flag local
+                    setAcademicSearchState('searching')
+                    setAcademicSearchQuery(chunk.metadata.query || "")
+                    setAcademicSearchResults(null)
+                  } else if (chunk.metadata.type === "tool_call_complete" && chunk.metadata.toolName === "search_academic_literature") {
+                    console.log('✅ Frontend: Búsqueda académica completada:', {
+                      found: chunk.metadata.sourcesFound,
+                      validated: chunk.metadata.sourcesValidated
+                    })
+                    isAcademicSearch = true // Mantener flag activo
+                    setAcademicSearchState('analyzing')
+                    setAcademicSearchResults({
+                      found: chunk.metadata.sourcesFound || 0,
+                      validated: chunk.metadata.sourcesValidated || 0
+                    })
+                  } else if (chunk.metadata.type === "sources_used_by_ai") {
+                    // 🎯 Actualizar con el número REAL de fuentes que Gemini usó
+                    console.log('🎯 Frontend: IA usó', chunk.metadata.sourcesUsed, 'fuentes en su respuesta')
+                    setAcademicSearchResults(prev => {
+                      if (!prev) {
+                        console.warn('⚠️ Frontend: No hay resultados previos para actualizar')
+                        return null
+                      }
+                      const updated = {
+                        ...prev,
+                        validated: chunk.metadata.sourcesUsed || prev.validated
+                      }
+                      console.log('🎯 Frontend: Actualizando de', prev.validated, 'a', updated.validated, 'fuentes')
+                      return updated
+                    })
+
+                    // No cambiar estado aquí - el timeout ya está programado
+                    // Esto permite que el usuario vea el número actualizado antes de que se oculte
+                  }
                 }
               }
               
@@ -529,6 +676,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               setStreamingResponse("")
               setStreamingGroundingUrls([])
               setIsStreaming(false)
+              // Resetear estado de búsqueda académica si quedó activo
+              if (academicSearchState !== 'idle') {
+                setAcademicSearchState('idle')
+                setAcademicSearchQuery("")
+                setAcademicSearchResults(null)
+              }
               span.setStatus({ code: 1, message: "Streaming completed successfully" })
             } catch (streamError) {
               console.error('❌ Frontend: Error en streaming:', streamError)
@@ -727,13 +880,13 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   )
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans bg-cloud-white relative">
+    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans bg-background relative">
       <ScrollArea
+        ref={scrollAreaRef}
         className={cn("flex-1 pt-0 overscroll-contain")}
         style={{
           paddingBottom: '0px' // Remove padding to allow content to extend behind input gradient
         }}
-        onScrollCapture={handleScroll}
       >
         <div className={cn("w-full mx-auto h-full flex flex-col space-y-4 md:space-y-8 pt-1 md:pt-2 pb-32", chatContainerWidthClass)}>
           {/* Indicador de mensajes anteriores */}
@@ -750,27 +903,27 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {/* Welcome greeting with minimal rotating capability hint */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
             <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-2">
-              <h1 className="font-sans text-4xl md:text-5xl tracking-tight text-deep-charcoal mb-4">
+              <h1 className="font-sans text-4xl md:text-5xl tracking-tight text-foreground mb-4">
                 ¿En qué piensas?
               </h1>
               {!isLoadingUIPreferences && shouldShowDynamicSuggestions && (
                 <div className="mt-8 md:mt-12 w-full max-w-3xl mx-auto px-4">
                   <div
-                    className="group relative bg-cloud-white border border-ash rounded-xl overflow-hidden cursor-pointer hover:border-clarity-blue-200 hover:shadow-sm transition-all duration-200 flex items-stretch"
+                    className="group relative bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-clarity-blue-200 dark:hover:border-clarity-blue-700 hover:shadow-sm transition-all duration-200 flex items-stretch"
                     onClick={handleSelectHint}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectHint() } }}
                   >
                     <div className="flex-1 p-4 md:p-5">
-                      <p className="text-base md:text-lg text-deep-charcoal font-sans leading-relaxed text-left">
+                      <p className="text-base md:text-lg text-foreground font-sans leading-relaxed text-left">
                         {typedHint || '\u00A0'}
-                        <span className="inline-block w-0.5 h-[1.2em] bg-clarity-blue-600 ml-0.5 align-text-bottom animate-cursor-blink" style={{ verticalAlign: '-0.1em' }} />
+                        <span className="inline-block w-0.5 h-[1.2em] bg-clarity-blue-600 dark:bg-clarity-blue-400 ml-0.5 align-text-bottom animate-cursor-blink" style={{ verticalAlign: '-0.1em' }} />
                       </p>
                     </div>
                     {typedHint && (
-                      <div className="flex items-center justify-center px-4 border-l border-transparent group-hover:border-ash/40 group-hover:bg-ash/30 transition-all duration-200">
-                        <div className="flex items-center gap-1.5 text-xs text-mineral-gray-600 group-hover:text-deep-charcoal transition-colors">
+                      <div className="flex items-center justify-center px-4 border-l border-transparent group-hover:border-border transition-all duration-200">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
                           <CopyIcon className="h-3.5 w-3.5" />
                           <span className="font-medium">Usar</span>
                         </div>
@@ -795,7 +948,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           }
                         }}
                       />
-                      <span className="text-sm text-mineral-gray-600 group-hover/checkbox:text-deep-charcoal transition-colors select-none">
+                      <span className="text-sm text-muted-foreground group-hover/checkbox:text-foreground transition-colors select-none">
                         No mostrar sugerencias de nuevo
                       </span>
                     </label>
@@ -1033,7 +1186,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                               onClick={() => setAreBulletsCollapsed(prev => !prev)}
                               className={cn(
                                 "inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium rounded-lg transition-all",
-                                "hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal"
+                                "hover:bg-secondary text-muted-foreground hover:text-foreground"
                               )}
                               aria-label={areBulletsCollapsed ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
                             >
@@ -1139,6 +1292,126 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     />
                   </div>
                 )}
+
+                {/* 🎨 UX: Indicador de búsqueda académica - Diseño Aurora elegante optimizado para mobile */}
+                {academicSearchState !== 'idle' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    className="mx-3 sm:mx-4 mb-2 sm:mb-3"
+                  >
+                    <div className="relative px-3 py-2.5 sm:px-4 sm:py-3.5 rounded-lg bg-gradient-to-br from-academic-plum-50/80 to-academic-plum-50/40 border border-academic-plum-200/60 shadow-sm paper-noise backdrop-blur-sm">
+                      {/* Sutil brillo superior */}
+                      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-academic-plum-300/40 to-transparent" />
+
+                      <div className="flex items-start gap-2.5 sm:gap-3.5">
+                        {/* Icono con animación elegante */}
+                        <div className="flex-shrink-0 mt-0.5">
+                          {academicSearchState === 'searching' && (
+                            <motion.div
+                              animate={{
+                                opacity: [0.5, 1, 0.5],
+                                scale: [0.95, 1, 0.95]
+                              }}
+                              transition={{
+                                duration: 2.5,
+                                repeat: Infinity,
+                                ease: "easeInOut"
+                              }}
+                              className="relative"
+                            >
+                              <div className="absolute inset-0 bg-academic-plum-400/20 rounded-full blur-md" />
+                              <MagnifyingGlassIcon className="relative h-4 w-4 sm:h-5 sm:w-5 text-academic-plum-600" weight="duotone" />
+                            </motion.div>
+                          )}
+                          {academicSearchState === 'analyzing' && (
+                            <motion.div
+                              animate={{
+                                opacity: [0.6, 1, 0.6],
+                                rotate: [0, 5, -5, 0]
+                              }}
+                              transition={{
+                                duration: 3,
+                                repeat: Infinity,
+                                ease: "easeInOut"
+                              }}
+                              className="relative"
+                            >
+                              <div className="absolute inset-0 bg-academic-plum-500/20 rounded-full blur-md" />
+                              <BrainIcon className="relative h-4 w-4 sm:h-5 sm:w-5 text-academic-plum-700" weight="duotone" />
+                            </motion.div>
+                          )}
+                          {academicSearchState === 'complete' && (
+                            <motion.div
+                              initial={{ scale: 0.8, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              transition={{ duration: 0.3, ease: "easeOut" }}
+                              className="relative"
+                            >
+                              <div className="absolute inset-0 bg-academic-plum-400/20 rounded-full blur-sm" />
+                              <CheckIcon className="relative h-4 w-4 sm:h-5 sm:w-5 text-academic-plum-600" weight="bold" />
+                            </motion.div>
+                          )}
+                        </div>
+
+                        {/* Contenido textual con tipografía refinada y optimizado para mobile */}
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <motion.div
+                            key={academicSearchState}
+                            initial={{ opacity: 0, x: -5 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, ease: "easeOut" }}
+                            className="text-xs sm:text-sm font-sans font-medium text-academic-plum-900 leading-relaxed tracking-tight"
+                          >
+                            {academicSearchState === 'searching' && (
+                              <>
+                                <span className="hidden sm:inline">Consultando bases de datos académicas</span>
+                                <span className="sm:hidden">Consultando bases académicas</span>
+                              </>
+                            )}
+                            {academicSearchState === 'analyzing' && academicSearchResults !== null && (
+                              <>
+                                {academicSearchResults.found === academicSearchResults.validated ? (
+                                  // Caso simple: todas las fuentes fueron validadas
+                                  <>
+                                    <span className="hidden sm:inline">Sintetizando evidencia de {academicSearchResults.validated} {academicSearchResults.validated === 1 ? 'fuente' : 'fuentes'}</span>
+                                    <span className="sm:hidden">Sintetizando {academicSearchResults.validated} {academicSearchResults.validated === 1 ? 'fuente' : 'fuentes'}</span>
+                                  </>
+                                ) : (
+                                  // Caso con filtrado: mostrar el proceso inteligente
+                                  <>
+                                    <span className="hidden sm:inline">{academicSearchResults.validated} {academicSearchResults.validated === 1 ? 'fuente validada' : 'fuentes validadas'} de {academicSearchResults.found} {academicSearchResults.found === 1 ? 'encontrada' : 'encontradas'}</span>
+                                    <span className="sm:hidden">{academicSearchResults.validated} de {academicSearchResults.found} {academicSearchResults.found === 1 ? 'fuente' : 'fuentes'}</span>
+                                  </>
+                                )}
+                              </>
+                            )}
+                            {academicSearchState === 'complete' && academicSearchResults !== null && (
+                              <>
+                                <span className="hidden sm:inline">Sintetizando evidencia de {academicSearchResults.validated} {academicSearchResults.validated === 1 ? 'fuente' : 'fuentes'}</span>
+                                <span className="sm:hidden">Sintetizando {academicSearchResults.validated} {academicSearchResults.validated === 1 ? 'fuente' : 'fuentes'}</span>
+                              </>
+                            )}
+                          </motion.div>
+                          {/* Query solo visible en desktop */}
+                          {academicSearchQuery && academicSearchState === 'searching' && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              transition={{ duration: 0.3, delay: 0.1 }}
+                              className="hidden sm:block text-xs font-serif text-academic-plum-700/80 mt-1.5 truncate italic leading-relaxed"
+                            >
+                              "{academicSearchQuery}"
+                            </motion.div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 {streamingGroundingUrls && streamingGroundingUrls.length > 0 && (
                   <div className="mx-4 mb-4 pt-3 border-t border-border/80 animate-in fade-in duration-300 ease-out">
                     <div className="text-xs font-sans font-medium text-muted-foreground mb-2">Referencias:</div>
@@ -1239,32 +1512,28 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
           <div ref={messagesEndRef} />
         </div>
-
-        {/* Botón flotante para ir al final - Siempre disponible cuando no está al fondo */}
-        {!autoScroll && (
-          <Button
-            onClick={scrollToBottom}
-            className={cn(
-              "absolute bottom-32 right-4 md:right-8 rounded-full w-12 h-12 shadow-xl transition-all hover:scale-110",
-              isStreaming && "ring-2 ring-primary/50 shadow-primary/20"
-            )}
-            size="icon"
-            variant="default"
-            title={isStreaming ? "Nuevo contenido - Ir al final" : "Ir al final de la conversación"}
-          >
-            <CaretDownIcon className="h-6 w-6" />
-            {isStreaming && (
-              <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-clarity-blue-600 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-clarity-blue-600 border-2 border-background"></span>
-              </span>
-            )}
-          </Button>
-        )}
       </ScrollArea>
 
       {/* Input Area - Floating */}
       <div className="absolute bottom-0 left-0 right-0 py-3 md:py-4 pt-6 z-20">
+        {/* Botón flotante para ir al final - Independiente y elegante */}
+        {!autoScroll && currentSession?.history && currentSession.history.length > 0 && (
+          <div className="absolute left-0 right-0 bottom-full mb-3 md:mb-4 pointer-events-none flex justify-center">
+            <Button
+              onClick={scrollToBottom}
+              className={cn(
+                "pointer-events-auto rounded-full w-11 h-11 shadow-lg transition-all duration-300 hover:scale-110 active:scale-95",
+                "bg-card/95 backdrop-blur-sm border-2 border-border/50 hover:border-border",
+                "text-foreground hover:bg-card"
+              )}
+              size="icon"
+              variant="ghost"
+              title={isStreaming ? "Nuevo contenido - Ir al final" : "Ir al final de la conversación"}
+            >
+              <CaretDownIcon className="h-5 w-5" weight="bold" />
+            </Button>
+          </div>
+        )}
 
         {/* Ficha Clínica controls moved into input toolbar */}
         <div className={cn("w-full mx-auto relative z-10", chatContainerWidthClass)}>
@@ -1285,7 +1554,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               </div>
             )}
             <div className={cn(
-                "rounded-[28px] border bg-cloud-white transition-all shadow-lg p-1",
+                "rounded-[28px] border bg-card dark:bg-card transition-all shadow-lg p-1",
                 "border-border/50",
                 config.focusWithinBorderColor
               )}>

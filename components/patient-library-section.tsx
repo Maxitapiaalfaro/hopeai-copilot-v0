@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Dialog,
   DialogContent,
@@ -626,8 +625,9 @@ export function PatientLibrarySection({
       </div>
 
       {/* Patient List */}
-      <ScrollArea className="flex-1">
-        <div className="px-4 py-3 space-y-1.5">
+      <div className="flex-1 overflow-hidden relative">
+        <div className="h-full overflow-y-auto scrollbar-hide">
+          <div className="px-3 py-3 space-y-1.5">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
@@ -677,9 +677,9 @@ export function PatientLibrarySection({
                   className={cn(
                     "w-full p-4 h-auto rounded-xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
                     selectedPatient?.id === patient.id
-                      ? "bg-clarity-blue-50 border-clarity-blue-200 shadow-sm hover:shadow-md"
-                      : "bg-cloud-white border-ash hover:bg-ash hover:border-mineral-gray-300 hover:shadow-sm",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clarity-blue-200 focus-visible:ring-offset-2"
+                      ? "bg-clarity-blue-50 dark:bg-clarity-blue-900/20 border-clarity-blue-200 dark:border-clarity-blue-700 shadow-sm hover:shadow-md"
+                      : "bg-card border-border hover:bg-secondary hover:border-muted-foreground hover:shadow-sm",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clarity-blue-200 dark:focus-visible:ring-clarity-blue-700 focus-visible:ring-offset-2"
                   )}
                 >
                   {/* Accent border on active */}
@@ -688,7 +688,7 @@ export function PatientLibrarySection({
                   )}
                   
                   
-                  <div className="flex items-start gap-3 w-full pr-12 pl-2">
+                  <div className="flex items-start gap-3 w-full pl-2 min-w-0">
                     <div className="flex-1 min-w-0">
                       {/* Header con nombre */}
                       <div className="mb-2">
@@ -764,7 +764,7 @@ export function PatientLibrarySection({
                 </button>
                 
                 {/* Dropdown menu for secondary actions */}
-                <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
+                <div className="absolute top-3 right-2 z-10" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu
                     onOpenChange={(open) => {
                       setOpenDropdownId(open ? patient.id : null)
@@ -869,8 +869,9 @@ export function PatientLibrarySection({
               </div>
             ))
           )}
+          </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

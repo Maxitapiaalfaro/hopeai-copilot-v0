@@ -58,10 +58,10 @@ export function DomainEvidenceDialog({
 
   const getFrequencyColor = (freq: string) => {
     switch (freq) {
-      case 'high': return 'bg-green-100 text-green-800 border-green-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low': return 'bg-gray-100 text-gray-800 border-gray-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'high': return 'bg-serene-teal-100 dark:bg-serene-teal-900/30 text-serene-teal-800 dark:text-serene-teal-200 border-serene-teal-200 dark:border-serene-teal-700';
+      case 'medium': return 'bg-clarity-blue-100 dark:bg-clarity-blue-900/30 text-clarity-blue-800 dark:text-clarity-blue-200 border-clarity-blue-200 dark:border-clarity-blue-700';
+      case 'low': return 'bg-secondary text-muted-foreground border-border';
+      default: return 'bg-secondary text-muted-foreground border-border';
     }
   };
 

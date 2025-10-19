@@ -92,7 +92,7 @@ export function MessageFileAttachments({ files, variant = 'compact', isUserMessa
             <span className="truncate max-w-[120px]">
               {file.name}
             </span>
-            <span className="text-blue-500 dark:text-blue-400 text-[10px]">
+            <span className="text-clarity-blue-600 dark:text-clarity-blue-400 text-[10px]">
               {formatFileSize(file.size)}
             </span>
             {getStatusIndicator(file.status)}
@@ -104,7 +104,7 @@ export function MessageFileAttachments({ files, variant = 'compact', isUserMessa
 
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
+      <div className="text-sm font-medium text-muted-foreground">
         Archivos adjuntos ({files.length})
       </div>
       <div className="space-y-2">
@@ -119,7 +119,7 @@ export function MessageFileAttachments({ files, variant = 'compact', isUserMessa
                 <div className="font-medium text-foreground truncate">
                   {file.name}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
                   <span>{formatFileSize(file.size)}</span>
                   <span>•</span>
                   <span>{new Date(file.uploadDate).toLocaleDateString()}</span>

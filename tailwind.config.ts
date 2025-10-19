@@ -136,19 +136,19 @@ const config: Config = {
   				800: '#063574',
   				900: '#042349',
   			},
-  			// Aurora Palette - Academic Plum (Evidencia/Investigación) #6F42C1
-  			'academic-plum': {
-  				50: '#F4EFFC',
-  				100: '#E5D9F7',
-  				200: '#CBAFE',
-  				300: '#B088E8',
-  				400: '#9565D4',
-  				500: '#6F42C1',
-  				600: '#5A359D',
-  				700: '#47297A',
-  				800: '#341E57',
-  				900: '#221334',
-  			},
+			// Aurora Palette - Academic Plum (Evidencia/Investigación) #6F42C1
+			'academic-plum': {
+				50: '#F4EFFC',
+				100: '#E5D9F7',
+				200: '#CBAFEF',
+				300: '#B088E8',
+				400: '#9565D4',
+				500: '#6F42C1',
+				600: '#5A359D',
+				700: '#47297A',
+				800: '#341E57',
+				900: '#221334',
+			},
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

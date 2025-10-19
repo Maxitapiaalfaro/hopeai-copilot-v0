@@ -26,31 +26,31 @@ export function ReasoningBullets({ bullets, isGenerating = false, className = ''
     
     switch (bullet.status) {
       case 'completed':
-        return <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+        return <CheckCircle className="w-4 h-4 text-serene-teal-500 dark:text-serene-teal-400 flex-shrink-0" />
       case 'generating':
-        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" />
+        return <Loader2 className="w-4 h-4 text-clarity-blue-500 dark:text-clarity-blue-400 animate-spin flex-shrink-0" />
       case 'error':
-        return <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+        return <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400 flex-shrink-0" />
       default:
-        return <Circle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        return <Circle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
     }
   }
 
   const getBulletTextColor = (bullet: ReasoningBullet) => {
     // ARQUITECTURA MEJORADA: Estilo especial para separadores
     if (bullet.type === 'separator') {
-      return 'text-gray-500 dark:text-gray-400 text-xs font-medium border-t border-gray-200 dark:border-gray-700 pt-2 mt-2'
+      return 'text-muted-foreground text-xs font-medium border-t border-border pt-2 mt-2'
     }
     
     switch (bullet.status) {
       case 'completed':
-        return 'text-gray-700 dark:text-gray-300'
+        return 'text-foreground'
       case 'generating':
-        return 'text-blue-600 dark:text-blue-400'
+        return 'text-clarity-blue-600 dark:text-clarity-blue-400'
       case 'error':
         return 'text-red-600 dark:text-red-400'
       default:
-        return 'text-gray-500 dark:text-gray-400'
+        return 'text-muted-foreground'
     }
   }
 

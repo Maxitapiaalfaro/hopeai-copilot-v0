@@ -1,3 +1,18 @@
+/**
+ * PubMed Research Tool - Enhanced v2.0
+ *
+ * Integración mejorada con PubMed E-utilities API
+ * Características nuevas:
+ * - Validación de DOIs con Crossref
+ * - Optimización para psicología clínica
+ * - Filtros de idioma (español + inglés)
+ * - Caché de resultados
+ */
+
+import { crossrefDOIResolver } from './crossref-doi-resolver'
+import { academicSourceValidator } from './academic-source-validator'
+import type { ValidatedAcademicSource } from './academic-source-validator'
+
 interface PubMedArticle {
   pmid: string
   title: string
@@ -7,6 +22,7 @@ interface PubMedArticle {
   abstract: string
   doi?: string
   url: string
+  language?: string
 }
 
 interface PubMedSearchParams {
@@ -14,22 +30,41 @@ interface PubMedSearchParams {
   maxResults?: number
   dateRange?: string
   sortBy?: "relevance" | "date" | "citations"
+  language?: 'es' | 'en' | 'both' // NUEVO: filtro de idioma
+  validateDOIs?: boolean // NUEVO: validar DOIs con Crossref
 }
 
 export class PubMedResearchTool {
   private readonly baseUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
   private readonly apiKey?: string
+  private cache: Map<string, PubMedArticle[]> = new Map()
+  private readonly cacheTTL = 24 * 60 * 60 * 1000 // 24 horas
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey
   }
 
   async searchPubMed(params: PubMedSearchParams): Promise<PubMedArticle[]> {
-    const { query, maxResults = 10, dateRange, sortBy = "relevance" } = params
+    const {
+      query,
+      maxResults = 10,
+      dateRange,
+      sortBy = "relevance",
+      language = 'both',
+      validateDOIs = true
+    } = params
+
+    // Verificar caché
+    const cacheKey = `${query}-${maxResults}-${dateRange}-${sortBy}-${language}`
+    const cached = this.cache.get(cacheKey)
+    if (cached) {
+      console.log('[PubMedTool] Retornando resultados desde caché')
+      return cached
+    }
 
     try {
       // Step 1: Search for PMIDs with retry logic
-      const searchUrl = this.buildSearchUrl(query, maxResults, dateRange, sortBy)
+      const searchUrl = this.buildSearchUrl(query, maxResults, dateRange, sortBy, language)
       const searchResponse = await this.fetchWithRetry(searchUrl, 'búsqueda de PMIDs')
       const searchData = await searchResponse.text()
 
@@ -44,11 +79,51 @@ export class PubMedResearchTool {
       const detailsResponse = await this.fetchWithRetry(detailsUrl, 'detalles de artículos')
       const detailsData = await detailsResponse.text()
 
-      return this.parseArticleDetails(detailsData)
+      let articles = this.parseArticleDetails(detailsData)
+
+      // Step 3: NUEVO - Validar DOIs con Crossref
+      if (validateDOIs) {
+        articles = await this.validateArticleDOIs(articles)
+      }
+
+      // Guardar en caché
+      this.cache.set(cacheKey, articles)
+      this.cleanCache()
+
+      return articles
     } catch (error) {
       console.error("Error searching PubMed:", error)
       throw new Error("Failed to search PubMed database")
     }
+  }
+
+  /**
+   * NUEVO: Valida DOIs de artículos con Crossref
+   * Filtra artículos con DOIs inválidos
+   */
+  private async validateArticleDOIs(articles: PubMedArticle[]): Promise<PubMedArticle[]> {
+    const validatedArticles: PubMedArticle[] = []
+
+    for (const article of articles) {
+      if (article.doi) {
+        try {
+          const isValid = await crossrefDOIResolver.validateDOI(article.doi)
+          if (isValid) {
+            validatedArticles.push(article)
+          } else {
+            console.warn(`[PubMedTool] DOI inválido: ${article.doi}`)
+          }
+        } catch (error) {
+          // Si falla validación, incluir artículo de todas formas
+          validatedArticles.push(article)
+        }
+      } else {
+        // Sin DOI, incluir de todas formas (tiene PMID)
+        validatedArticles.push(article)
+      }
+    }
+
+    return validatedArticles
   }
 
   private async fetchWithRetry(
@@ -106,10 +181,16 @@ export class PubMedResearchTool {
     throw new Error(`Falló ${operation} después de ${maxRetries} intentos. Último error: ${lastError?.message}`)
   }
 
-  private buildSearchUrl(query: string, maxResults: number, dateRange?: string, sortBy?: string): string {
+  private buildSearchUrl(
+    query: string,
+    maxResults: number,
+    dateRange?: string,
+    sortBy?: string,
+    language?: 'es' | 'en' | 'both'
+  ): string {
     const params = new URLSearchParams({
       db: "pubmed",
-      term: this.enhanceQuery(query),
+      term: this.enhanceQuery(query, language),
       retmax: maxResults.toString(),
       retmode: "xml",
       sort: sortBy === "date" ? "pub_date" : "relevance",
@@ -142,22 +223,47 @@ export class PubMedResearchTool {
     return `${this.baseUrl}/efetch.fcgi?${params.toString()}`
   }
 
-  private enhanceQuery(query: string): string {
-    // Add psychology and clinical terms to improve relevance
+  /**
+   * MEJORADO: Optimiza query para psicología clínica con filtros de idioma
+   */
+  private enhanceQuery(query: string, language?: 'es' | 'en' | 'both'): string {
+    // Términos MeSH optimizados para psicología clínica
     const clinicalTerms = [
-      "psychology[MeSH]",
+      "psychology, clinical[MeSH]",
       "psychotherapy[MeSH]",
-      "mental health[MeSH]",
-      "clinical psychology[MeSH]",
+      "mental disorders[MeSH]",
+      "cognitive behavioral therapy[MeSH]",
+      "mental health[MeSH]"
     ]
 
     // Check if query already contains field tags
     if (query.includes("[") && query.includes("]")) {
-      return query
+      // Query ya tiene tags MeSH, solo agregar filtro de idioma
+      return this.addLanguageFilter(query, language)
     }
 
-    // Add clinical context to general queries
-    return `(${query}) AND (${clinicalTerms.join(" OR ")})`
+    // Construir query mejorado
+    let enhancedQuery = `(${query}) AND (${clinicalTerms.join(" OR ")})`
+
+    // Agregar filtro de idioma
+    enhancedQuery = this.addLanguageFilter(enhancedQuery, language)
+
+    return enhancedQuery
+  }
+
+  /**
+   * NUEVO: Agrega filtro de idioma a la query
+   */
+  private addLanguageFilter(query: string, language?: 'es' | 'en' | 'both'): string {
+    if (!language || language === 'both') {
+      // Priorizar español e inglés
+      return `${query} AND (spanish[Language] OR english[Language])`
+    } else if (language === 'es') {
+      return `${query} AND spanish[Language]`
+    } else if (language === 'en') {
+      return `${query} AND english[Language]`
+    }
+    return query
   }
 
   private convertDateRange(dateRange: string): string {
@@ -386,6 +492,32 @@ ${article.abstract.substring(0, 300)}${article.abstract.length > 300 ? "..." : "
         }
       }
     }
+  }
+
+  /**
+   * NUEVO: Limpia entradas de caché antiguas
+   */
+  private cleanCache(): void {
+    const now = Date.now()
+    const keysToDelete: string[] = []
+
+    // Implementación simple: si caché > 100 entradas, limpiar las más antiguas
+    if (this.cache.size > 100) {
+      const entries = Array.from(this.cache.entries())
+      // Mantener solo las últimas 50
+      entries.slice(0, entries.length - 50).forEach(([key]) => {
+        keysToDelete.push(key)
+      })
+    }
+
+    keysToDelete.forEach(key => this.cache.delete(key))
+  }
+
+  /**
+   * NUEVO: Limpia toda la caché
+   */
+  clearCache(): void {
+    this.cache.clear()
   }
 }
 

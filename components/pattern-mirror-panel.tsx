@@ -484,7 +484,7 @@ export function PatternMirrorPanel({
             {analysis.reflectiveQuestions.map((question, idx) => (
               <div 
                 key={idx} 
-                className="group relative bg-white border-2 border-indigo-100 rounded-xl p-5 space-y-3 hover:border-indigo-200 hover:shadow-sm transition-all"
+                className="group relative bg-card border-2 border-academic-plum-200 dark:border-academic-plum-700 rounded-xl p-5 space-y-3 hover:border-academic-plum-300 dark:hover:border-academic-plum-600 hover:shadow-sm transition-all"
               >
                 {/* Question Number Badge */}
                 <div className="absolute -top-3 left-5 px-2.5 py-0.5 bg-indigo-600 text-white text-xs font-medium rounded-full">
