@@ -11,7 +11,17 @@ export interface ChatMessage {
   // ARQUITECTURA OPTIMIZADA: Archivos se referencian por ID, no objetos completos
   // Esto previene la acumulación exponencial que causa RESOURCE_EXHAUSTED
   fileReferences?: string[]  // IDs de archivos, no objetos completos
-  groundingUrls?: Array<{title: string, url: string, domain?: string}>
+  // 📚 MEJORADO: groundingUrls ahora soporta referencias académicas completas de ParallelAI
+  groundingUrls?: Array<{
+    title: string
+    url: string
+    domain?: string
+    // Campos académicos opcionales extraídos de ParallelAI
+    doi?: string
+    authors?: string
+    year?: number
+    journal?: string
+  }>
   // ELIMINADO: attachments duplicados - usar solo fileReferences por ID
   // NUEVA FUNCIONALIDAD: Bullets de razonamiento específicos por mensaje
   reasoningBullets?: ReasoningBullet[]

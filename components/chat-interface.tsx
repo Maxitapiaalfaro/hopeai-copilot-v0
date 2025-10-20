@@ -25,7 +25,7 @@ import type { TransitionState } from "@/hooks/use-hopeai-system"
 import { ReasoningBullets } from "@/components/reasoning-bullets"
 import type { ReasoningBulletsState } from "@/types/clinical-types"
 import { useDisplayPreferences, getFontSizeClass, getMessageWidthClass, getMessageSpacingClass, getChatContainerWidthClass } from "@/providers/display-preferences-provider"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 
 interface ChatInterfaceProps {
@@ -184,6 +184,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     found: number
     validated: number
   } | null>(null)
+  // 📚 Estado para almacenar referencias académicas extraídas de ParallelAI
+  const [streamingAcademicReferences, setStreamingAcademicReferences] = useState<Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>>([])
+  // Estado para controlar colapso/expansión de referencias
+  const [collapsedReferences, setCollapsedReferences] = useState<Record<string, boolean>>({})
   const academicSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 🔄 Resetear estado del indicador académico cuando cambia la sesión
@@ -553,6 +557,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             
             let fullResponse = ""
             let accumulatedGroundingUrls: Array<{title: string, url: string, domain?: string}> = []
+            let accumulatedAcademicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
             let chunkCount = 0
             const streamingStartTime = Date.now()
             
@@ -596,18 +601,30 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   accumulatedGroundingUrls = [...accumulatedGroundingUrls, ...chunk.groundingUrls]
                   setStreamingGroundingUrls(accumulatedGroundingUrls)
                 }
+                // 📚 Capturar referencias académicas de ParallelAI
+                if (chunk.metadata?.type === "academic_references" && chunk.metadata.references) {
+                  console.log('📚 Frontend: Referencias académicas recibidas:', chunk.metadata.references.length)
+                  accumulatedAcademicReferences = chunk.metadata.references
+                  setStreamingAcademicReferences(accumulatedAcademicReferences)
+                }
                 // 🎨 UX: Capturar eventos de tool calls
                 if (chunk.metadata) {
                   console.log('📦 Frontend: Metadata recibida:', chunk.metadata)
 
-                  if (chunk.metadata.type === "tool_call_start" && chunk.metadata.toolName === "search_academic_literature") {
-                    console.log('🔍 Frontend: Búsqueda académica iniciada:', chunk.metadata.query)
+                  if (chunk.metadata.type === "tool_call_start" && 
+                      (chunk.metadata.toolName === "search_academic_literature" ||
+                       chunk.metadata.toolName === "search_evidence_for_reflection" ||
+                       chunk.metadata.toolName === "search_evidence_for_documentation")) {
+                    console.log('🔍 Frontend: Búsqueda académica iniciada:', chunk.metadata.toolName, chunk.metadata.query)
                     isAcademicSearch = true // Activar flag local
                     setAcademicSearchState('searching')
                     setAcademicSearchQuery(chunk.metadata.query || "")
                     setAcademicSearchResults(null)
-                  } else if (chunk.metadata.type === "tool_call_complete" && chunk.metadata.toolName === "search_academic_literature") {
-                    console.log('✅ Frontend: Búsqueda académica completada:', {
+                  } else if (chunk.metadata.type === "tool_call_complete" && 
+                             (chunk.metadata.toolName === "search_academic_literature" ||
+                              chunk.metadata.toolName === "search_evidence_for_reflection" ||
+                              chunk.metadata.toolName === "search_evidence_for_documentation")) {
+                    console.log('✅ Frontend: Búsqueda académica completada:', chunk.metadata.toolName, {
                       found: chunk.metadata.sourcesFound,
                       validated: chunk.metadata.sourcesValidated
                     })
@@ -665,8 +682,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   // Usar el agente de la información de enrutamiento si está disponible,
                   // de lo contrario usar el agente activo actual
                   const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-                  await addStreamingResponseToHistory(fullResponse, responseAgent, accumulatedGroundingUrls, bulletsSnapshotRef.current)
-                  console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
+                  // 📚 Combinar groundingUrls y referencias académicas
+                  const allReferences = [...accumulatedGroundingUrls, ...accumulatedAcademicReferences]
+                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, bulletsSnapshotRef.current)
+                  console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent, 'y', allReferences.length, 'referencias')
                 } catch (historyError) {
                   console.error('❌ Frontend: Error agregando al historial:', historyError)
                   Sentry.captureException(historyError)
@@ -675,6 +694,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               
               setStreamingResponse("")
               setStreamingGroundingUrls([])
+              setStreamingAcademicReferences([])
               setIsStreaming(false)
               // Resetear estado de búsqueda académica si quedó activo
               if (academicSearchState !== 'idle') {
@@ -1057,25 +1077,84 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   {/* Mostrar referencias de grounding si existen */}
                   {message.groundingUrls && message.groundingUrls.length > 0 && (
                     <div className="p-3 md:p-4 border-t border-border/80">
-                      <div className="text-xs font-sans font-medium text-muted-foreground mb-2">Referencias:</div>
-                      <div className="space-y-1">
-                        {message.groundingUrls.map((ref, index) => (
-                          <div key={index} className="text-sm font-sans break-words overflow-hidden">
-                            <a 
-                              href={ref.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline break-words hyphens-auto"
-                              style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-                            >
-                              {ref.title}
-                            </a>
-                            {ref.domain && (
-                              <span className="text-muted-foreground ml-1 break-words">({ref.domain})</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedReferences(prev => ({ ...prev, [message.id]: !prev[message.id] }))}
+                        className="w-full text-xs font-sans font-medium text-muted-foreground mb-3 flex items-center gap-2 hover:text-foreground transition-colors"
+                      >
+                        <BookOpenIcon className="h-4 w-4" weight="duotone" />
+                        <span>Referencias ({message.groundingUrls.length})</span>
+                        <CaretDownIcon 
+                          className={cn(
+                            "h-3.5 w-3.5 ml-auto transition-transform duration-200",
+                            !collapsedReferences[message.id] && "-rotate-90"
+                          )} 
+                        />
+                      </button>
+                      <AnimatePresence>
+                        {collapsedReferences[message.id] && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                            className="overflow-hidden"
+                          >
+                            <div className="space-y-2.5">
+                              {message.groundingUrls.map((ref: any, index: number) => {
+                                // Detectar si es una referencia académica (tiene autores, DOI, journal o year)
+                                const isAcademicRef = ref.authors || ref.doi || ref.journal || ref.year
+                                
+                                return (
+                                  <motion.div 
+                                    key={index} 
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 10 }}
+                                    transition={{ 
+                                      duration: 0.2, 
+                                      delay: index * 0.05
+                                    }}
+                                    className="text-sm font-sans break-words"
+                                  >
+                                    <a 
+                                      href={ref.url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className={cn(
+                                        "hover:underline inline-flex items-start gap-1.5 group",
+                                        isAcademicRef ? "text-academic-plum-600 hover:text-academic-plum-700" : "text-primary"
+                                      )}
+                                    >
+                                      <span className="flex-1">
+                                        <span className="font-medium">{index + 1}. {ref.title}</span>
+                                        {ref.authors && <span className="text-muted-foreground text-xs block mt-0.5">{ref.authors}</span>}
+                                        {(ref.journal || ref.year) && (
+                                          <span className="text-muted-foreground text-xs block mt-0.5">
+                                            {ref.journal}{ref.journal && ref.year && ', '}{ref.year}
+                                          </span>
+                                        )}
+                                        {ref.doi && (
+                                          <span className="text-muted-foreground text-xs block mt-0.5">
+                                            DOI: {ref.doi}
+                                          </span>
+                                        )}
+                                        {!isAcademicRef && ref.domain && (
+                                          <span className="text-muted-foreground text-xs block mt-0.5">({ref.domain})</span>
+                                        )}
+                                      </span>
+                                      <CaretRightIcon className={cn(
+                                        "h-3.5 w-3.5 text-muted-foreground transition-colors flex-shrink-0 mt-0.5",
+                                        isAcademicRef ? "group-hover:text-academic-plum-600" : "group-hover:text-primary"
+                                      )} />
+                                    </a>
+                                  </motion.div>
+                                )
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   )}
                   {/* Copy to clipboard for AI messages */}
@@ -1290,6 +1369,75 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       className="text-base leading-relaxed"
                       showTypingIndicator={true}
                     />
+                    {/* 📚 Referencias académicas de ParallelAI */}
+                    {streamingAcademicReferences.length > 0 && (
+                      <div className="mt-6 pt-4 border-t border-border/60">
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedReferences(prev => ({ ...prev, 'streaming': !prev['streaming'] }))}
+                          className="w-full text-xs font-sans font-medium text-muted-foreground mb-3 flex items-center gap-2 hover:text-foreground transition-colors"
+                        >
+                          <BookOpenIcon className="h-4 w-4" weight="duotone" />
+                          <span>Referencias Académicas ({streamingAcademicReferences.length})</span>
+                          <CaretDownIcon 
+                            className={cn(
+                              "h-3.5 w-3.5 ml-auto transition-transform duration-200",
+                              !collapsedReferences['streaming'] && "-rotate-90"
+                            )} 
+                          />
+                        </button>
+                        <AnimatePresence>
+                          {collapsedReferences['streaming'] && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2, ease: "easeInOut" }}
+                              className="overflow-hidden"
+                            >
+                              <div className="space-y-2.5">
+                                {streamingAcademicReferences.map((ref, index) => (
+                                  <motion.div 
+                                    key={index} 
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 10 }}
+                                    transition={{ 
+                                      duration: 0.2, 
+                                      delay: index * 0.05
+                                    }}
+                                    className="text-sm font-sans break-words"
+                                  >
+                                    <a 
+                                      href={ref.url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="text-academic-plum-600 hover:text-academic-plum-700 hover:underline inline-flex items-start gap-1.5 group"
+                                    >
+                                      <span className="flex-1">
+                                        <span className="font-medium">{index + 1}. {ref.title}</span>
+                                        {ref.authors && <span className="text-muted-foreground text-xs block mt-0.5">{ref.authors}</span>}
+                                        {(ref.journal || ref.year) && (
+                                          <span className="text-muted-foreground text-xs block mt-0.5">
+                                            {ref.journal}{ref.journal && ref.year && ', '}{ref.year}
+                                          </span>
+                                        )}
+                                        {ref.doi && (
+                                          <span className="text-muted-foreground text-xs block mt-0.5">
+                                            DOI: {ref.doi}
+                                          </span>
+                                        )}
+                                      </span>
+                                      <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-academic-plum-600 transition-colors flex-shrink-0 mt-0.5" />
+                                    </a>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -111,9 +111,13 @@ export class IntelligentIntentRouter {
       - Solicita diálogo terapéutico, cuestionamiento socrático o facilitación de insights
       - Necesita explorar creencias, desarrollar perspectiva o análisis introspectivo
       - Busca comprensión profunda, desarrollo de conciencia o autorreflexión
-      - Menciona términos como: reflexionar, explorar, analizar, cuestionar, insight, autoconocimiento
+      - Presenta un CASO CLÍNICO para supervisión o análisis de paciente
+      - Pregunta sobre abordaje terapéutico en contexto de caso específico
+      - Menciona términos como: reflexionar, explorar, analizar, cuestionar, insight, autoconocimiento, caso, paciente
       
-      ENTIDADES CLAVE: exploración socrática, desarrollo personal, insight terapéutico`,
+      NOTA IMPORTANTE: El Supervisor puede buscar evidencia científica COMO COMPLEMENTO a la exploración reflexiva cuando sea relevante para el caso, pero la intención principal debe ser exploración/supervisión clínica.
+      
+      ENTIDADES CLAVE: exploración socrática, desarrollo personal, insight terapéutico, supervisión de casos`,
       parametersJsonSchema: {
         type: 'object' as const,
         properties: {
@@ -144,12 +148,15 @@ export class IntelligentIntentRouter {
       
       ACTIVAR CUANDO:
       - Usuario necesita documentación clínica, notas de sesión o resúmenes profesionales
-      - Solicita estructuración de información, formatos específicos (SOAP, PIRP, DAP)
+      - Solicita estructuración de información, formatos específicos (SOAP, PIRP, DAP, BIRP)
       - Requiere síntesis documental, archivado clínico o registro de intervenciones
       - Busca ejemplos de redacción profesional o plantillas de documentación
-      - Menciona términos como: documentar, notas, resumen, SOAP, expediente, bitácora
+      - Pide organizar, estructurar o sintetizar información de sesiones/casos
+      - Menciona términos como: documentar, notas, resumen, SOAP, expediente, bitácora, registrar
       
-      ENTIDADES CLAVE: documentación clínica, formatos profesionales, síntesis terapéutica`,
+      NOTA IMPORTANTE: El Documentalista puede buscar evidencia científica COMO COMPLEMENTO para fundamentar diagnósticos o intervenciones en la documentación, pero la intención principal debe ser crear/estructurar documentación clínica.
+      
+      ENTIDADES CLAVE: documentación clínica, formatos profesionales, síntesis terapéutica, registros estructurados`,
       parametersJsonSchema: {
         type: 'object' as const,
         properties: {
@@ -176,16 +183,24 @@ export class IntelligentIntentRouter {
     },
     {
       name: 'activar_modo_academico',
-      description: `Activa HopeAI Académico para búsqueda de evidencia científica, validación empírica y consulta de literatura especializada.
+      description: `Activa Investigador Académico para búsqueda EXHAUSTIVA de evidencia científica, validación empírica y consulta PROFUNDA de literatura especializada como OBJETIVO PRINCIPAL.
       
-      ACTIVAR CUANDO:
-      - Usuario busca estudios, evidencia científica o validación de técnicas terapéuticas
-      - Solicita investigación, metaanálisis, ensayos clínicos o revisiones sistemáticas
-      - Requiere respaldo empírico, guidelines clínicas o protocolos validados
-      - Busca literatura actualizada, consenso científico o práctica basada en evidencia
-      - Menciona términos como: estudios, evidencia, investigación, papers, validación científica
+      ACTIVAR CUANDO LA PREGUNTA PRINCIPAL ES SOBRE EVIDENCIA:
+      - Usuario pregunta "¿Qué dice la evidencia/investigación sobre [tema]?" como consulta CENTRAL
+      - Solicita EXPLÍCITAMENTE investigación, metaanálisis, ensayos clínicos o revisiones sistemáticas
+      - Requiere respaldo empírico, guidelines clínicas o protocolos validados SIN contexto de caso específico
+      - Busca literatura actualizada, consenso científico o práctica basada en evidencia de forma GENERAL
+      - Pide comparación de eficacia entre múltiples intervenciones basada en estudios
+      - Menciona EXPLÍCITAMENTE términos como: estudios, papers, metaanálisis, RCT, evidencia, investigación, publicaciones
       
-      ENTIDADES CLAVE: validación académica, evidencia empírica, investigación científica`,
+      NO ACTIVAR CUANDO:
+      - La búsqueda de evidencia es COMPLEMENTARIA a exploración de un caso clínico (usar Supervisor)
+      - La evidencia es para FUNDAMENTAR documentación (usar Documentalista)
+      - La pregunta principal es sobre un caso/paciente específico y la evidencia es secundaria
+      
+      NOTA CRÍTICA: El Académico hace búsqueda EXHAUSTIVA (10+ fuentes). Los otros agentes hacen búsqueda COMPLEMENTARIA (3-5 fuentes) cuando es relevante.
+      
+      ENTIDADES CLAVE: validación académica exhaustiva, evidencia empírica primaria, investigación científica profunda, literatura especializada`,
       parametersJsonSchema: {
         type: 'object' as const,
         properties: {
