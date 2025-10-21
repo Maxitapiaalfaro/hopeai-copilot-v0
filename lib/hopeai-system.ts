@@ -659,16 +659,17 @@ export class HopeAISystem {
           }
         }
         
-        // 📊 COMPLETE COMPREHENSIVE METRICS TRACKING for streaming
-        // Note: Streaming metrics are completed in the wrapper async generator
-        const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
+        // 📊 METRICS TRACKING for streaming
+        // Note: Streaming metrics will be automatically completed in the wrapper async generator
+        // when the stream finishes. DO NOT call completeInteraction here - it would complete
+        // with 0 tokens before the stream has finished.
         
         console.log(`🎉 [SessionMetrics] Streaming interaction setup completed: ${sessionId} | Metrics will be captured on stream completion`);
         
         return { 
           response: streamingResponse, 
           updatedState: currentState,
-          interactionMetrics: completedMetrics 
+          interactionMetrics: null // Will be captured by wrapper when stream completes
         }
       } else {
         responseContent = response.text
@@ -700,10 +701,11 @@ export class HopeAISystem {
         })
       }
 
-      // 📊 COMPLETE COMPREHENSIVE METRICS TRACKING for non-streaming
-      const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
+      // 📊 METRICS TRACKING for non-streaming
+      // Note: Metrics are already completed in clinical-agent-router.ts after token extraction
+      // Attempting to call completeInteraction here would return null as interaction is already completed
       
-      console.log(`🎉 [SessionMetrics] Non-streaming interaction completed: ${sessionId} | ${completedMetrics?.timing?.totalResponseTime || 'N/A'}ms | ${completedMetrics?.tokens?.totalTokens || 'N/A'} tokens | $${completedMetrics?.tokens?.estimatedCost?.toFixed(6) || '0.000000'}`);
+      console.log(`🎉 [SessionMetrics] Non-streaming interaction completed: ${sessionId}`);
 
       return { 
         response: {
@@ -716,7 +718,7 @@ export class HopeAISystem {
           }
         }, 
         updatedState: currentState,
-        interactionMetrics: completedMetrics
+        interactionMetrics: null // Already captured and completed in router
       }
     } catch (error) {
       console.error("Error sending message:", error)

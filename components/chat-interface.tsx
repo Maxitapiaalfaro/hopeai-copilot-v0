@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils"
 import type { AgentType, ChatState, ClinicalFile, ReasoningBullet } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
 import { useSpeechToText } from "@/hooks/use-speech-to-text"
+import { GeminiVoiceButton } from "@/components/gemini-voice-button"
+import { VoiceTranscriptionOverlay } from "@/components/voice-transcription-overlay"
+import { VoiceRecordingOverlay } from "@/components/voice-recording-overlay"
 import { MarkdownRenderer, StreamingMarkdownRenderer } from "@/components/markdown-renderer"
 import { getAgentVisualConfig, getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 import { trackMessage } from "@/lib/sentry-metrics-tracker"
@@ -27,6 +30,8 @@ import type { ReasoningBulletsState } from "@/types/clinical-types"
 import { useDisplayPreferences, getFontSizeClass, getMessageWidthClass, getMessageSpacingClass, getChatContainerWidthClass } from "@/providers/display-preferences-provider"
 import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
+import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
+import { DevMessageMetrics } from "@/components/dev-message-metrics"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -176,6 +181,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const voiceButtonStopRef = useRef<(() => void) | null>(null)
+  const voiceCancelRecordingRef = useRef<(() => void) | null>(null)
+  const voiceCancelTranscriptionRef = useRef<(() => void) | null>(null)
   const [forceUpdate, setForceUpdate] = useState(0)
   // 🎨 UX: Estado para indicador de búsqueda académica
   const [academicSearchState, setAcademicSearchState] = useState<'idle' | 'searching' | 'analyzing' | 'complete'>('idle')
@@ -1174,6 +1185,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                             <CopyIcon className="h-4 w-4" />
                           )}
                         </button>
+                        <DevMessageMetrics 
+                          sessionId={currentSession?.sessionId || ''} 
+                          messageIndex={index} 
+                        />
                         <button
                           type="button"
                           onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
@@ -1718,7 +1733,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   placeholder="Escribe tu mensaje o pregunta..."
                   className="w-full min-h-[52px] resize-none border-0 bg-transparent px-4 md:px-5 py-3 md:pr-32 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans overflow-hidden"
                   rows={1}
-                  disabled={isProcessing || isStreaming || isUploading}
+                  disabled={isProcessing || isStreaming || isUploading || isTranscribing}
                   style={{
                     boxShadow: 'none',
                   }}
@@ -1735,7 +1750,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       // No-op here; parent hook updates pendingFiles after uploadDocument
                     }}
                     uploadDocument={uploadDocument}
-                    disabled={isProcessing || isStreaming || isUploading}
+                    disabled={isProcessing || isStreaming || isUploading || isTranscribing}
                     pendingFiles={pendingFiles}
                     onRemoveFile={onRemoveFile}
                     buttonClassName={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
@@ -1810,14 +1825,23 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
                 {/* Right side buttons (voice and send) */}
                 <div className="flex items-center gap-1.5">
-                  <VoiceInputButton
-                    onTranscriptUpdate={handleVoiceTranscript}
-                    disabled={isProcessing || isStreaming || isUploading}
-                    size="lg"
-                    variant="ghost"
-                    language="es-CL"
+                  <GeminiVoiceButton
+                    onTranscriptReady={(transcript) => {
+                      setInputValue(prev => {
+                        const newValue = prev.trim() ? `${prev} ${transcript}` : transcript
+                        return newValue
+                      })
+                    }}
+                    onTranscribingChange={setIsTranscribing}
+                    onRecordingChange={(isRecording, duration) => {
+                      setIsRecordingVoice(isRecording)
+                      setRecordingDuration(duration)
+                    }}
+                    stopRecordingRef={voiceButtonStopRef}
+                    cancelRecordingRef={voiceCancelRecordingRef}
+                    cancelTranscriptionRef={voiceCancelTranscriptionRef}
+                    disabled={isProcessing || isStreaming || isUploading || isTranscribing || isRecordingVoice}
                     className={cn("h-10 w-10 md:h-12 md:w-12", config.ghostButton.hoverBg, config.ghostButton.text)}
-                    iconClassName={cn(config.ghostButton.text, 'group-hover:opacity-90 h-5 w-5')}
                   />
                   <Button
                     onClick={() => handleSendMessage()}
@@ -1826,6 +1850,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       isProcessing || 
                       isStreaming ||
                       isUploading ||
+                      isTranscribing ||
                       pendingFiles.some(file => 
                         (file as any).processingStatus && 
                         (file as any).processingStatus === 'processing'
@@ -1855,6 +1880,26 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
         confidence={0}
         error={speechError}
       />
+      
+      {/* Overlay elegante de transcripción con Gemini */}
+      <VoiceTranscriptionOverlay isTranscribing={isTranscribing} />
+      
+      {/* Overlay elegante de grabación de voz */}
+      <VoiceRecordingOverlay 
+        isRecording={isRecordingVoice} 
+        duration={recordingDuration}
+        onStop={() => {
+          voiceButtonStopRef.current?.()
+        }}
+        onCancel={() => {
+          voiceCancelRecordingRef.current?.()
+        }}
+      />
+      
+      {/* Dev Metrics Indicator - Only visible in development */}
+      {currentSession?.sessionId && (
+        <DevMetricsIndicator sessionId={currentSession.sessionId} />
+      )}
     </div>
   )
 }

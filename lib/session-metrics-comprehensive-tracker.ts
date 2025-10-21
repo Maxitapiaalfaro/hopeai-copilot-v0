@@ -102,11 +102,27 @@ export class SessionMetricsComprehensiveTracker {
   private sessionSnapshots: Map<string, SessionMetricsSnapshot> = new Map();
   private interactions: Map<string, ComprehensiveSessionMetrics[]> = new Map();
   
-  // Model pricing (tokens per USD) - Update based on current pricing
-  private readonly MODEL_PRICING: Record<string, { inputCostPer1KTokens: number; outputCostPer1KTokens: number }> = {
+  // Model pricing (per 1K tokens in USD) - Based on official Google AI pricing
+  // Reference: https://ai.google.dev/gemini-api/docs/pricing
+  private readonly MODEL_PRICING: Record<string, { 
+    inputCostPer1KTokens: number; 
+    outputCostPer1KTokens: number;
+    displayName: string;
+  }> = {
+    'gemini-2.5-pro': {
+      inputCostPer1KTokens: 0.00030,      // $0.30 per 1M tokens = $0.0003 per 1K
+      outputCostPer1KTokens: 0.00250,     // $2.50 per 1M tokens = $0.0025 per 1K
+      displayName: 'Gemini 2.5 Pro'
+    },
+    'gemini-2.5-flash': {
+      inputCostPer1KTokens: 0.00030,      // $0.30 per 1M tokens = $0.0003 per 1K
+      outputCostPer1KTokens: 0.00250,     // $2.50 per 1M tokens = $0.0025 per 1K
+      displayName: 'Gemini 2.5 Flash'
+    },
     'gemini-2.5-flash-lite': {
-      inputCostPer1KTokens: 0.000125,  // $0.000125 per 1K input tokens
-      outputCostPer1KTokens: 0.000375  // $0.000375 per 1K output tokens
+      inputCostPer1KTokens: 0.00010,      // $0.10 per 1M tokens = $0.0001 per 1K
+      outputCostPer1KTokens: 0.00040,     // $0.40 per 1M tokens = $0.0004 per 1K
+      displayName: 'Gemini 2.5 Flash-Lite'
     }
   };
 
@@ -253,7 +269,10 @@ export class SessionMetricsComprehensiveTracker {
       interaction.behavioral.responseLength = responseText.length;
     }
 
-    // 🔒 SECURITY: Console logging disabled in production
+    // 🔍 DEBUG: Log what was recorded
+    console.log(`📊 [SessionMetrics] recordModelCallComplete - ID: ${interactionId}`);
+    console.log(`📊 [SessionMetrics] Input: ${inputTokens}, Output: ${outputTokens}, Total: ${interaction.tokens.totalTokens}`);
+    console.log(`📊 [SessionMetrics] Model: ${model}, Cost: $${interaction.tokens.estimatedCost.toFixed(6)}`);
   }
 
   /**
@@ -276,19 +295,24 @@ export class SessionMetricsComprehensiveTracker {
     
     const completedInteraction = interaction as ComprehensiveSessionMetrics;
     
+    // 🔍 DEBUG: Log what we're saving
+    console.log(`📊 [SessionMetrics] completeInteraction - ID: ${interactionId}, Session: ${completedInteraction.sessionId}`);
+    console.log(`📊 [SessionMetrics] Tokens: ${completedInteraction.tokens.totalTokens}, Cost: $${completedInteraction.tokens.estimatedCost.toFixed(6)}`);
+    console.log(`📊 [SessionMetrics] Time: ${completedInteraction.timing.totalResponseTime}ms, Agent: ${completedInteraction.computational?.agentUsed}`);
+    
     // Store in session history
     if (!this.interactions.has(completedInteraction.sessionId)) {
       this.interactions.set(completedInteraction.sessionId, []);
+      console.log(`📊 [SessionMetrics] Created new interaction array for session ${completedInteraction.sessionId}`);
     }
     this.interactions.get(completedInteraction.sessionId)!.push(completedInteraction);
+    console.log(`📊 [SessionMetrics] Added interaction to session. Total interactions now: ${this.interactions.get(completedInteraction.sessionId)!.length}`);
     
     // Update session snapshot
     this.updateSessionSnapshot(completedInteraction);
     
     // Clean up active tracking
     this.activeInteractions.delete(interactionId);
-
-    // 🔒 SECURITY: Console logging disabled in production
 
     return completedInteraction;
   }
@@ -304,6 +328,16 @@ export class SessionMetricsComprehensiveTracker {
       snapshot: this.sessionSnapshots.get(sessionId) || null,
       interactions: this.interactions.get(sessionId) || []
     };
+  }
+
+  /**
+   * Get model pricing information
+   */
+  getModelPricing(model?: string) {
+    if (model && this.MODEL_PRICING[model]) {
+      return this.MODEL_PRICING[model];
+    }
+    return this.MODEL_PRICING; // Return all pricing
   }
 
   /**
@@ -388,9 +422,19 @@ export class SessionMetricsComprehensiveTracker {
     const sessionId = interaction.sessionId;
     const sessionInteractions = this.interactions.get(sessionId) || [];
     
+    // 🔍 DEBUG: Log what we're working with
+    console.log(`📊 [SessionMetrics] Updating snapshot for session ${sessionId}`);
+    console.log(`📊 [SessionMetrics] Total interactions in session: ${sessionInteractions.length}`);
+    if (sessionInteractions.length > 0) {
+      const lastInteraction = sessionInteractions[sessionInteractions.length - 1];
+      console.log(`📊 [SessionMetrics] Last interaction tokens: ${lastInteraction.tokens.totalTokens}, cost: $${lastInteraction.tokens.estimatedCost}`);
+    }
+    
     const totalTokens = sessionInteractions.reduce((sum, i) => sum + i.tokens.totalTokens, 0);
     const totalCost = sessionInteractions.reduce((sum, i) => sum + (i.tokens.estimatedCost || 0), 0);
     const totalTime = sessionInteractions.reduce((sum, i) => sum + i.timing.totalResponseTime, 0);
+    
+    console.log(`📊 [SessionMetrics] Calculated totals - Tokens: ${totalTokens}, Cost: $${totalCost}, Time: ${totalTime}ms`);
     
     // Agent preferences
     const agentCounts: { [agent: string]: number } = {};

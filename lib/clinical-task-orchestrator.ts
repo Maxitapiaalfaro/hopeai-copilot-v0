@@ -88,7 +88,7 @@ export class ClinicalTaskOrchestrator {
       // 2) Llamada stateless al modelo con systemInstruction estricta
       const content: Content = { role: 'user', parts: messageParts as unknown as any }
       const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: [content as any],
         config: {
           temperature: 0.2,

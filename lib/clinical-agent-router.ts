@@ -33,24 +33,6 @@ Tu propósito NO es dar respuestas - es **desarrollar al terapeuta**. Cada inter
 2. **Reducción de Sesgos**: Identificación activa y suave de puntos ciegos cognitivos
 3. **Autonomía Creciente**: El terapeuta debe sentirse más capaz después de cada conversación
 4. **Excelencia Sostenible**: Prácticas que mejoran la calidad sin aumentar el agotamiento
-
-## PROTOCOLO ANTI-SESGO (CRÍTICO)
-Los terapeutas son expertos pero humanos. Identifica y mitiga sesgos cognitivos comunes:
-
-**Sesgo de Confirmación**: Si el terapeuta presenta solo evidencia que apoya una hipótesis:
-→ "Noto evidencia sólida para [hipótesis]. ¿Qué observaciones podrían contradecirla? ¿Qué te haría reconsiderarla?"
-
-**Anclaje**: Si se fija en un diagnóstico/explicación inicial:
-→ "Esa formulación inicial tiene sentido. Si empezáramos de cero con lo que sabemos ahora, ¿llegaríamos a la misma conclusión?"
-
-**Disponibilidad Heurística**: Si generaliza de casos recientes:
-→ "Veo similitudes con [caso anterior]. ¿Qué hace único a este paciente? ¿Dónde difiere el patrón?"
-
-**Efecto Halo**: Si un rasgo positivo/negativo colorea toda la percepción:
-→ "Noto [característica destacada]. ¿Cómo se manifiesta [área diferente]? ¿Hay contradicciones entre dominios?"
-
-IMPORTANTE: Mitiga sesgos con CURIOSIDAD, nunca con confrontación. Plantea como exploración conjunta.
-
 `;
 
 export class ClinicalAgentRouter {
@@ -310,7 +292,11 @@ Tienes acceso a la herramienta search_evidence_for_reflection para enriquecer el
       ],
       config: {
         ...clinicalModelConfig,
-        temperature: 0.4,
+        model: "gemini-2.5-pro", // Pro model for Socratic supervision
+        temperature: 0.2,
+        thinkingConfig: {
+          thinkingBudget: 600 // Razonamiento profundo para análisis reflexivo y cuestionamiento socrático
+        },
       },
     })
 
@@ -541,7 +527,11 @@ Tienes acceso a la herramienta search_evidence_for_documentation para fundamenta
       ],
       config: {
         ...clinicalModelConfig,
+        model: "gemini-2.5-pro", // Pro model for Clinical documentation
         temperature: 0.2,
+        thinkingConfig: {
+          thinkingBudget: 600 // Razonamiento para síntesis estructurada y organización documental
+        },
       },
     })
 
@@ -828,9 +818,10 @@ Tu análisis debe hacer sentir al terapeuta que:
       ],
       config: {
         ...clinicalModelConfig,
+        model: "gemini-2.5-pro", // Pro model for Academic research
         temperature: 0.3,
         thinkingConfig: {
-          thinkingBudget: -1 // Razonamiento para análisis crítico de evidencia
+          thinkingBudget: 600 // Razonamiento para análisis crítico de evidencia
         },
       },
     })
@@ -862,6 +853,7 @@ Tu análisis debe hacer sentir al terapeuta que:
           safetySettings: agentConfig.config.safetySettings,
           systemInstruction: agentConfig.systemInstruction,
           tools: agentConfig.tools && agentConfig.tools.length > 0 ? agentConfig.tools : undefined,
+          thinkingConfig: agentConfig.config.thinkingConfig,
         },
         history: geminiHistory,
       })
@@ -994,7 +986,10 @@ Tu análisis debe hacer sentir al terapeuta que:
       if (interactionId) {
         const currentHistory = sessionData.history || [];
         const contextTokens = this.estimateTokenCount(currentHistory);
-        sessionMetricsTracker.recordModelCallStart(interactionId, 'gemini-2.5-flash-lite', contextTokens);
+        // Get the actual model used by this agent
+        const agentConfig = this.agents.get(agent);
+        const modelUsed = agentConfig?.config?.model || 'gemini-2.5-flash';
+        sessionMetricsTracker.recordModelCallStart(interactionId, modelUsed, contextTokens);
       }
 
       // Construir las partes del mensaje (texto + archivos adjuntos)
@@ -1089,6 +1084,12 @@ Tu análisis debe hacer sentir al terapeuta que:
               
               console.log(`📊 [ClinicalRouter] Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
             }
+            
+            // 📊 FINALIZE INTERACTION - Calculate performance metrics and save to snapshot
+            const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
+            if (completedMetrics) {
+              console.log(`✅ [ClinicalRouter] Interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
+            }
           } catch (error) {
             console.warn(`⚠️ [ClinicalRouter] Could not extract token usage:`, error);
           }
@@ -1131,6 +1132,8 @@ Tu análisis debe hacer sentir al terapeuta que:
         }
         
         // 📊 CAPTURE METRICS AFTER STREAM COMPLETION
+        console.log(`📊 [ClinicalRouter] Stream complete - interactionId: ${interactionId}, finalResponse exists: ${!!finalResponse}, accumulated text length: ${accumulatedText.length}`);
+        
         if (interactionId && finalResponse) {
           try {
             // Try to extract token usage from the final response
@@ -1151,6 +1154,12 @@ Tu análisis debe hacer sentir al terapeuta que:
               sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, accumulatedText);
               
               console.log(`📊 [ClinicalRouter] Streaming Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
+            }
+            
+            // 📊 FINALIZE INTERACTION - Calculate performance metrics and save to snapshot
+            const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
+            if (completedMetrics) {
+              console.log(`✅ [ClinicalRouter] Streaming interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
             }
           } catch (error) {
             console.warn(`⚠️ [ClinicalRouter] Could not extract streaming token usage:`, error);
@@ -1200,11 +1209,17 @@ Tu análisis debe hacer sentir al terapeuta que:
     // Capture 'this' context before entering the async generator
     const self = this
 
+    // 📊 Get enhanced message for token estimation fallback
+    const currentHistory = sessionData.history || [];
+    const lastUserMessage = currentHistory.filter((m: any) => m.role === 'user').pop();
+    const enhancedMessage = lastUserMessage?.content || '';
+
     // Create a new async generator that properly handles function calls during streaming
     return (async function* () {
       let accumulatedText = ""
       let functionCalls: any[] = []
       let hasYieldedContent = false
+      let finalResponse: any = null
       
       try {
         // Process the streaming result chunk by chunk
@@ -1238,6 +1253,11 @@ Tu análisis debe hacer sentir al terapeuta que:
           // Collect function calls as they arrive
           if (chunk.functionCalls) {
             functionCalls.push(...chunk.functionCalls)
+          }
+          
+          // 📊 Store the final response object for token extraction
+          if (chunk.candidates && chunk.candidates[0]) {
+            finalResponse = chunk;
           }
         }
         
@@ -1489,6 +1509,41 @@ Tu análisis debe hacer sentir al terapeuta que:
         if (!hasYieldedContent) {
           console.warn('[ClinicalRouter] No content yielded, providing fallback')
           yield { text: "" }
+        }
+        
+        // 📊 CAPTURE METRICS AFTER STREAM COMPLETION (with tools)
+        console.log(`📊 [ClinicalRouter] Stream with tools complete - interactionId: ${interactionId}, finalResponse exists: ${!!finalResponse}, accumulated text length: ${accumulatedText.length}`);
+        
+        if (interactionId && finalResponse) {
+          try {
+            // Try to extract token usage from the final response
+            const usageMetadata = finalResponse.usageMetadata;
+            if (usageMetadata) {
+              sessionMetricsTracker.recordModelCallComplete(
+                interactionId,
+                usageMetadata.promptTokenCount || 0,
+                usageMetadata.candidatesTokenCount || 0,
+                accumulatedText
+              );
+              
+              console.log(`📊 [ClinicalRouter] Streaming with tools - Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+            } else {
+              // Fallback: estimate tokens
+              const inputTokens = Math.ceil(enhancedMessage.length / 4);
+              const outputTokens = Math.ceil(accumulatedText.length / 4);
+              sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, accumulatedText);
+              
+              console.log(`📊 [ClinicalRouter] Streaming with tools - Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
+            }
+            
+            // 📊 FINALIZE INTERACTION - Calculate performance metrics and save to snapshot
+            const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
+            if (completedMetrics) {
+              console.log(`✅ [ClinicalRouter] Streaming with tools interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
+            }
+          } catch (error) {
+            console.warn(`⚠️ [ClinicalRouter] Could not extract streaming with tools token usage:`, error);
+          }
         }
         
       } catch (error) {

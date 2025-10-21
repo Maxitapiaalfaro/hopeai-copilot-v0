@@ -673,7 +673,7 @@ export class IntelligentIntentRouter {
           topP: 0.1,
           topK: 1,
           seed: 42,
-          maxOutputTokens: 1028
+          maxOutputTokens: 2048
         }
       });
 

@@ -50,9 +50,9 @@ export const clinicalSafetySettings = [
   },
 ]
 
-// Model configuration for clinical use
+// Model configuration for clinical use (base config - model set individually per agent)
 export const clinicalModelConfig = {
-  model: "gemini-2.5-flash",
+  model: "gemini-2.5-flash", // Default model (overridden per agent)
   temperature: 0.3, // Conservative for clinical recommendations
   topK: 40,
   topP: 0.95,

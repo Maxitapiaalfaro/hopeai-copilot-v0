@@ -74,9 +74,9 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
   // Referrer Policy
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   
-  // Permissions Policy (limitar features del navegador)
+  // Permissions Policy (permitir micrófono y cámara, limitar otras features)
   headers.set('Permissions-Policy', 
-    'camera=(), microphone=(), geolocation=(), interest-cohort=()'
+    'camera=*, microphone=*, geolocation=(), interest-cohort=()'
   );
 
   // Content Security Policy (CSP)
