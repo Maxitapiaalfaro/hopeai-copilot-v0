@@ -58,6 +58,6 @@ export const clinicalModelConfig = {
   topP: 0.95,
   thinkingConfig: {
     thinkingBudget: -1},
-  maxOutputTokens: 7000,
+  maxOutputTokens: 35000,
   safetySettings: clinicalSafetySettings,
 }

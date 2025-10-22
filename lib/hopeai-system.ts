@@ -264,11 +264,35 @@ export class HopeAISystem {
     }
 
     try {
-      // Convertir historial al formato Content[] esperado por el router
-      const sessionContext = currentState.history.map((msg: ChatMessage) => ({
+      // 🔧 FIX: Aplicar Context Window Manager para comprimir historial ANTES de enviar al agente
+      // Esto previene sobrecarga con archivos grandes + conversaciones largas
+      const { ContextWindowManager } = await import('./context-window-manager');
+      const contextWindowManager = new ContextWindowManager({
+        maxExchanges: 6,        // Últimos 6 intercambios = 12 mensajes max
+        triggerTokens: 50000,   // Activar compresión a 50k tokens
+        targetTokens: 30000,    // Reducir a 30k tokens después de compresión
+        enableLogging: true
+      });
+
+      // Convertir historial completo al formato Content[] 
+      const rawSessionContext = currentState.history.map((msg: ChatMessage) => ({
         role: msg.role,
         parts: [{ text: msg.content }]
-      }))
+      }));
+
+      // Aplicar compresión inteligente del contexto
+      const contextResult = contextWindowManager.processContext(rawSessionContext, message);
+      
+      // Usar contexto optimizado (comprimido si es necesario)
+      const sessionContext = contextResult.processedContext;
+      
+      console.log(`🔄 [HopeAI] Context Window Applied:`, {
+        originalMessages: rawSessionContext.length,
+        optimizedMessages: sessionContext.length,
+        estimatedTokens: contextResult.metrics.tokensEstimated,
+        compressionApplied: contextResult.metrics.compressionApplied,
+        hasFiles: resolvedSessionFiles.length > 0
+      });
 
       // ARQUITECTURA OPTIMIZADA: Crear contexto enriquecido para detección de intención
       // Incluir archivos de la sesión actual para análisis contextual
