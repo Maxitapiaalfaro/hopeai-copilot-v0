@@ -79,6 +79,34 @@ const TRUSTED_ACADEMIC_DOMAINS = {
   ]
 }
 
+// ============================================================================
+// 🎯 TOP 10 DOMINIOS PARA PSICOLOGÍA CLÍNICA EN ESPAÑOL
+// ============================================================================
+// Límite de Parallel AI: 10 dominios en total (include + exclude)
+// Estrategia: Priorizar fuentes académicas en español y latinoamericanas
+
+const CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS = [
+  // 🇪🇸 Fuentes españolas de máxima calidad
+  'scielo.org',              // #1 - Red Iberoamericana de revistas científicas (España + Latinoamérica)
+  'redalyc.org',             // #2 - Red de Revistas Científicas de América Latina y el Caribe
+  
+  // 🌎 Bases de datos internacionales con contenido en español
+  'pubmed.ncbi.nlm.nih.gov', // #3 - PubMed (incluye journals latinoamericanos)
+  'sciencedirect.com',       // #4 - Elsevier (journals en español)
+  
+  // 🧠 Psicología específica - fuentes profesionales
+  'psycnet.apa.org',         // #5 - American Psychological Association (contenido bilingüe)
+  'infocop.es',              // #6 - Consejo General de la Psicología de España
+  
+  // 📚 Repositorios académicos iberoamericanos
+  'dialnet.unirioja.es',     // #7 - Portal bibliográfico hispano (España)
+  'pepsic.bvsalud.org',      // #8 - Periódicos Electrónicos en Psicología (Brasil + Latinoamérica)
+  
+  // 🏛️ Instituciones académicas de referencia
+  'cochrane.org',            // #9 - Cochrane Library (revisiones sistemáticas, contenido en español)
+  'bvsalud.org'              // #10 - Biblioteca Virtual en Salud (OPS/OMS - multilingüe con español)
+]
+
 // Dominios a excluir por defecto
 const EXCLUDED_DOMAINS = [
   'reddit.com',
@@ -154,22 +182,22 @@ export class ParallelAISearch {
       console.log(`  🔎 Queries: ${searchQueries.join(', ')}`)
       console.log(`  ⚙️  Processor: ${processor}`)
 
-      // 🧪 MODO PRUEBA: SIN source_policy para evitar límite de 10 dominios
-      // Parallel AI buscará en toda la web y nosotros filtraremos después
-      console.log('🧪 [ParallelAI] MODO PRUEBA: Búsqueda sin restricción de dominios')
+      // 🎯 CONFIGURACIÓN DE DOMINIOS: Top 10 fuentes académicas en español
+      console.log('🎯 [ParallelAI] Usando dominios académicos en español (Top 10)')
+      console.log(`  📚 Dominios incluidos: ${CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS.join(', ')}`)
 
-      // Ejecutar búsqueda con Parallel AI SIN source_policy
+      // Ejecutar búsqueda con Parallel AI CON source_policy optimizado
       const search = await this.client.beta.search({
         objective,
         search_queries: searchQueries.length > 0 ? searchQueries : undefined,
         processor,
         max_results: maxResults,
-        max_chars_per_result: maxCharsPerResult
-        // source_policy comentado temporalmente para testing
-        // source_policy: {
-        //   include_domains: includeList,
-        //   exclude_domains: excludeList
-        // }
+        max_chars_per_result: maxCharsPerResult,
+        // 🎯 RESTRICCIÓN: Solo los 10 dominios académicos más relevantes para psicología clínica en español
+        source_policy: {
+          include_domains: CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS
+          // No usamos exclude_domains para maximizar el uso de los 10 slots disponibles
+        }
       })
 
       console.log(`[ParallelAI] Encontrados ${search.results?.length || 0} resultados`)
@@ -225,25 +253,30 @@ export class ParallelAISearch {
   }
 
   /**
-   * Extrae DOI de texto usando regex
+   * Extrae DOI de texto usando regex con validación robusta
    */
   private extractDOI(text: string): string | undefined {
+    // Patrones académicos específicos para DOI
     const doiPatterns = [
-      /\b(10\.\d{4,}\/[^\s]+)/gi,
-      /doi:\s*(10\.\d{4,}\/[^\s]+)/gi,
-      /https?:\/\/doi\.org\/(10\.\d{4,}\/[^\s]+)/gi
+      /(?:DOI|doi)\s*:?\s*(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i,
+      /https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i,
+      /\b(10\.\d{4,9}\/[-._;()/:A-Z0-9]{6,})/  // DOI standalone con longitud mínima
     ]
 
     for (const pattern of doiPatterns) {
       const match = text.match(pattern)
       if (match) {
-        let doi = match[0]
+        let doi = match[1] || match[0]
         // Limpiar prefijos
-        doi = doi.replace(/^doi:\s*/i, '')
-        doi = doi.replace(/^https?:\/\/doi\.org\//i, '')
+        doi = doi.replace(/^(?:DOI|doi)\s*:?\s*/i, '')
+        doi = doi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
         // Limpiar sufijos comunes
-        doi = doi.replace(/[.,;)\]]+$/, '')
-        return doi
+        doi = doi.replace(/[.,;)\]>]+$/, '')
+        
+        // Validar formato básico: debe tener 10.xxxx/yyyy
+        if (/^10\.\d{4,9}\/[-._;()/:A-Z0-9]{6,}$/i.test(doi)) {
+          return doi
+        }
       }
     }
 
@@ -251,53 +284,118 @@ export class ParallelAISearch {
   }
 
   /**
-   * Extrae autores de texto (heurística simple)
+   * Extrae autores de texto buscando patrones académicos específicos
    */
   private extractAuthors(text: string): string[] {
-    // Buscar patrones como "Author A, Author B, et al."
-    const authorPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+et\s+al\.)?)/g
-    const matches = text.match(authorPattern)
-    
-    if (matches && matches.length > 0) {
-      // Tomar los primeros 3 autores únicos
-      const uniqueAuthors = [...new Set(matches)].slice(0, 3)
-      return uniqueAuthors
+    // Palabras comunes a filtrar (no son nombres de autores)
+    const commonWords = new Set([
+      'Last', 'First', 'Next', 'Previous', 'Abstract', 'Introduction', 
+      'Methods', 'Results', 'Discussion', 'Conclusion', 'References',
+      'Published', 'Received', 'Accepted', 'Available', 'Copyright',
+      'License', 'Open', 'Access', 'Article', 'Journal', 'Volume',
+      'Issue', 'Page', 'Pages', 'Figure', 'Table', 'Supplementary',
+      'Materials', 'Data', 'Code', 'Availability', 'Funding', 'Conflict',
+      'Interest', 'Acknowledgments', 'Ethics', 'Statement'
+    ])
+
+    const authors: string[] = []
+
+    // Patrón 1: "Authors: Apellido A, Apellido B, et al."
+    const authorsLinePattern = /(?:Authors?|By)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z]\.?)?(?:,\s*[A-Z][a-z]+(?:\s+[A-Z]\.?)?)*(?:,?\s+(?:and|&)\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?)?(?:,?\s+et\s+al\.?)?)/i
+    const authorsLineMatch = text.match(authorsLinePattern)
+    if (authorsLineMatch) {
+      const authorsText = authorsLineMatch[1]
+      const authorsList = authorsText.split(/,\s*(?:and|&)?\s*|\s+and\s+|\s+&\s+/)
+        .map(a => a.trim())
+        .filter(a => a.length > 2 && !a.match(/^et\s+al/i))
+        .slice(0, 3)
+      return authorsList.filter(a => !commonWords.has(a))
+    }
+
+    // Patrón 2: "Apellido, N., Apellido, M., & Apellido, P. (año)"
+    const citationPattern = /([A-Z][a-z]+,\s+[A-Z]\.(?:,\s+[A-Z][a-z]+,\s+[A-Z]\.)*(?:,?\s+&\s+[A-Z][a-z]+,\s+[A-Z]\.)?)\s+\(\d{4}\)/
+    const citationMatch = text.match(citationPattern)
+    if (citationMatch) {
+      const authorsText = citationMatch[1]
+      const authorsList = authorsText.split(/,\s*&\s*|,\s+(?=[A-Z][a-z]+,)/)
+        .map(a => a.trim().replace(/,\s+[A-Z]\.$/, ''))  // Remover inicial
+        .filter(a => a.length > 2)
+        .slice(0, 3)
+      return authorsList.filter(a => !commonWords.has(a))
     }
 
     return []
   }
 
   /**
-   * Extrae año de publicación
+   * Extrae año de publicación buscando contexto académico
    */
   private extractYear(text: string): number | undefined {
-    const yearPattern = /\b(19|20)\d{2}\b/g
+    // Patrón 1: "Published: 2023" o "(2023)"
+    const publishedPattern = /(?:Published|Publication|Copyright|©)\s*:?\s*(\d{4})|\((\d{4})\)/i
+    const publishedMatch = text.match(publishedPattern)
+    if (publishedMatch) {
+      const year = parseInt(publishedMatch[1] || publishedMatch[2])
+      if (year >= 1900 && year <= 2026) {
+        return year
+      }
+    }
+
+    // Patrón 2: "Apellido et al. (2023)"
+    const citationYearPattern = /[A-Z][a-z]+(?:\s+et\s+al\.?)?\s*\((\d{4})\)/
+    const citationMatch = text.match(citationYearPattern)
+    if (citationMatch) {
+      const year = parseInt(citationMatch[1])
+      if (year >= 1900 && year <= 2026) {
+        return year
+      }
+    }
+
+    // Patrón 3: Buscar año más reciente en el texto (menos confiable)
+    const yearPattern = /\b(20[0-2][0-9]|19[89][0-9])\b/g
     const matches = text.match(yearPattern)
-    
     if (matches && matches.length > 0) {
-      // Tomar el año más reciente encontrado
-      const years = matches.map(y => parseInt(y))
-      return Math.max(...years)
+      const years = matches.map(y => parseInt(y)).filter(y => y >= 1990 && y <= 2026)
+      if (years.length > 0) {
+        return Math.max(...years)
+      }
     }
 
     return undefined
   }
 
   /**
-   * Extrae nombre de journal (heurística basada en título y texto)
+   * Extrae nombre de journal buscando patrones académicos específicos
    */
   private extractJournal(title: string, text: string): string | undefined {
-    // Buscar patrones comunes de journals
-    const journalPatterns = [
-      /published in ([A-Z][^.,]+)/i,
-      /journal of ([^.,]+)/i,
-      /([A-Z][a-z]+ (?:Journal|Review|Medicine|Psychology|Psychiatry))/
-    ]
+    // Patrón 1: "Published in Journal Name" o "Journal: Journal Name"
+    const publishedInPattern = /(?:Published in|Journal|Source)\s*:?\s+([A-Z][A-Za-z\s&-]+(?:Journal|Review|Medicine|Psychology|Psychiatry|Science|Research|Proceedings|Letters|Reports))/i
+    const publishedMatch = text.match(publishedInPattern)
+    if (publishedMatch) {
+      const journal = publishedMatch[1].trim()
+      if (journal.length > 5 && journal.length < 100) {
+        return journal
+      }
+    }
 
-    for (const pattern of journalPatterns) {
-      const match = text.match(pattern)
-      if (match) {
-        return match[1] || match[0]
+    // Patrón 2: Buscar nombre de journal en el título (ej: "Article Title - Journal Name")
+    const titleJournalPattern = /[-–—]\s*([A-Z][A-Za-z\s&-]+(?:Journal|Review|Medicine|Psychology|Psychiatry|Science|Research))\s*$/
+    const titleMatch = title.match(titleJournalPattern)
+    if (titleMatch) {
+      const journal = titleMatch[1].trim()
+      if (journal.length > 5 && journal.length < 100) {
+        return journal
+      }
+    }
+
+    // Patrón 3: "Journal of [Topic]" standalone
+    const journalOfPattern = /\b((?:Journal|International Journal|European Journal|American Journal|British Journal) of [A-Za-z\s&-]+)/i
+    const journalOfMatch = text.match(journalOfPattern)
+    if (journalOfMatch) {
+      const journal = journalOfMatch[1].trim()
+      // Validar que no sea demasiado largo (probablemente capturó demasiado contexto)
+      if (journal.length > 10 && journal.length < 80) {
+        return journal
       }
     }
 
@@ -313,13 +411,28 @@ export class ParallelAISearch {
     try {
       const hostname = new URL(result.url).hostname.toLowerCase()
       
-      // Factor 1: Dominio académico
-      if (TRUSTED_ACADEMIC_DOMAINS.tier1.some(domain => hostname.includes(domain))) {
-        score += 30
-      } else if (TRUSTED_ACADEMIC_DOMAINS.tier2.some(domain => hostname.includes(domain))) {
-        score += 20
-      } else if (TRUSTED_ACADEMIC_DOMAINS.tier3.some(domain => hostname.includes(domain))) {
-        score += 10
+      // 🎯 Factor 1: Dominios académicos en español (PRIORIDAD MÁXIMA)
+      const isSpanishAcademicDomain = CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS.some(domain => 
+        hostname.includes(domain.toLowerCase())
+      )
+      
+      if (isSpanishAcademicDomain) {
+        // Bonus especial para dominios configurados
+        score += 35
+        
+        // Bonus adicional para fuentes iberoamericanas de élite
+        if (hostname.includes('scielo.org') || hostname.includes('redalyc.org')) {
+          score += 5 // Total: +40 para SciELO y Redalyc
+        }
+      } else {
+        // Fallback a sistema de tiers original (para resultados fuera de los 10 dominios)
+        if (TRUSTED_ACADEMIC_DOMAINS.tier1.some(domain => hostname.includes(domain))) {
+          score += 30
+        } else if (TRUSTED_ACADEMIC_DOMAINS.tier2.some(domain => hostname.includes(domain))) {
+          score += 20
+        } else if (TRUSTED_ACADEMIC_DOMAINS.tier3.some(domain => hostname.includes(domain))) {
+          score += 10
+        }
       }
 
       // Factor 2: Presencia de DOI en excerpts
