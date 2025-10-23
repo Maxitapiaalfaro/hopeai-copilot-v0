@@ -124,15 +124,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const patientConversationError = null
   const clearPatientError = () => {}
 
-  // Debug logging para Pioneer Circle
-  useEffect(() => {
-    console.log('🔍 Pioneer Circle Debug - Main Interface:', {
-      totalConversationsFromHook: totalConversationsCount,
-      currentMessageCount: systemState.history?.length || 0,
-      shouldShowInvitation,
-      eligibilityMetrics
-    });
-  }, [totalConversationsCount, systemState.history?.length, shouldShowInvitation, eligibilityMetrics])
+
 
   // Estado para controlar la creación de sesión por defecto
   // Eliminado: no crear sesión por defecto; se creará en el primer envío de mensaje

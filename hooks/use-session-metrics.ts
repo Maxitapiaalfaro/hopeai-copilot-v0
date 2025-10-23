@@ -166,15 +166,23 @@ export function useSessionMetrics({
       updateActivity();
     };
 
-    // Eventos que indican actividad del usuario
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    
-    // Throttle para evitar demasiadas llamadas
+    // 🔥 OPTIMIZACIÓN: Solo eventos significativos (no mousemove/scroll)
+    // mousemove y scroll causan memory leaks en sesiones largas
+    const events = ['mousedown', 'keypress', 'touchstart', 'click'];
+
+    // Throttle agresivo para sesiones largas
     let throttleTimeout: NodeJS.Timeout | null = null;
+    let lastActivityTime = 0;
+
     const throttledHandler = () => {
+      const now = Date.now();
+      // Ignorar eventos si ya hubo actividad en los últimos 30 segundos
+      if (now - lastActivityTime < 30000) return;
+
       if (!throttleTimeout) {
         throttleTimeout = setTimeout(() => {
           handleUserActivity();
+          lastActivityTime = Date.now();
           throttleTimeout = null;
         }, 30000); // Throttle de 30 segundos
       }
@@ -208,18 +216,16 @@ export function useSessionMetrics({
     const handleVisibilityChange = () => {
       if (document.hidden) {
         // Página oculta - pausar tracking activo pero no finalizar sesión
-        console.log('📊 Página oculta - pausando tracking activo');
       } else {
         // Página visible - reanudar tracking
         if (sessionStartedRef.current) {
           updateActivity();
-          console.log('📊 Página visible - reanudando tracking');
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };

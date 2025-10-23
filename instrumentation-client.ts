@@ -21,8 +21,9 @@ Sentry.init({
 
   // Integrations for enhanced functionality
   integrations: [
-    // Send console.log, console.error, and console.warn calls as logs to Sentry
-    Sentry.consoleLoggingIntegration({ levels: ["log", "error", "warn"] }),
+    // 🔒 OPTIMIZACIÓN: Solo capturar errores críticos, NO console.log
+    // Esto evita que Sentry agregue rutas largas a cada log en desarrollo
+    Sentry.consoleLoggingIntegration({ levels: ["error"] }), // Solo errores
     // Enable session replay for debugging
     Sentry.replayIntegration({
       // Additional replay configuration goes here

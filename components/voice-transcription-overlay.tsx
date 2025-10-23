@@ -7,8 +7,6 @@ interface VoiceTranscriptionOverlayProps {
 }
 
 export function VoiceTranscriptionOverlay({ isTranscribing }: VoiceTranscriptionOverlayProps) {
-  console.log('🎭 VoiceTranscriptionOverlay render:', { isTranscribing })
-  
   return (
     <AnimatePresence mode="wait">
       {isTranscribing && (

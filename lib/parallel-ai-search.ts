@@ -82,8 +82,9 @@ const TRUSTED_ACADEMIC_DOMAINS = {
 // ============================================================================
 // 🎯 TOP 10 DOMINIOS PARA PSICOLOGÍA CLÍNICA EN ESPAÑOL
 // ============================================================================
-// Límite de Parallel AI: 10 dominios en total (include + exclude)
+// ⚠️ LÍMITE DE API: Parallel AI permite máximo 10 dominios en include_domains
 // Estrategia: Priorizar fuentes académicas en español y latinoamericanas
+// Documentación: https://docs.parallel.ai/resources/search-api#request-fields
 
 const CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS = [
   // 🇪🇸 Fuentes españolas de máxima calidad
@@ -163,8 +164,8 @@ export class ParallelAISearch {
       objective,
       searchQueries = [],
       maxResults = 10,
-      maxCharsPerResult = 6000,
-      processor = 'pro', // Usar 'pro' por defecto para investigación académica
+      maxCharsPerResult = 15000, // Aumentado de 6000 a 15000 para mayor contexto académico
+      processor = 'base', // Usar 'base' por defecto para velocidad (cambiar a 'pro' cuando esté disponible)
       sourceDomains
     } = params
 

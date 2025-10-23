@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, memo } from 'react'
+import React, { useMemo, memo, useEffect, useRef } from 'react'
 import { parseMarkdown, parseMarkdownStreaming, sanitizeMarkdownContent } from '@/lib/markdown-parser'
 import { cn } from '@/lib/utils'
 
@@ -19,21 +19,22 @@ interface MarkdownRendererProps {
  * Componente para renderizar contenido Markdown de forma segura y elegante
  * Optimizado para mensajes clínicos con soporte para streaming
  */
-const MarkdownRendererComponent = ({ 
-  content, 
-  isStreaming = false, 
-  className = '', 
-  trusted = true 
+const MarkdownRendererComponent = ({
+  content,
+  isStreaming = false,
+  className = '',
+  trusted = true
 }: MarkdownRendererProps) => {
-  
+  const containerRef = useRef<HTMLDivElement>(null)
+
   const renderedContent = useMemo(() => {
     if (!content) return ''
-    
+
     // Sanitizar el contenido primero
     const sanitizedContent = sanitizeMarkdownContent(content)
-    
+
     if (!sanitizedContent) return ''
-    
+
     // Usar el parser apropiado según si es streaming o no
     if (isStreaming) {
       return parseMarkdownStreaming(sanitizedContent)
@@ -41,7 +42,37 @@ const MarkdownRendererComponent = ({
       return parseMarkdown(sanitizedContent)
     }
   }, [content, isStreaming])
-  
+
+  // 🔥 OPTIMIZACIÓN: Detectar scroll en tablas para ocultar indicador
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const tableWrappers = containerRef.current.querySelectorAll('.clinical-table-wrapper')
+
+    const handleScroll = (wrapper: Element) => {
+      const scrollLeft = wrapper.scrollLeft
+      if (scrollLeft > 10) {
+        wrapper.classList.add('scrolled')
+      } else {
+        wrapper.classList.remove('scrolled')
+      }
+    }
+
+    const listeners: Array<{ element: Element; handler: () => void }> = []
+
+    tableWrappers.forEach(wrapper => {
+      const handler = () => handleScroll(wrapper)
+      wrapper.addEventListener('scroll', handler, { passive: true })
+      listeners.push({ element: wrapper, handler })
+    })
+
+    return () => {
+      listeners.forEach(({ element, handler }) => {
+        element.removeEventListener('scroll', handler)
+      })
+    }
+  }, [renderedContent])
+
   // Si no hay contenido, no renderizar nada
   if (!renderedContent) {
     return null
@@ -57,11 +88,14 @@ const MarkdownRendererComponent = ({
   }
   
   return (
-    <div 
+    <div
+      ref={containerRef}
       className={cn(
         'markdown-content text-base leading-relaxed font-sans',
         // Estilos base optimizados
         'prose prose-sans max-w-none paper-noise',
+        // 🔥 CRÍTICO: Evitar que tablas expandan el contenedor
+        'min-w-0 w-full overflow-hidden',
         // Personalización de colores para el tema clínico
         'dark:prose-invert',
         'prose-headings:text-foreground prose-p:text-foreground/90',
@@ -78,7 +112,7 @@ const MarkdownRendererComponent = ({
         'prose-ul:my-2 prose-ol:my-2 prose-li:my-1',
         className
       )}
-      style={{ 
+      style={{
         wordBreak: 'break-word',
         overflowWrap: 'anywhere',
         hyphens: 'auto'
@@ -133,9 +167,11 @@ const StreamingMarkdownRendererComponent = ({
   return (
     <div className={cn('relative', className)}>
       {renderedContent ? (
-        <div 
+        <div
           className={cn(
             'markdown-content text-base leading-relaxed font-sans prose prose-sans max-w-none dark:prose-invert',
+            // 🔥 CRÍTICO: Evitar que tablas expandan el contenedor
+            'min-w-0 w-full overflow-hidden',
             // Estilos optimizados para streaming
             'prose-headings:text-foreground prose-p:text-foreground/90',
             'prose-strong:text-foreground prose-em:text-muted-foreground',
@@ -149,7 +185,7 @@ const StreamingMarkdownRendererComponent = ({
             'prose-p:mb-3 prose-headings:mb-2 prose-headings:mt-3',
             'prose-ul:my-2 prose-ol:my-2 prose-li:my-1'
           )}
-          style={{ 
+          style={{
             wordBreak: 'break-word',
             overflowWrap: 'anywhere',
             hyphens: 'auto'

@@ -82,9 +82,9 @@ function configureCustomRules(md: MarkdownIt) {
     return `<a href="${href}" class="text-primary hover:underline" target="_blank" rel="noopener noreferrer">`
   }
 
-  // Personalizar tablas para datos clínicos
+  // 🔥 OPTIMIZACIÓN: Tablas clínicas profesionales con diseño mobile-first
   md.renderer.rules.table_open = () => {
-    return '<div class="overflow-x-auto my-4"><table class="min-w-full border border-border/80 rounded-lg">'
+    return '<div class="clinical-table-wrapper"><table class="clinical-table">'
   }
 
   md.renderer.rules.table_close = () => {
@@ -92,15 +92,19 @@ function configureCustomRules(md: MarkdownIt) {
   }
 
   md.renderer.rules.thead_open = () => {
-    return '<thead class="bg-secondary/50">'
+    return '<thead class="clinical-table-header">'
   }
 
   md.renderer.rules.th_open = () => {
-    return '<th class="px-4 py-2 text-left font-sans font-semibold text-foreground border-b border-border/80">'
+    return '<th class="clinical-table-th">'
   }
 
   md.renderer.rules.td_open = () => {
-    return '<td class="px-4 py-3 border-b border-border/50">'
+    return '<td class="clinical-table-td">'
+  }
+
+  md.renderer.rules.tr_open = () => {
+    return '<tr class="clinical-table-row">'
   }
 }
 
@@ -149,6 +153,96 @@ export function parseMarkdown(content: string): string {
 }
 
 /**
+ * Detecta si hay una tabla markdown incompleta en el contenido
+ * @param content - Contenido a analizar
+ * @returns true si hay una tabla incompleta
+ */
+function hasIncompleteTable(content: string): boolean {
+  // Buscar el inicio de una tabla (línea que empieza con |)
+  const lines = content.split('\n')
+
+  // Buscar la última tabla en el contenido
+  let lastTableStart = -1
+  let lastTableEnd = -1
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+
+    if (line.startsWith('|') && line.endsWith('|')) {
+      // Si no estamos en una tabla, este es el inicio
+      if (lastTableStart === -1 || i > lastTableEnd) {
+        lastTableStart = i
+        lastTableEnd = i
+      } else {
+        // Extender la tabla actual
+        lastTableEnd = i
+      }
+    } else if (lastTableStart !== -1 && line.length > 0 && !line.startsWith('|')) {
+      // Fin de tabla (línea no vacía que no es parte de la tabla)
+      // No hacer nada, la tabla ya terminó
+    }
+  }
+
+  // Si no hay tabla, no está incompleta
+  if (lastTableStart === -1) {
+    return false
+  }
+
+  // Si la última línea del contenido es parte de una tabla, verificar si está completa
+  const lastLine = lines[lines.length - 1].trim()
+  if (!lastLine.startsWith('|') || !lastLine.endsWith('|')) {
+    // La última línea no es parte de una tabla, así que la tabla está completa
+    return false
+  }
+
+  // Contar líneas de la última tabla
+  const tableLines = lines.slice(lastTableStart).filter(l => l.trim().startsWith('|') && l.trim().endsWith('|'))
+
+  // Una tabla completa necesita al menos:
+  // 1. Header (| Col1 | Col2 |)
+  // 2. Separator (|---|---|)
+  // 3. Al menos 1 fila de datos
+  if (tableLines.length < 3) {
+    return true // Incompleta
+  }
+
+  // Verificar que tenga separator (segunda línea debe tener solo |, -, y espacios)
+  if (tableLines.length >= 2) {
+    const secondLine = tableLines[1].trim()
+    const isSeparator = /^\|[\s\-|]+\|$/.test(secondLine)
+    if (!isSeparator) {
+      return true // No tiene separator válido, está incompleta
+    }
+  }
+
+  return false // Tabla completa
+}
+
+/**
+ * Extrae el contenido antes de una tabla incompleta
+ * @param content - Contenido completo
+ * @returns Contenido sin la tabla incompleta
+ */
+function extractContentBeforeIncompleteTable(content: string): string {
+  const lines = content.split('\n')
+  let lastCompleteIndex = lines.length - 1
+
+  // Buscar hacia atrás desde el final hasta encontrar el inicio de la tabla incompleta
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim()
+    if (line.startsWith('|') && line.endsWith('|')) {
+      // Encontramos una línea de tabla, seguir buscando el inicio
+      lastCompleteIndex = i - 1
+    } else if (lastCompleteIndex < lines.length - 1) {
+      // Ya pasamos la tabla incompleta
+      break
+    }
+  }
+
+  return lines.slice(0, lastCompleteIndex + 1).join('\n')
+}
+
+/**
  * Parsea texto markdown de forma incremental para streaming
  * Útil para mostrar contenido mientras se está recibiendo
  * @param content - Contenido markdown parcial
@@ -158,23 +252,40 @@ export function parseMarkdownStreaming(content: string): string {
   if (!content || typeof content !== 'string') {
     return ''
   }
-  
+
   try {
     const md = getMarkdownInstance()
-    
+
     // Para streaming, manejamos contenido incompleto de forma más inteligente
     let safeContent = content
-    
-    // Si termina con markdown incompleto, agregamos espacio para parsing seguro
-    if (content.endsWith('*') || content.endsWith('_') || content.endsWith('`') || 
-        content.endsWith('#') || content.endsWith('-') || content.endsWith('>')) {
-      safeContent = content + ' '
+    let pendingTableIndicator = ''
+
+    // 🔥 OPTIMIZACIÓN CRÍTICA: Detectar tablas incompletas y NO parsearlas
+    // Esto evita re-parsear tablas grandes en cada chunk
+    const hasIncomplete = hasIncompleteTable(content)
+    if (hasIncomplete) {
+      const contentBeforeTable = extractContentBeforeIncompleteTable(content)
+      safeContent = contentBeforeTable
+      pendingTableIndicator = '\n\n*[Generando tabla...]*'
     }
-    
+
+    // Si termina con markdown incompleto, agregamos espacio para parsing seguro
+    if (safeContent.endsWith('*') || safeContent.endsWith('_') || safeContent.endsWith('`') ||
+        safeContent.endsWith('#') || safeContent.endsWith('-') || safeContent.endsWith('>')) {
+      safeContent = safeContent + ' '
+    }
+
     // Aplicar resaltado de menciones de agentes antes del parsing
     const contentWithHighlights = highlightAgentMentions(safeContent)
-    
-    return md.render(contentWithHighlights)
+
+    const rendered = md.render(contentWithHighlights)
+
+    // Agregar indicador de tabla pendiente si es necesario
+    if (pendingTableIndicator) {
+      return rendered + md.render(pendingTableIndicator)
+    }
+
+    return rendered
   } catch (error) {
     console.error('Error parsing streaming markdown:', error)
     // Fallback más robusto para streaming

@@ -2,11 +2,14 @@
  * Academic Multi-Source Search Engine
  *
  * Sistema de búsqueda priorizada que integra múltiples fuentes académicas:
- * 1. PubMed (prioridad máxima para psicología clínica)
- * 2. Crossref (validación y búsqueda complementaria)
- * 3. Parallel AI (búsqueda web avanzada con excerpts optimizados para LLMs)
+ * 🧪 MODO ACTUAL: Parallel AI como prioridad 1 (testing)
+ * 1. Parallel AI (búsqueda web avanzada con excerpts optimizados para LLMs)
+ *    - Validación integrada (sin filtrado adicional para maximizar resultados)
+ *    - Dominios académicos en español configurados (SciELO, Redalyc, etc.)
+ * 2. PubMed (deshabilitado temporalmente)
+ * 3. Crossref (deshabilitado temporalmente)
  *
- * Garantiza que todas las fuentes retornadas tengan DOIs válidos y URLs accesibles
+ * OPTIMIZACIÓN: ParallelAI ya valida fuentes, no se aplica filtrado adicional
  */
 
 import { pubmedTool } from './pubmed-research-tool'
@@ -90,50 +93,51 @@ export class AcademicMultiSourceSearch {
       try {
         const academicQueries = this.generateAcademicQueries(query)
 
-        const objective = `Find peer-reviewed research on: ${this.enhanceQueryForPsychology(query)}.
-Focus on clinical psychology, evidence-based interventions, and recent studies from reputable academic sources.
-Prioritize meta-analyses, RCTs, and systematic reviews.`
+        // 📝 Objective expandido con instrucciones detalladas en español
+        const objective = `
+OBJETIVO DE INVESTIGACIÓN:
+Buscar investigación académica revisada por pares sobre: ${this.enhanceQueryForPsychology(query)}
+
+ÁREAS DE ENFOQUE:
+- Psicología clínica y psicoterapia
+- Intervenciones y tratamientos basados en evidencia
+- Estudios recientes de fuentes académicas confiables (preferiblemente últimos 5 años)
+- Meta-análisis, revisiones sistemáticas y ensayos controlados aleatorizados (RCTs)
+
+CRITERIOS DE CALIDAD:
+- Revistas revisadas por pares con alto factor de impacto
+- Estudios con metodología robusta y muestras grandes
+- Investigación de instituciones y autores reconocidos
+- Priorizar fuentes en español de Latinoamérica y España
+
+REQUISITOS DE CONTENIDO:
+- Incluir DOI cuando esté disponible
+- Extraer nombres de autores, año de publicación e información de la revista
+- Priorizar resúmenes (abstracts) y hallazgos clave
+- Enfocarse en aplicaciones clínicas prácticas
+
+IDIOMA: Priorizar fuentes en español, pero incluir fuentes en inglés de alta calidad si son relevantes.
+
+CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoamérica que necesitan evidencia científica actualizada para su práctica profesional.
+`.trim()
 
         const parallelResults = await parallelAISearch.searchAcademic({
           objective,
           searchQueries: academicQueries,
           maxResults: maxResults,
-          maxCharsPerResult: 6000, // Reducido de 6000 para mayor velocidad
-          processor: 'base' // Cambiado de 'pro' a 'base' para respuestas más rápidas
+          maxCharsPerResult: 15000, // Aumentado de 6000 a 15000 para mayor contexto académico
+          processor: 'base' // Mantener 'base' por ahora para velocidad
         })
 
-        // Validar en paralelo para mayor velocidad
-        // Saltamos validación de accesibilidad HTTP porque Parallel AI ya pre-valida las fuentes
-        const validationPromises = parallelResults.map(result =>
-          academicSourceValidator.validateSource({
-            url: result.url,
-            title: result.title,
-            doi: result.doi,
-            authors: result.authors,
-            year: result.year,
-            journal: result.journal,
-            abstract: result.abstract,
-            skipAccessibilityCheck: true // Parallel AI ya validó estas fuentes
-          })
-        )
+        // ✅ OPTIMIZACIÓN: Confiar 100% en ParallelAI
+        // ParallelAI ya validó las fuentes, extrajo metadata y calculó trustScore
+        // No necesitamos re-validar con academicSourceValidator (elimina redundancia)
 
-        const validationResults = await Promise.all(validationPromises)
+        // Agregar resultados directamente
+        allSources.push(...parallelResults)
+        parallelAICount = parallelResults.length
 
-        for (let i = 0; i < validationResults.length; i++) {
-          const validationResult = validationResults[i]
-          const result = parallelResults[i]
-
-          if (validationResult.isValid && validationResult.source) {
-            validationResult.source.sourceType = 'parallel_ai'
-            if (result.excerpts) {
-              validationResult.source.excerpts = result.excerpts
-            }
-            allSources.push(validationResult.source)
-            parallelAICount++
-          }
-        }
-
-        console.log(`🧪 [AcademicSearch] Parallel AI: ${parallelAICount} resultados válidos`)
+        console.log(`🧪 [AcademicSearch] Parallel AI: ${parallelAICount} resultados válidos (sin filtrado adicional)`)
         console.log(`🧪 [AcademicSearch] SALTANDO PubMed y Crossref (modo prueba)`)
       } catch (error) {
         console.error('🧪 [AcademicSearch] Error en Parallel AI:', error)
@@ -329,26 +333,53 @@ Prioritize meta-analyses, RCTs, and systematic reviews.`
 
   /**
    * Genera queries académicos específicos para Parallel AI
+   * IMPORTANTE: Cada query debe tener máximo 200 caracteres (límite de API)
    */
   private generateAcademicQueries(query: string): string[] {
+    const MAX_QUERY_LENGTH = 200 // Límite de Parallel AI por query individual
     const queries: string[] = []
 
-    // Query principal
-    queries.push(query)
+    // Helper para truncar queries que excedan el límite
+    const truncateQuery = (q: string): string => {
+      if (q.length <= MAX_QUERY_LENGTH) return q
+      // Truncar en el último espacio antes del límite para no cortar palabras
+      const truncated = q.substring(0, MAX_QUERY_LENGTH)
+      const lastSpace = truncated.lastIndexOf(' ')
+      return lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated
+    }
+
+    // Query principal (truncado si es necesario)
+    queries.push(truncateQuery(query))
 
     // Query con términos académicos
-    queries.push(`${query} peer-reviewed research`)
+    const academicQuery = `${query} investigación revisada por pares`
+    queries.push(truncateQuery(academicQuery))
 
     // Query con enfoque en psicología clínica
-    if (!query.toLowerCase().includes('psychology')) {
-      queries.push(`${query} clinical psychology`)
+    if (!query.toLowerCase().includes('psicología') && !query.toLowerCase().includes('psychology')) {
+      const psychologyQuery = `${query} psicología clínica`
+      queries.push(truncateQuery(psychologyQuery))
     }
 
     // Query con enfoque en evidencia
-    queries.push(`${query} evidence-based treatment`)
+    const evidenceQuery = `${query} tratamiento basado en evidencia`
+    queries.push(truncateQuery(evidenceQuery))
+
+    // Query con enfoque en meta-análisis
+    const metaAnalysisQuery = `${query} meta-análisis revisión sistemática`
+    queries.push(truncateQuery(metaAnalysisQuery))
 
     // Limitar a 5 queries máximo (límite de Parallel AI)
-    return queries.slice(0, 5)
+    const finalQueries = queries.slice(0, 5)
+
+    // Log de validación
+    finalQueries.forEach((q, index) => {
+      if (q.length > MAX_QUERY_LENGTH) {
+        console.warn(`[AcademicSearch] Query ${index + 1} excede ${MAX_QUERY_LENGTH} caracteres: ${q.length}`)
+      }
+    })
+
+    return finalQueries
   }
 
   /**

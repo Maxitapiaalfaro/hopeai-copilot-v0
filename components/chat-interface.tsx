@@ -426,25 +426,19 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     // Find the Radix ScrollArea viewport element
     const scrollAreaRoot = scrollAreaRef.current
     if (!scrollAreaRoot) {
-      console.log('🔍 ScrollArea ref not found')
-      return
-    }
-    
-    const viewport = scrollAreaRoot.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement
-    if (!viewport) {
-      console.log('🔍 Viewport not found in ScrollArea')
       return
     }
 
-    console.log('✅ Scroll listener attached to viewport')
+    const viewport = scrollAreaRoot.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement
+    if (!viewport) {
+      return
+    }
 
     const handleScrollEvent = () => {
       const { scrollTop, scrollHeight, clientHeight } = viewport
       const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50
       const isAtTop = scrollTop < 100
-      
-      console.log('📜 Scroll event:', { scrollTop, scrollHeight, clientHeight, isAtBottom })
-      
+
       setAutoScroll(isAtBottom)
       
       // Cargar más mensajes cuando se llega al top
@@ -461,10 +455,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     return () => viewport.removeEventListener('scroll', handleScrollEvent)
   }, [currentSession?.history, visibleMessageCount])
 
-  // Debug autoScroll state
-  useEffect(() => {
-    console.log('🎯 AutoScroll state changed:', autoScroll, 'Messages:', currentSession?.history?.length || 0)
-  }, [autoScroll, currentSession?.history?.length])
+
 
 
 
@@ -551,17 +542,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           
           span.setAttribute("message.response_time", responseTime)
           span.setAttribute("response.received", true)
-          
-          console.log('✅ Frontend: Respuesta recibida:', response)
-          console.log('📊 Frontend: Estado de sesión actual:', currentSession?.history?.length, 'mensajes')
 
           // Verificar si la respuesta tiene un AsyncGenerator (streaming)
           if (response && typeof response[Symbol.asyncIterator] === 'function') {
-            console.log('🔄 Frontend: Procesando respuesta streaming...')
-            
+
             // Extraer routingInfo si está disponible
             if (response.routingInfo) {
-              console.log('🧠 Frontend: Información de enrutamiento extraída:', response.routingInfo)
               span.setAttribute("routing.target_agent", response.routingInfo.targetAgent)
               span.setAttribute("routing.confidence", response.routingInfo.confidence || 0)
             }
@@ -575,17 +561,24 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             try {
               let hasReceivedText = false
               let isAcademicSearch = false // Flag local para tracking
+              let lastUpdateTs = 0
 
               for await (const chunk of response) {
                 chunkCount++
                 if (chunk.text) {
                   fullResponse += chunk.text
-                  setStreamingResponse(fullResponse)
+                  const now = Date.now()
+                  // 🔥 OPTIMIZACIÓN: Throttle agresivo (200ms = ~5fps) para máxima estabilidad
+                  // Las tablas incompletas se detectan y no se parsean hasta estar completas (ver markdown-parser.ts)
+                  // 5 FPS es perfectamente fluido para texto que "aparece" (no se mueve)
+                  if (now - lastUpdateTs > 200) {
+                    setStreamingResponse(fullResponse)
+                    lastUpdateTs = now
+                  }
 
                   // 🎯 Cuando empieza el streaming, programar ocultación del indicador
                   if (!hasReceivedText && isAcademicSearch) {
                     hasReceivedText = true
-                    console.log('📝 Frontend: Streaming iniciado, programando ocultación del indicador')
 
                     // Transición a 'complete' para mostrar brevemente el estado final
                     setAcademicSearchState('complete')
@@ -597,7 +590,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
                     // Ocultar después de 1.5 segundos (da tiempo a ver el número final)
                     academicSearchTimeoutRef.current = setTimeout(() => {
-                      console.log('📝 Frontend: Ocultando indicador académico después del delay')
                       setAcademicSearchState('idle')
                       setAcademicSearchQuery("")
                       setAcademicSearchResults(null)
@@ -614,31 +606,23 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 }
                 // 📚 Capturar referencias académicas de ParallelAI
                 if (chunk.metadata?.type === "academic_references" && chunk.metadata.references) {
-                  console.log('📚 Frontend: Referencias académicas recibidas:', chunk.metadata.references.length)
                   accumulatedAcademicReferences = chunk.metadata.references
                   setStreamingAcademicReferences(accumulatedAcademicReferences)
                 }
                 // 🎨 UX: Capturar eventos de tool calls
                 if (chunk.metadata) {
-                  console.log('📦 Frontend: Metadata recibida:', chunk.metadata)
-
-                  if (chunk.metadata.type === "tool_call_start" && 
+                  if (chunk.metadata.type === "tool_call_start" &&
                       (chunk.metadata.toolName === "search_academic_literature" ||
                        chunk.metadata.toolName === "search_evidence_for_reflection" ||
                        chunk.metadata.toolName === "search_evidence_for_documentation")) {
-                    console.log('🔍 Frontend: Búsqueda académica iniciada:', chunk.metadata.toolName, chunk.metadata.query)
                     isAcademicSearch = true // Activar flag local
                     setAcademicSearchState('searching')
                     setAcademicSearchQuery(chunk.metadata.query || "")
                     setAcademicSearchResults(null)
-                  } else if (chunk.metadata.type === "tool_call_complete" && 
+                  } else if (chunk.metadata.type === "tool_call_complete" &&
                              (chunk.metadata.toolName === "search_academic_literature" ||
                               chunk.metadata.toolName === "search_evidence_for_reflection" ||
                               chunk.metadata.toolName === "search_evidence_for_documentation")) {
-                    console.log('✅ Frontend: Búsqueda académica completada:', chunk.metadata.toolName, {
-                      found: chunk.metadata.sourcesFound,
-                      validated: chunk.metadata.sourcesValidated
-                    })
                     isAcademicSearch = true // Mantener flag activo
                     setAcademicSearchState('analyzing')
                     setAcademicSearchResults({
@@ -647,18 +631,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     })
                   } else if (chunk.metadata.type === "sources_used_by_ai") {
                     // 🎯 Actualizar con el número REAL de fuentes que Gemini usó
-                    console.log('🎯 Frontend: IA usó', chunk.metadata.sourcesUsed, 'fuentes en su respuesta')
                     setAcademicSearchResults(prev => {
                       if (!prev) {
-                        console.warn('⚠️ Frontend: No hay resultados previos para actualizar')
                         return null
                       }
-                      const updated = {
+                      return {
                         ...prev,
                         validated: chunk.metadata.sourcesUsed || prev.validated
                       }
-                      console.log('🎯 Frontend: Actualizando de', prev.validated, 'a', updated.validated, 'fuentes')
-                      return updated
                     })
 
                     // No cambiar estado aquí - el timeout ya está programado
@@ -684,9 +664,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 chunkCount,
                 groundingUrlsCount: accumulatedGroundingUrls.length
               })
-              
-              console.log('✅ Frontend: Streaming completado')
-              
+
+              // Ensure latest content is rendered
+              setStreamingResponse(fullResponse)
+
               // Agregar la respuesta completa al historial
               if (fullResponse.trim() && addStreamingResponseToHistory) {
                 try {
@@ -696,7 +677,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   // 📚 Combinar groundingUrls y referencias académicas
                   const allReferences = [...accumulatedGroundingUrls, ...accumulatedAcademicReferences]
                   await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, bulletsSnapshotRef.current)
-                  console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent, 'y', allReferences.length, 'referencias')
                 } catch (historyError) {
                   console.error('❌ Frontend: Error agregando al historial:', historyError)
                   Sentry.captureException(historyError)
@@ -1003,7 +983,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               )}>
                 <div
                   className={cn(
-                    "relative rounded-lg border ring-1 ring-transparent overflow-visible w-full",
+                    "relative rounded-lg border ring-1 ring-transparent overflow-hidden w-full min-w-0",
                     fontSizeClass,
                     message.role === "user"
                       ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-[hsl(var(--user-bubble-bg))] shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
@@ -1068,8 +1048,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       />
                     </div>
                   )}
-                  <div className="p-3 md:p-4">
-                    <MarkdownRenderer 
+                  <div className="p-3 md:p-4 min-w-0 overflow-hidden">
+                    <MarkdownRenderer
                       content={message.content}
                       className="leading-relaxed"
                       trusted={message.role === "model"}
@@ -1235,7 +1215,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     backgroundColor: realConfig.bgColor
                   }}
                   transition={{ duration: 0.4, ease: "easeInOut" }}
-                  className={cn("relative rounded-lg border w-full", fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
+                  className={cn("relative rounded-lg border w-full min-w-0 overflow-hidden", fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
                 >
                   {/* Agent Context Header - Aurora v2.0 Design with Animation */}
                   <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
@@ -1378,7 +1358,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 })()}
                 {/* Contenido de streaming - solo cuando hay texto */}
                 {streamingResponse && (
-                  <div className="p-4">
+                  <div className="p-4 min-w-0 overflow-hidden">
                     <StreamingMarkdownRenderer
                       content={streamingResponse}
                       className="text-base leading-relaxed"

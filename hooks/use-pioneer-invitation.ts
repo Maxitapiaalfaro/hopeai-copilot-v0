@@ -60,18 +60,7 @@ export function usePioneerInvitation({
   totalConversations: injectedTotalConversations = 0 // Inyectar el total de conversaciones
 }: UsePioneerInvitationProps): PioneerInvitationReturn {
   
-  // Debug logging para verificar valores recibidos
-  useEffect(() => {
-    console.log('🔍 Pioneer Circle Hook Debug - Valores recibidos:', {
-      userId,
-      sessionId,
-      currentAgent,
-      isActive,
-      currentMessageCount,
-      injectedTotalConversations,
-      timestamp: new Date().toISOString()
-    });
-  }, [userId, sessionId, currentAgent, isActive, currentMessageCount, injectedTotalConversations]);
+
   
   // Usar el hook de métricas existente
   const { getSessionStats } = useSessionMetrics({
@@ -155,17 +144,6 @@ export function usePioneerInvitation({
       }
     });
 
-    console.log('🎯 Evaluación de elegibilidad Pioneer Circle (NUEVOS CRITERIOS):', {
-      userId,
-      sessionId,
-      messageCount: `${messageCount} (requiere ${MESSAGES_IN_SESSION_THRESHOLD})`,
-      totalConversations: `${conversationCount} (requiere ${TOTAL_CONVERSATIONS_THRESHOLD})`,
-      meetsMessageThreshold,
-      meetsConversationThreshold,
-      qualifiesForInvitation,
-      source: 'enhanced_engagement_criteria'
-    });
-
   }, [getSessionStats, userId, sessionId, currentMessageCount, injectedTotalConversations]);
 
   // Determinar si mostrar la invitación
@@ -231,7 +209,6 @@ export function usePioneerInvitation({
   // Efecto adicional para re-evaluar cuando cambie el conteo de conversaciones
   useEffect(() => {
     if (isActive && injectedTotalConversations !== undefined) {
-      console.log('🔄 Re-evaluando elegibilidad debido a cambio en conteo de conversaciones:', injectedTotalConversations);
       evaluateEligibility();
     }
   }, [isActive, injectedTotalConversations, evaluateEligibility]);

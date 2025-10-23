@@ -346,20 +346,27 @@ export function useMarketValidationMetrics({
       updateEngagementActivity();
     };
     
-    // Eventos que indican actividad
-    const events = ['click', 'keydown', 'scroll', 'mousemove'];
-    
-    // Throttle para evitar spam
+    // 🔥 OPTIMIZACIÓN: Solo eventos significativos (no scroll/mousemove)
+    const events = ['click', 'keydown'];
+
+    // Throttle agresivo para sesiones largas
     let throttleTimeout: NodeJS.Timeout | null = null;
+    let lastActivityTime = 0;
+
     const throttledHandler = () => {
+      const now = Date.now();
+      // Ignorar eventos si ya hubo actividad en los últimos 10 segundos
+      if (now - lastActivityTime < 10000) return;
+
       if (!throttleTimeout) {
         throttleTimeout = setTimeout(() => {
           handleUserActivity();
+          lastActivityTime = Date.now();
           throttleTimeout = null;
         }, 10000); // Throttle de 10 segundos
       }
     };
-    
+
     events.forEach(event => {
       document.addEventListener(event, throttledHandler, { passive: true });
     });

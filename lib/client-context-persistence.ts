@@ -31,9 +31,11 @@ interface OptimizedContextData {
   }
 }
 
-// Configuración de compresión
+// 🔥 OPTIMIZACIÓN: Configuración agresiva para sesiones largas
 const COMPRESSION_THRESHOLD = 50000 // caracteres
 const MAX_STORED_SESSIONS = 10 // máximo de sesiones almacenadas
+const MAX_SESSION_SIZE_BYTES = 5 * 1024 * 1024 // 5MB por sesión (límite estricto)
+const MAX_TOTAL_STORAGE_BYTES = 50 * 1024 * 1024 // 50MB total (límite global)
 const STORAGE_KEY_PREFIX = 'hopeai_optimized_context_'
 const SESSIONS_INDEX_KEY = 'hopeai_sessions_index'
 
@@ -123,6 +125,16 @@ export class ClientContextPersistence {
             compressionActive: needsCompression
           }
         }
+      }
+
+      // 🔥 OPTIMIZACIÓN: Validar tamaño antes de guardar
+      const contextSize = new Blob([JSON.stringify(optimizedContext)]).size
+      if (contextSize > MAX_SESSION_SIZE_BYTES) {
+        console.warn(`⚠️ Sesión ${sessionId} excede límite de tamaño (${(contextSize / 1024 / 1024).toFixed(2)}MB > ${MAX_SESSION_SIZE_BYTES / 1024 / 1024}MB)`)
+        // Comprimir más agresivamente
+        finalCuratedHistory = this.compressHistory(comprehensiveHistory, 0.5) // 50% de compresión
+        optimizedContext.curatedHistory = finalCuratedHistory
+        optimizedContext.metadata.usageMetadata.compressionRatio = finalCuratedHistory.length / comprehensiveHistory.length
       }
 
       // Guardar en localStorage
