@@ -316,34 +316,144 @@ export class ClientContextPersistence {
     return compressed
   }
 
-  private compressHistory(history: ChatMessage[]): ChatMessage[] {
-    // Estrategia de compresión inteligente:
-    // 1. Mantener siempre los primeros 2 mensajes (contexto inicial)
-    // 2. Mantener siempre los últimos 10 mensajes (contexto reciente)
-    // 3. Para el medio, mantener 1 de cada 3 mensajes, priorizando mensajes del usuario
-    
+  /**
+   * 🎯 ARQUITECTURA MEJORADA: Compresión híbrida basada en metadata
+   *
+   * Estrategia de preservación (5 tiers de prioridad):
+   * 1. TIER 1: Metadata estructurada (fileReferences, groundingUrls, reasoningBullets)
+   * 2. TIER 2: Transiciones de agente (cambios en msg.agent)
+   * 3. TIER 3: Mensajes del usuario (siempre preservar)
+   * 4. TIER 4: Contexto de sesión (primeros 2 y últimos N mensajes)
+   * 5. TIER 5: Contenido clínico crítico (keywords de alta prioridad)
+   *
+   * Este enfoque está alineado con el SDK de Gemini que usa metadata nativa
+   * para contexto estructurado, no solo análisis de contenido textual.
+   */
+  private compressHistory(history: ChatMessage[], compressionRatio: number = 1.0): ChatMessage[] {
     if (history.length <= 12) {
       return history // No necesita compresión
     }
 
-    const compressed: ChatMessage[] = []
-    
-    // Primeros 2 mensajes
-    compressed.push(...history.slice(0, 2))
-    
-    // Últimos 10 mensajes
-    const recentMessages = history.slice(-10)
-    
-    // Mensajes del medio con compresión selectiva
-    const middleMessages = history.slice(2, -10)
-    const compressedMiddle = middleMessages.filter((msg, index) => 
-      msg.role === 'user' || index % 3 === 0
-    )
-    
-    compressed.push(...compressedMiddle)
-    compressed.push(...recentMessages)
-    
+    // Ajustar parámetros según el ratio de compresión
+    const recentMessagesCount = Math.max(5, Math.floor(10 * compressionRatio))
+
+    // Identificar mensajes a preservar por metadata y contexto
+    const preservedIndices = new Set<number>()
+    const preservationReasons: Record<number, string> = {}
+
+    history.forEach((msg, index) => {
+      const reason = this.shouldPreserveMessage(msg, index, history, recentMessagesCount)
+      if (reason) {
+        preservedIndices.add(index)
+        preservationReasons[index] = reason
+      }
+    })
+
+    // Construir historial comprimido manteniendo orden original
+    const compressed = history.filter((_, index) => preservedIndices.has(index))
+
+    // 📊 Logging de métricas de preservación
+    const compressionRate = ((1 - compressed.length / history.length) * 100).toFixed(1)
+    console.log(`[ClientContextPersistence] Compresión aplicada:`, {
+      original: history.length,
+      compressed: compressed.length,
+      compressionRate: `${compressionRate}%`,
+      compressionRatio,
+      preservedByTier: this.getPreservationStats(preservationReasons)
+    })
+
     return compressed
+  }
+
+  /**
+   * 🎯 Determina si un mensaje debe preservarse basado en metadata y contexto
+   * Retorna la razón de preservación o null si debe comprimirse
+   */
+  private shouldPreserveMessage(
+    msg: ChatMessage,
+    index: number,
+    history: ChatMessage[],
+    recentMessagesCount: number
+  ): string | null {
+    // 🎯 TIER 1: Metadata estructurada (SIEMPRE)
+    if (this.hasStructuralMetadata(msg)) {
+      return 'structural_metadata'
+    }
+
+    // 🎯 TIER 2: Transiciones de agente (SIEMPRE)
+    if (this.isAgentTransition(msg, index, history)) {
+      return 'agent_transition'
+    }
+
+    // 🎯 TIER 3: Mensajes del usuario (SIEMPRE)
+    if (msg.role === 'user') {
+      return 'user_message'
+    }
+
+    // 🎯 TIER 4: Contexto de sesión (SIEMPRE)
+    if (index < 2) {
+      return 'session_start'
+    }
+    if (index >= history.length - recentMessagesCount) {
+      return 'session_recent'
+    }
+
+    // 🎯 TIER 5: Contenido clínico crítico (OPCIONAL)
+    if (this.hasCriticalClinicalContent(msg)) {
+      return 'critical_clinical'
+    }
+
+    return null // Mensaje puede ser comprimido
+  }
+
+  /**
+   * 🎯 Verifica si el mensaje tiene metadata estructurada
+   * Alineado con el SDK de Gemini que usa metadata nativa
+   */
+  private hasStructuralMetadata(msg: ChatMessage): boolean {
+    return !!(
+      (msg.fileReferences && msg.fileReferences.length > 0) ||
+      (msg.groundingUrls && msg.groundingUrls.length > 0) ||
+      (msg.reasoningBullets && msg.reasoningBullets.length > 0)
+    )
+  }
+
+  /**
+   * 🎯 Detecta transiciones entre agentes
+   * Crítico para mantener continuidad en sistema multi-agente
+   */
+  private isAgentTransition(msg: ChatMessage, index: number, history: ChatMessage[]): boolean {
+    if (index === 0) return false
+    const prevMsg = history[index - 1]
+    return msg.agent !== prevMsg.agent && msg.agent !== undefined && prevMsg.agent !== undefined
+  }
+
+  /**
+   * 🎯 Detecta contenido clínico crítico usando keywords de alta prioridad
+   * Solo para casos que requieren preservación obligatoria (crisis, riesgo, diagnósticos)
+   */
+  private hasCriticalClinicalContent(msg: ChatMessage): boolean {
+    // Solo keywords de ALTA prioridad (diagnósticos, crisis, riesgo)
+    const criticalKeywords = [
+      'suicidio', 'suicida', 'autolesión', 'autolesiones',
+      'crisis', 'emergencia', 'riesgo',
+      'diagnóstico', 'trastorno', 'psicosis',
+      'hospitalización', 'internación'
+    ]
+
+    const contentLower = msg.content.toLowerCase()
+    return criticalKeywords.some(keyword => contentLower.includes(keyword))
+  }
+
+  /**
+   * 📊 Calcula estadísticas de preservación por tier
+   */
+  private getPreservationStats(reasons: Record<number, string>): Record<string, number> {
+    const stats: Record<string, number> = {}
+    Object.values(reasons).forEach(reason => {
+      stats[reason] = (stats[reason] || 0) + 1
+    })
+    return stats
   }
 
   private estimateTokenCount(history: ChatMessage[]): number {

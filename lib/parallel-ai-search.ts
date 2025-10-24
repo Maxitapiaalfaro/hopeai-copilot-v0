@@ -92,20 +92,20 @@ const CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS = [
   'redalyc.org',             // #2 - Red de Revistas Científicas de América Latina y el Caribe
   
   // 🌎 Bases de datos internacionales con contenido en español
-  'pubmed.ncbi.nlm.nih.gov', // #3 - PubMed (incluye journals latinoamericanos)
-  'sciencedirect.com',       // #4 - Elsevier (journals en español)
+  'pmc.ncbi.nlm.nih.gov', // #3 - PubMed (incluye journals latinoamericanos)
+  'crossref.org',       // #4 - Elsevier (journals en español)
   
   // 🧠 Psicología específica - fuentes profesionales
   'psycnet.apa.org',         // #5 - American Psychological Association (contenido bilingüe)
-  'infocop.es',              // #6 - Consejo General de la Psicología de España
+  'semanticscholar.org',              // #6 - Consejo General de la Psicología de España
   
   // 📚 Repositorios académicos iberoamericanos
-  'dialnet.unirioja.es',     // #7 - Portal bibliográfico hispano (España)
-  'pepsic.bvsalud.org',      // #8 - Periódicos Electrónicos en Psicología (Brasil + Latinoamérica)
+  'doaj.org',     // #7 - Portal bibliográfico hispano (España)
+  'revistasaludpublica.uchile.cl',      // #8 - Periódicos Electrónicos en Psicología (Brasil + Latinoamérica)
   
   // 🏛️ Instituciones académicas de referencia
-  'cochrane.org',            // #9 - Cochrane Library (revisiones sistemáticas, contenido en español)
-  'bvsalud.org'              // #10 - Biblioteca Virtual en Salud (OPS/OMS - multilingüe con español)
+  'revista.ispch.gob.cl',            // #9 - Cochrane Library (revisiones sistemáticas, contenido en español)
+  'minsal.cl'              // #10 - Biblioteca Virtual en Salud (OPS/OMS - multilingüe con español)
 ]
 
 // Dominios a excluir por defecto

@@ -568,10 +568,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 if (chunk.text) {
                   fullResponse += chunk.text
                   const now = Date.now()
-                  // 🔥 OPTIMIZACIÓN: Throttle agresivo (200ms = ~5fps) para máxima estabilidad
+                  // 🔥 OPTIMIZACIÓN: Throttle optimizado (100ms = ~10fps) para fluidez mejorada
                   // Las tablas incompletas se detectan y no se parsean hasta estar completas (ver markdown-parser.ts)
-                  // 5 FPS es perfectamente fluido para texto que "aparece" (no se mueve)
-                  if (now - lastUpdateTs > 200) {
+                  // 10 FPS proporciona streaming suave y natural sin comprometer performance
+                  if (now - lastUpdateTs > 100) {
                     setStreamingResponse(fullResponse)
                     lastUpdateTs = now
                   }
