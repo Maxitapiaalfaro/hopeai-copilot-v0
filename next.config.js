@@ -4,11 +4,34 @@ const { withSentryConfig } = require('@sentry/nextjs');
 const nextConfig = {
   // Your existing Next.js configuration
   experimental: {
-    // Enable experimental features if needed
+    // 🔥 PREWARM: Habilitar instrumentación para pre-warming del sistema
+    instrumentationHook: true,
   },
   eslint: {
     // Disable ESLint during builds
     ignoreDuringBuilds: true,
+  },
+  // Webpack configuration for server-only modules
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Excluir módulos de Node.js del bundle del cliente
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        'better-sqlite3': false,
+      };
+    }
+
+    // Excluir better-sqlite3 de ser procesado por webpack en el cliente
+    config.externals = config.externals || [];
+    if (!isServer) {
+      config.externals.push('better-sqlite3');
+    }
+
+    return config;
   },
 };
 

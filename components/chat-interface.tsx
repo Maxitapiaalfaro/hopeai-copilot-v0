@@ -288,7 +288,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
   // Keep snapshot of reasoning bullets during streaming cycle
   useEffect(() => {
-    if (isStreaming && reasoningBullets && reasoningBullets.bullets) {
+    if (isStreaming && reasoningBullets?.bullets) {
       bulletsSnapshotRef.current = [...reasoningBullets.bullets]
     }
   }, [isStreaming, reasoningBullets?.bullets])
@@ -568,12 +568,20 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 if (chunk.text) {
                   fullResponse += chunk.text
                   const now = Date.now()
-                  // 🔥 OPTIMIZACIÓN: Throttle optimizado (100ms = ~10fps) para fluidez mejorada
-                  // Las tablas incompletas se detectan y no se parsean hasta estar completas (ver markdown-parser.ts)
-                  // 10 FPS proporciona streaming suave y natural sin comprometer performance
-                  if (now - lastUpdateTs > 100) {
+
+                  // 🚀 OPTIMIZACIÓN: Actualizar INMEDIATAMENTE el primer chunk para mejor UX
+                  // Luego usar throttle (50ms = ~20fps) para chunks subsecuentes
+                  // 20 FPS proporciona streaming muy fluido y responsivo sin comprometer performance
+                  const isFirstChunk = chunkCount === 1
+                  const shouldUpdate = isFirstChunk || (now - lastUpdateTs > 50)
+
+                  if (shouldUpdate) {
                     setStreamingResponse(fullResponse)
                     lastUpdateTs = now
+
+                    if (isFirstChunk) {
+                      console.log('🚀 [ChatInterface] Primer chunk mostrado inmediatamente:', fullResponse.substring(0, 50))
+                    }
                   }
 
                   // 🎯 Cuando empieza el streaming, programar ocultación del indicador
@@ -983,7 +991,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               )}>
                 <div
                   className={cn(
-                    "relative rounded-lg border ring-1 ring-transparent overflow-hidden w-full min-w-0",
+                    "chat-message-bubble relative rounded-lg border ring-1 ring-transparent overflow-hidden w-full min-w-0",
                     fontSizeClass,
                     message.role === "user"
                       ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-[hsl(var(--user-bubble-bg))] shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
@@ -1016,7 +1024,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                             )}>
                               {messageAgentConfig.name}
                             </h3>
-                            {message.reasoningBullets && message.reasoningBullets.length > 0 && (
+                            {/* ⚠️ BULLETS INHABILITADOS: Botón de toggle deshabilitado */}
+                            {false && message.reasoningBullets && message.reasoningBullets.length > 0 && (
                               <button
                                 type="button"
                                 onClick={() => toggleMessageBullets(message.id)}
@@ -1037,10 +1046,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       </div>
                     </div>
                   )}
-                  {/* Reasoning bullets at the top of AI message with per-message collapse */}
-                  {message.role === 'model' && message.reasoningBullets && message.reasoningBullets.length > 0 && !collapsedMessageBullets[message.id] && (
+                  {/* ⚠️ BULLETS INHABILITADOS: Bullets en mensajes históricos deshabilitados */}
+                  {false && message.role === 'model' && message.reasoningBullets && message.reasoningBullets.length > 0 && !collapsedMessageBullets[message.id] && (
                     <div className="p-3 md:p-4">
-                      <ReasoningBullets 
+                      <ReasoningBullets
                         bullets={message.reasoningBullets}
                         isGenerating={false}
                         showHeader={false}
@@ -1215,7 +1224,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     backgroundColor: realConfig.bgColor
                   }}
                   transition={{ duration: 0.4, ease: "easeInOut" }}
-                  className={cn("relative rounded-lg border w-full min-w-0 overflow-hidden", fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
+                  className={cn("chat-message-bubble relative rounded-lg border w-full min-w-0 overflow-hidden", fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
                 >
                   {/* Agent Context Header - Aurora v2.0 Design with Animation */}
                   <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
@@ -1254,7 +1263,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           >
                             {realConfig.name}
                           </motion.h3>
-                          {reasoningBullets && reasoningBullets.bullets.length > 0 && (
+                          {/* ⚠️ BULLETS INHABILITADOS: Botón de toggle en streaming deshabilitado */}
+                          {false && reasoningBullets?.bullets && reasoningBullets.bullets.length > 0 && (
                             <button
                               type="button"
                               onClick={() => setAreBulletsCollapsed(prev => !prev)}
@@ -1280,8 +1290,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       </div>
                     </div>
                   </div>
-                {/* Reasoning Bullets DENTRO de la burbuja de streaming */}
-                {reasoningBullets && reasoningBullets.bullets.length > 0 && !areBulletsCollapsed && (
+                {/* ⚠️ BULLETS INHABILITADOS: Bullets dentro de streaming deshabilitados para optimizar latencia */}
+                {false && reasoningBullets?.bullets && reasoningBullets.bullets.length > 0 && !areBulletsCollapsed && (
                   <div className="px-4 pt-4 pb-2">
                     <ReasoningBullets
                       bullets={reasoningBullets.bullets}
@@ -1582,9 +1592,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             )
           })()}
 
-          {/* Reasoning Bullets EXTERNOS - Solo cuando NO hay streaming activo CON ANIMACIÓN */}
-          {!isStreaming && reasoningBullets && (
-            reasoningBullets.isGenerating || (reasoningBullets.bullets.length > 0 && !lastModelMessageHasBullets)
+          {/* ⚠️ BULLETS INHABILITADOS: Contenedor de bullets externos deshabilitado para optimizar latencia */}
+          {/* Los bullets añadían ~500-1000ms de latencia al streaming */}
+          {false && !isStreaming && reasoningBullets && (
+            reasoningBullets.isGenerating || ((reasoningBullets?.bullets?.length ?? 0) > 0 && !lastModelMessageHasBullets)
           ) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}

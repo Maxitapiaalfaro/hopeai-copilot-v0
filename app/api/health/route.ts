@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminRequest } from '@/lib/security/admin-auth';
 import { getConfigSummary, isSecureMode } from '@/lib/env-validator';
+import { getPrewarmStatus } from '@/lib/server-prewarm';
 
 /**
  * 🔒 HEALTH CHECK API - Endpoint de health check con autenticación
@@ -29,12 +30,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Obtener estado de pre-warming
+    const prewarmStatus = getPrewarmStatus()
+
     // Health check básico (público)
     const basicHealth = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: Math.round(process.uptime()),
-      environment: process.env.NODE_ENV || 'development'
+      environment: process.env.NODE_ENV || 'development',
+      prewarm: {
+        ready: prewarmStatus.isPrewarmed,
+        duration: prewarmStatus.duration
+      }
     };
 
     // Si no se solicita detalle, devolver solo básico
@@ -76,6 +84,12 @@ export async function GET(request: NextRequest) {
         metrics: {
           enabled: true,
           tracker: 'sentry-metrics-tracker'
+        },
+        hopeai: {
+          prewarmed: prewarmStatus.isPrewarmed,
+          prewarming: prewarmStatus.isPrewarming,
+          prewarmDuration: prewarmStatus.duration,
+          prewarmError: prewarmStatus.error
         }
       }
     };

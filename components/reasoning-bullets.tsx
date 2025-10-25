@@ -13,6 +13,10 @@ interface ReasoningBulletsProps {
 }
 
 export function ReasoningBullets({ bullets, isGenerating = false, className = '', showHeader = true }: ReasoningBulletsProps) {
+  // ⚠️ BULLETS INHABILITADOS: No mostrar nada (optimización de latencia)
+  // Los bullets añadían ~500-1000ms de latencia al streaming
+  return null
+
   // Si no hay bullets y no está generando, no mostrar nada
   if (!bullets || (bullets.length === 0 && !isGenerating)) {
     return null

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
+import { getSSEClient } from '@/lib/sse-client'
 
 // ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
 const MAX_HISTORICAL_BULLETS = 15
@@ -376,14 +377,14 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         }
       })
 
-      console.log('📤 Enviando mensaje con enrutamiento inteligente:', message.substring(0, 50) + '...')
-      
+      console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
+
       // Callback para manejar bullets progresivos
       const handleBulletUpdate = (bullet: ReasoningBullet) => {
         console.log('🎯 Bullet recibido:', bullet.content)
         addReasoningBullet(bullet)
       }
-      
+
       // 🎯 CALLBACK: Cuando se selecciona el agente INMEDIATAMENTE
       const handleAgentSelected = (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => {
         console.log('🎯 Agente seleccionado INMEDIATAMENTE:', routingInfo.targetAgent)
@@ -395,7 +396,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             lastMessage.agent = routingInfo.targetAgent as AgentType
             console.log('🔄 Mensaje del usuario actualizado con agente real:', routingInfo.targetAgent)
           }
-          
+
           return {
             ...prev,
             history: updatedHistory,
@@ -410,7 +411,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
         })
       }
-      
+
       // Simular estado de selección de agente
       setTimeout(() => {
         setSystemState(prev => ({
@@ -418,53 +419,78 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           transitionState: 'selecting_agent'
         }))
       }, 500)
-      
-      const result = await hopeAISystem.current.sendMessage(
-        sessionIdToUse!,
-        message,
-        useStreaming,
-        undefined, // suggestedAgent
-        sessionMetaToUse, // patient context metadata (ya actualizado con sessionId si es lazy creation)
-        handleBulletUpdate, // callback para bullets progresivos
-        handleAgentSelected // callback cuando se selecciona el agente
-      )
-      
-      // 🎯 ACTUALIZAR ROUTING INFO INMEDIATAMENTE para mostrar el agente real
-      if (result.response.routingInfo) {
-        setSystemState(prev => ({
-          ...prev,
-          routingInfo: result.response.routingInfo,
-          transitionState: 'specialist_responding'
-        }))
-        console.log('🎯 Agente seleccionado:', result.response.routingInfo.targetAgent)
-      } else {
-        // Cambiar a estado de respuesta del especialista sin routing info
-        setSystemState(prev => ({
-          ...prev,
-          transitionState: 'specialist_responding'
-        }))
-      }
-      
-      // Actualizar estado con la respuesta completa al final
-      // Mantener el historial actualizado sin sobrescribir
-      setSystemState(prev => ({
-        ...prev,
-        history: result.updatedState.history,
-        activeAgent: result.updatedState.activeAgent,
-        routingInfo: result.response.routingInfo,
-        isLoading: false,
-        transitionState: 'idle',
-        reasoningBullets: {
-          ...prev.reasoningBullets,
-          isGenerating: false
-        }
-      }))
-      lastSessionIdRef.current = sessionIdToUse!
 
-      console.log('✅ Mensaje enviado exitosamente')
-      console.log('🧠 Información de enrutamiento:', result.response.routingInfo)
-      
-      return result.response
+      // 🔥 NUEVA ARQUITECTURA: Usar SSE Client y retornar AsyncGenerator para streaming real
+      const sseClient = getSSEClient()
+
+      // Variables para acumular datos durante el streaming
+      let finalRoutingInfo: any = null
+
+      // Crear AsyncGenerator que yielde chunks en tiempo real
+      const streamGenerator = (async function* () {
+        try {
+          // Usar el nuevo método sendMessageStream que yielda chunks
+          for await (const chunk of sseClient.sendMessageStream(
+            {
+              sessionId: sessionIdToUse!,
+              message,
+              useStreaming,
+              userId: systemState.userId || 'demo_user',
+              suggestedAgent: undefined,
+              sessionMeta: sessionMetaToUse
+            },
+            {
+              onBullet: handleBulletUpdate,
+              onAgentSelected: handleAgentSelected,
+              onChunk: (chunk) => {
+                // Este callback se ejecuta pero no necesitamos hacer nada aquí
+                // porque el generator ya está yieldando los chunks
+                console.log('📝 Chunk procesado en callback')
+              },
+              onResponse: (responseData) => {
+                console.log('✅ Respuesta final recibida vía SSE')
+
+                // 🎯 ACTUALIZAR ROUTING INFO si está disponible
+                if (responseData.response?.routingInfo) {
+                  finalRoutingInfo = responseData.response.routingInfo
+                  setSystemState(prev => ({
+                    ...prev,
+                    routingInfo: responseData.response.routingInfo,
+                    transitionState: 'specialist_responding'
+                  }))
+                  console.log('🎯 Agente seleccionado:', responseData.response.routingInfo.targetAgent)
+                }
+              },
+              onError: (error, details) => {
+                console.error('❌ Error SSE:', error, details)
+                throw new Error(error)
+              },
+              onComplete: () => {
+                console.log('✅ Stream SSE completado')
+              }
+            }
+          )) {
+            // ✅ YIELDAR CADA CHUNK INMEDIATAMENTE para que la UI se actualice
+            console.log('🚀 [Hook] Yielding chunk:', chunk.text?.substring(0, 50))
+            yield chunk
+          }
+        } catch (error) {
+          console.error('❌ Error en stream generator:', error)
+          throw error
+        }
+      })()
+
+      // Agregar routingInfo como propiedad del generator (para compatibilidad con chat-interface.tsx)
+      // Esto se actualizará cuando llegue el evento 'response'
+      Object.defineProperty(streamGenerator, 'routingInfo', {
+        get: () => finalRoutingInfo,
+        enumerable: true
+      })
+
+      console.log('✅ Retornando AsyncGenerator para streaming en tiempo real')
+
+      // Retornar el generator directamente - chat-interface.tsx lo consumirá
+      return streamGenerator
     } catch (error) {
       console.error('❌ Error enviando mensaje:', error)
       setSystemState(prev => ({
@@ -579,34 +605,47 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           : currentMessageBullets
       )
 
-      // Actualizar el historial local inmediatamente
-      const updatedState = await hopeAISystem.current.getChatState(targetSessionId)
-      
-      // NUEVA FUNCIONALIDAD: Asociar bullets del mensaje actual con el último mensaje de respuesta
-      const updatedHistory = [...updatedState.history]
+      // 🔧 FIX: NO cargar desde DB (cliente y servidor tienen DBs separadas)
+      // En su lugar, agregar el mensaje del modelo al historial local existente
+
+      const aiMessage: ChatMessage = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        content: responseContent,
+        role: "model",
+        agent: agent,
+        timestamp: new Date(),
+        groundingUrls: groundingUrls || [],
+        reasoningBullets: undefined // Los bullets se agregan después si existen
+      }
+
+      // Asociar bullets si existen
       const bulletsToAttach = (reasoningBulletsForThisResponse && reasoningBulletsForThisResponse.length > 0)
         ? reasoningBulletsForThisResponse
         : currentMessageBullets
-      if (updatedHistory.length > 0 && bulletsToAttach.length > 0) {
-        const lastMessage = updatedHistory[updatedHistory.length - 1]
-        if (lastMessage.role === 'model') {
-          lastMessage.reasoningBullets = [...bulletsToAttach]
-          console.log('🎯 Bullets asociados al mensaje:', bulletsToAttach.length)
-        }
+
+      if (bulletsToAttach.length > 0) {
+        aiMessage.reasoningBullets = [...bulletsToAttach]
+        console.log('🎯 Bullets asociados al mensaje:', bulletsToAttach.length)
       }
-      
+
+      console.log('🔄 [addStreamingResponseToHistory] Agregando mensaje del modelo al historial local:', {
+        currentHistoryLength: systemState.history.length,
+        aiMessageId: aiMessage.id,
+        aiMessageContent: aiMessage.content.substring(0, 50)
+      })
+
       setSystemState(prev => ({
         ...prev,
-        history: updatedHistory,
-        activeAgent: updatedState.activeAgent, // Sincronizar el agente activo
+        history: [...prev.history, aiMessage],
+        activeAgent: agent,
         isLoading: false
       }))
-      
+
       // Limpiar bullets temporales después de asociarlos
       setCurrentMessageBullets([])
 
       console.log('✅ Respuesta de streaming agregada al historial')
-      console.log('📊 Historial actualizado con', updatedHistory.length, 'mensajes')
+      console.log('📊 Historial actualizado con', systemState.history.length + 1, 'mensajes')
     } catch (error) {
       console.error('❌ Error agregando respuesta al historial:', error)
       throw error

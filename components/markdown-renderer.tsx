@@ -1,7 +1,12 @@
 "use client"
 
-import React, { useMemo, memo, useEffect, useRef } from 'react'
-import { parseMarkdown, parseMarkdownStreaming, sanitizeMarkdownContent } from '@/lib/markdown-parser'
+import React, { useMemo, memo, useEffect, useRef, useState } from 'react'
+import {
+  parseMarkdownSync,
+  parseMarkdownStreamingSync,
+  sanitizeMarkdownContent
+} from '@/lib/markdown-parser-streamdown'
+import { useIncrementalMarkdown } from '@/hooks/use-incremental-markdown'
 import { cn } from '@/lib/utils'
 
 interface MarkdownRendererProps {
@@ -36,10 +41,11 @@ const MarkdownRendererComponent = ({
     if (!sanitizedContent) return ''
 
     // Usar el parser apropiado según si es streaming o no
+    // Usamos versiones síncronas para compatibilidad con useMemo
     if (isStreaming) {
-      return parseMarkdownStreaming(sanitizedContent)
+      return parseMarkdownStreamingSync(sanitizedContent)
     } else {
-      return parseMarkdown(sanitizedContent)
+      return parseMarkdownSync(sanitizedContent)
     }
   }, [content, isStreaming])
 
@@ -131,35 +137,58 @@ export const MarkdownRenderer = memo(MarkdownRendererComponent)
 export function useMarkdownRenderer(content: string, isStreaming = false) {
   const renderedContent = useMemo(() => {
     if (!content) return ''
-    
+
     const sanitizedContent = sanitizeMarkdownContent(content)
     if (!sanitizedContent) return ''
-    
-    return isStreaming 
-      ? parseMarkdownStreaming(sanitizedContent)
-      : parseMarkdown(sanitizedContent)
+
+    return isStreaming
+      ? parseMarkdownStreamingSync(sanitizedContent)
+      : parseMarkdownSync(sanitizedContent)
   }, [content, isStreaming])
-  
+
   return renderedContent
 }
 
 /**
  * Componente especializado para mensajes de streaming
  * Incluye indicador de escritura y manejo optimizado de contenido parcial
+ *
+ * 🚀 OPTIMIZACIÓN: Usa parsing incremental para evitar re-parsear todo el contenido
  */
 interface StreamingMarkdownRendererProps {
   content: string
   className?: string
   showTypingIndicator?: boolean
+  enableIncrementalParsing?: boolean  // Flag para habilitar/deshabilitar optimización
 }
 
-const StreamingMarkdownRendererComponent = ({ 
-  content, 
+const StreamingMarkdownRendererComponent = ({
+  content,
   className = '',
-  showTypingIndicator = true 
+  showTypingIndicator = true,
+  enableIncrementalParsing = true  // Habilitado por defecto
 }: StreamingMarkdownRendererProps) => {
-  const renderedContent = useMarkdownRenderer(content, true)
-  
+  // 🚀 OPTIMIZACIÓN: Usar parsing incremental si está habilitado
+  const { html: incrementalHtml } = useIncrementalMarkdown(
+    content,
+    true,  // isStreaming = true
+    {
+      enabled: enableIncrementalParsing,
+      config: {
+        baseThrottle: 100,        // 100ms para contenido normal
+        tableThrottle: 200,       // 200ms para tablas pequeñas
+        largeTableThrottle: 500,  // 500ms para tablas grandes (>10 filas)
+        largeTableThreshold: 10,
+        minDeltaSize: 10,
+      },
+    }
+  )
+
+  // Fallback al método anterior si incremental está deshabilitado
+  const fallbackHtml = useMarkdownRenderer(content, true)
+
+  const renderedContent = enableIncrementalParsing ? incrementalHtml : fallbackHtml
+
   if (!content && !showTypingIndicator) {
     return null
   }

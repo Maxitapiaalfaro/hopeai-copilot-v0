@@ -391,28 +391,41 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     }
 
     setIsUploading(true) // ⭐ Bloquear chat mientras se sube archivo
-    
+
     try {
       console.log('📎 Subiendo documento:', file.name)
-      
-      // Usar el sistema HopeAI para subir el documento
-      const uploadedFile = await HopeAISystemSingleton.uploadDocument(
-        sessionIdForUpload as string,
-        file,
-        systemState.userId || 'demo_user'
-      )
-      
+
+      // 🔧 FIX: Llamar al endpoint del servidor para que el archivo se guarde en SQLite
+      // ANTES: Llamaba directamente a HopeAISystemSingleton.uploadDocument() que guardaba en IndexedDB (cliente)
+      // AHORA: Llama al endpoint /api/upload-document que guarda en SQLite (servidor)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('sessionId', sessionIdForUpload as string)
+      formData.append('userId', systemState.userId || 'demo_user')
+
+      const response = await fetch('/api/upload-document', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.details || errorData.error || 'Error al subir documento')
+      }
+
+      const { uploadedFile } = await response.json()
+
       // Agregar archivo con estado inicial de procesamiento
       setPendingFiles(prev => [...prev, {
         ...uploadedFile,
         processingStatus: uploadedFile.status === 'processed' ? 'active' : 'processing'
       }])
-      
+
       // Si el archivo aún está procesando, iniciar polling para verificar estado
       if (uploadedFile.status !== 'processed') {
         pollFileStatus(uploadedFile.id, uploadedFile.geminiFileId)
       }
-      
+
       console.log('✅ Documento subido exitosamente:', uploadedFile.name)
       return uploadedFile
     } catch (error) {
@@ -810,7 +823,6 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               fichaLoading={isFichaLoading}
               generateLoading={isGenerateFichaLoading}
               canRevertFicha={!!lastGeneratedFichaId && !!previousFichaBackup}
-              reasoningBullets={systemState.reasoningBullets}
             />
             {patient && (
               <FichaClinicaPanel

@@ -432,8 +432,17 @@
     color: hsl(var(--foreground)) !important;
   }
 
+  /* 🔥 CONTAINER QUERIES: Establecer contexto de contención en burbujas de mensaje */
+  .chat-message-bubble,
+  .markdown-content,
+  .prose {
+    container-type: inline-size;
+    container-name: message-bubble;
+  }
+
   /* Responsive: scroll horizontal en mobile con indicador visual */
-  @media (max-width: 639px) {
+  /* Usando Container Queries en lugar de media queries para mejor encapsulación */
+  @container message-bubble (max-width: 639px) {
     .markdown-content .clinical-table-wrapper,
     .prose .clinical-table-wrapper {
       /* CRÍTICO: Forzar scroll horizontal en mobile */
@@ -491,11 +500,65 @@
   .prose .clinical-table-wrapper.scrolled::after {
     display: none !important;
   }
-  
+
+  /* 🔥 OPTIMIZACIÓN: Sombras de gradiente para indicar scroll disponible */
+  .clinical-table-wrapper {
+    position: relative;
+  }
+
+  /* Sombra derecha (indica que hay más contenido a la derecha) */
+  @container message-bubble (max-width: 639px) {
+    .clinical-table-wrapper::before {
+      content: '';
+      position: sticky;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 20px;
+      background: linear-gradient(to right, hsl(var(--card)), transparent);
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .clinical-table-wrapper.scrolled::before {
+      opacity: 1;
+    }
+  }
+
+  /* Mejorar el wrapper de tablas para mejor UX */
+  .clinical-table-wrapper {
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    /* Snap to columns on mobile (opcional) */
+    /* scroll-snap-type: x proximity; */
+    /* Ocultar scrollbar pero mantener funcionalidad */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
   .markdown-content strong {
     @apply font-semibold text-foreground;
   }
-  
+
   .markdown-content em {
     @apply italic text-muted-foreground;
   }

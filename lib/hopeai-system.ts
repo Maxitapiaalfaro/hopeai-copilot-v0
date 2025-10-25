@@ -10,6 +10,7 @@ import { PatientSummaryBuilder } from "./patient-summary-builder"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, ReasoningBullet } from "@/types/clinical-types"
+import type { OperationalMetadata, AgentTransition } from "@/types/operational-metadata"
 
 export class HopeAISystem {
   private _initialized = false
@@ -52,40 +53,81 @@ export class HopeAISystem {
   }
 
   async initialize(): Promise<void> {
-    if (this._initialized) return
+    const isServer = typeof window === 'undefined'
+    const startTime = Date.now()
+    console.log('🚀 [HopeAISystem] initialize() called', { isServer })
+
+    if (this._initialized) {
+      console.log('✅ [HopeAISystem] Already initialized, skipping')
+      return
+    }
 
     try {
-      // Inicializar el storage adapter
-      this.storage = await getStorageAdapter()
-      
-      // Asegurar que el storage esté inicializado
-      if (this.storage && typeof this.storage.initialize === 'function') {
-        await this.storage.initialize()
-      }
-      
-      // Inicializar el router de intenciones inteligente
-      this.intentRouter = createIntelligentIntentRouter(clinicalAgentRouter, {
-        confidenceThreshold: 0.8,
-        fallbackAgent: 'socratico',
-        enableLogging: true,
-        maxRetries: 2
-      })
-      
-      // Inicializar DynamicOrchestrator con optimizaciones de performance
-      if (this.useAdvancedOrchestration) {
-        this.dynamicOrchestrator = new DynamicOrchestrator(clinicalAgentRouter, {
-          enableAdaptiveLearning: false,
-          enableRecommendations: false,
-          asyncRecommendations: false,          // 🚀 Performance optimization
-          toolContinuityThreshold: 3,         // 🛠️ Smart tool persistence
-          dominantTopicsUpdateInterval: 5,    // 📊 Optimized update frequency
-          maxToolsPerSession: 20,
-          confidenceThreshold: 0.75,
-          sessionTimeoutMinutes: 60,
-          logLevel: 'info'
-        })
-        // 🔒 SECURITY: Console logging disabled in production
-      }
+      console.log('🔧 [HopeAISystem] Starting PARALLEL initialization...')
+
+      // 🚀 OPTIMIZACIÓN: Inicializar componentes en PARALELO para reducir cold start
+      const [storage, intentRouter, orchestrator] = await Promise.all([
+        // 1. Storage adapter
+        (async () => {
+          console.log('🔧 [HopeAISystem] Getting storage adapter...')
+          const storageAdapter = await getStorageAdapter()
+          console.log('✅ [HopeAISystem] Storage adapter obtained:', storageAdapter?.constructor?.name)
+
+          // Asegurar que el storage esté inicializado
+          if (storageAdapter && typeof storageAdapter.initialize === 'function') {
+            console.log('🔧 [HopeAISystem] Calling storage.initialize()...')
+            await storageAdapter.initialize()
+            console.log('✅ [HopeAISystem] Storage initialized successfully')
+          } else {
+            console.warn('⚠️ [HopeAISystem] Storage does not have initialize method')
+          }
+
+          return storageAdapter
+        })(),
+
+        // 2. Intent router (independiente del storage)
+        (async () => {
+          console.log('🔧 [HopeAISystem] Creating intent router...')
+          const router = createIntelligentIntentRouter(clinicalAgentRouter, {
+            confidenceThreshold: 0.8,
+            fallbackAgent: 'socratico',
+            enableLogging: true,
+            maxRetries: 2
+          })
+          console.log('✅ [HopeAISystem] Intent router created')
+          return router
+        })(),
+
+        // 3. Dynamic orchestrator (independiente del storage)
+        (async () => {
+          if (!this.useAdvancedOrchestration) {
+            return null
+          }
+
+          console.log('🔧 [HopeAISystem] Creating dynamic orchestrator...')
+          const orch = new DynamicOrchestrator(clinicalAgentRouter, {
+            enableAdaptiveLearning: false,
+            enableRecommendations: false,
+            asyncRecommendations: false,          // 🚀 Performance optimization
+            toolContinuityThreshold: 3,         // 🛠️ Smart tool persistence
+            dominantTopicsUpdateInterval: 5,    // 📊 Optimized update frequency
+            maxToolsPerSession: 20,
+            confidenceThreshold: 0.75,
+            sessionTimeoutMinutes: 60,
+            logLevel: 'info'
+          })
+          console.log('✅ [HopeAISystem] Dynamic orchestrator created')
+          return orch
+        })()
+      ])
+
+      // Asignar resultados
+      this.storage = storage
+      this.intentRouter = intentRouter
+      this.dynamicOrchestrator = orchestrator
+
+      const initTime = Date.now() - startTime
+      console.log(`✅ [HopeAISystem] PARALLEL initialization completed in ${initTime}ms`)
 
       this._initialized = true
       // 🔒 SECURITY: Console logging disabled in production
@@ -183,6 +225,261 @@ export class HopeAISystem {
     await this.saveChatSessionBoth(chatState)
 
     return { sessionId: finalSessionId, chatState }
+  }
+
+  /**
+   * 🚨 EDGE CASE DETECTION: Detectar contenido sensible en el mensaje del usuario
+   * Usa las mismas keywords que el router, pero sin requerir contexto de paciente
+   */
+  private detectSensitiveContent(userInput: string, metadata: OperationalMetadata): boolean {
+    const inputLower = userInput.toLowerCase();
+
+    // Keywords críticas que siempre requieren routing al clínico
+    const criticalKeywords = [
+      // Riesgo suicida
+      'suicidio', 'suicida', 'matarme', 'acabar con mi vida', 'quitarme la vida',
+      // Autolesiones
+      'autolesión', 'autolesiones', 'cortarme', 'hacerme daño', 'lastimarme',
+      // Violencia y maltrato
+      'abuso', 'violencia', 'maltrato', 'agresión', 'golpe', 'golpear', 'pegar', 'pegó',
+      'maltrato infantil', 'abuso infantil', 'violencia doméstica', 'violencia intrafamiliar',
+      'golpear a un niño', 'golpear a su hijo', 'pegar a un niño', 'pegar a su hijo',
+      'le pegó a su hijo', 'le pego a su hijo', 'se le pegó', 'se le pego',
+      // Crisis
+      'crisis', 'emergencia', 'urgente', 'inmediato',
+      // Obligación de informar
+      'no quiero informar', 'no informar', 'ocultar', 'no reportar'
+    ];
+
+    // Detectar si el mensaje contiene alguna keyword crítica
+    const hasCriticalKeyword = criticalKeywords.some(keyword =>
+      inputLower.includes(keyword.toLowerCase())
+    );
+
+    // También verificar si hay risk flags activos en el paciente
+    const hasRiskFlags = metadata.risk_flags_active.length > 0 ||
+                        metadata.risk_level === 'high' ||
+                        metadata.risk_level === 'critical';
+
+    return hasCriticalKeyword || hasRiskFlags;
+  }
+
+  /**
+   * METADATA COLLECTION: Recolecta metadata operativa para decisiones de routing
+   * Esta metadata informa las decisiones del router, no es un delivery pasivo
+   */
+  private async collectOperationalMetadata(
+    sessionId: string,
+    userId: string,
+    currentState: ChatState,
+    patientReference?: string
+  ): Promise<OperationalMetadata> {
+    // 1. TEMPORAL METADATA
+    const now = new Date();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const sessionStartTime = currentState.metadata.createdAt;
+    const sessionDurationMs = now.getTime() - sessionStartTime.getTime();
+    const sessionDurationMinutes = Math.floor(sessionDurationMs / (1000 * 60));
+
+    const hour = now.getHours();
+    let timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+    if (hour >= 6 && hour < 12) timeOfDay = 'morning';
+    else if (hour >= 12 && hour < 18) timeOfDay = 'afternoon';
+    else if (hour >= 18 && hour < 22) timeOfDay = 'evening';
+    else timeOfDay = 'night';
+
+    // Detectar región basada en timezone
+    let region: 'LATAM' | 'EU' | 'US' | 'ASIA' | 'OTHER' = 'OTHER';
+    if (timezone.includes('America/')) region = 'LATAM';
+    else if (timezone.includes('Europe/')) region = 'EU';
+    else if (timezone.includes('US/') || timezone.includes('America/New_York') || timezone.includes('America/Los_Angeles')) region = 'US';
+    else if (timezone.includes('Asia/')) region = 'ASIA';
+
+    // 2. RISK METADATA (desde patient context si está disponible)
+    let riskFlags: string[] = [];
+    let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low';
+    let requiresImmediateAttention = false;
+    let lastRiskAssessment: Date | null = null;
+
+    if (patientReference) {
+      try {
+        const patientPersistence = getPatientPersistence();
+        const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
+
+        if (patientRecord) {
+          // Extraer risk flags desde tags del paciente
+          const riskTags = patientRecord.tags?.filter(tag =>
+            tag.toLowerCase().includes('riesgo') ||
+            tag.toLowerCase().includes('suicid') ||
+            tag.toLowerCase().includes('autolesión') ||
+            tag.toLowerCase().includes('crisis') ||
+            tag.toLowerCase().includes('urgente')
+          ) || [];
+
+          riskFlags = riskTags;
+
+          // Determinar nivel de riesgo basado en tags
+          if (riskTags.some(tag => tag.toLowerCase().includes('crítico') || tag.toLowerCase().includes('suicid'))) {
+            riskLevel = 'critical';
+            requiresImmediateAttention = true;
+          } else if (riskTags.some(tag => tag.toLowerCase().includes('alto') || tag.toLowerCase().includes('crisis'))) {
+            riskLevel = 'high';
+          } else if (riskTags.length > 0) {
+            riskLevel = 'medium';
+          }
+
+          // Last risk assessment desde updatedAt del paciente
+          lastRiskAssessment = patientRecord.updatedAt;
+        }
+      } catch (error) {
+        console.warn(`⚠️ [HopeAI] Error loading patient risk metadata for ${patientReference}:`, error);
+      }
+    }
+
+    // 3. AGENT HISTORY METADATA
+    // Extraer transiciones de agentes desde el historial de mensajes
+    const agentTransitions: AgentTransition[] = [];
+    const agentTurnCounts: Record<AgentType, number> = {
+      socratico: 0,
+      clinico: 0,
+      academico: 0,
+      orquestador: 0
+    };
+
+    let lastAgentSwitch: Date | null = null;
+    let consecutiveSwitches = 0;
+    let previousAgent: AgentType | null = null;
+    const fiveMinutesAgo = now.getTime() - (5 * 60 * 1000);
+
+    for (const msg of currentState.history) {
+      if (msg.role === 'model' && msg.agent) {
+        agentTurnCounts[msg.agent]++;
+
+        // Detectar transiciones
+        if (previousAgent && previousAgent !== msg.agent) {
+          const transition: AgentTransition = {
+            from: previousAgent,
+            to: msg.agent,
+            timestamp: msg.timestamp,
+            reason: 'detected_from_history'
+          };
+          agentTransitions.push(transition);
+          lastAgentSwitch = msg.timestamp;
+
+          // Contar switches consecutivos en últimos 5 minutos
+          if (msg.timestamp.getTime() >= fiveMinutesAgo) {
+            consecutiveSwitches++;
+          }
+        }
+
+        previousAgent = msg.agent;
+      }
+    }
+
+    // 4. PATIENT CONTEXT METADATA
+    let therapeuticPhase: 'assessment' | 'intervention' | 'maintenance' | 'closure' | null = null;
+    let sessionCount = 0;
+    let lastSessionDate: Date | null = null;
+    let treatmentModality: string | null = null;
+    let patientSummaryAvailable = false;
+
+    if (patientReference) {
+      try {
+        const patientPersistence = getPatientPersistence();
+        const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
+
+        if (patientRecord) {
+          patientSummaryAvailable = !!patientRecord.summaryCache;
+
+          // Extraer modalidad de tratamiento desde tags
+          const modalityTags = patientRecord.tags?.filter(tag =>
+            tag.toLowerCase().includes('tcc') ||
+            tag.toLowerCase().includes('cbt') ||
+            tag.toLowerCase().includes('psicodinámico') ||
+            tag.toLowerCase().includes('humanista') ||
+            tag.toLowerCase().includes('sistémica')
+          ) || [];
+
+          if (modalityTags.length > 0) {
+            treatmentModality = modalityTags[0];
+          }
+
+          // Estimar fase terapéutica basada en número de notas clínicas
+          try {
+            const fichas = await this.storage.getFichasClinicasByPaciente(patientReference);
+            sessionCount = fichas.length;
+
+            if (sessionCount === 0) {
+              therapeuticPhase = 'assessment';
+            } else if (sessionCount <= 3) {
+              therapeuticPhase = 'assessment';
+            } else if (sessionCount <= 12) {
+              therapeuticPhase = 'intervention';
+            } else if (sessionCount <= 24) {
+              therapeuticPhase = 'maintenance';
+            } else {
+              therapeuticPhase = 'closure';
+            }
+
+            // Last session date desde última ficha
+            if (fichas.length > 0) {
+              const sortedFichas = fichas.sort((a: any, b: any) =>
+                new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime()
+              );
+              lastSessionDate = new Date(sortedFichas[0].ultimaActualizacion);
+            }
+          } catch (error) {
+            console.warn(`⚠️ [HopeAI] Error loading patient session count for ${patientReference}:`, error);
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️ [HopeAI] Error loading patient context metadata for ${patientReference}:`, error);
+      }
+    }
+
+    // Construir metadata operativa completa
+    const operationalMetadata: OperationalMetadata = {
+      // Temporal
+      timestamp_utc: now.toISOString(),
+      timezone,
+      local_time: now.toLocaleString('es-ES', { timeZone: timezone }),
+      region,
+      session_duration_minutes: sessionDurationMinutes,
+      time_of_day: timeOfDay,
+
+      // Risk
+      risk_flags_active: riskFlags,
+      risk_level: riskLevel,
+      last_risk_assessment: lastRiskAssessment,
+      requires_immediate_attention: requiresImmediateAttention,
+
+      // Agent History
+      agent_transitions: agentTransitions,
+      agent_turn_counts: agentTurnCounts,
+      last_agent_switch: lastAgentSwitch,
+      consecutive_switches: consecutiveSwitches,
+
+      // Patient Context
+      patient_id: patientReference || null,
+      patient_summary_available: patientSummaryAvailable,
+      therapeutic_phase: therapeuticPhase,
+      session_count: sessionCount,
+      last_session_date: lastSessionDate,
+      treatment_modality: treatmentModality
+    };
+
+    console.log(`📊 [HopeAI] Operational metadata collected:`, {
+      session_duration_minutes: sessionDurationMinutes,
+      time_of_day: timeOfDay,
+      region,
+      risk_level: riskLevel,
+      risk_flags_count: riskFlags.length,
+      consecutive_switches: consecutiveSwitches,
+      therapeutic_phase: therapeuticPhase,
+      session_count: sessionCount
+    });
+
+    return operationalMetadata;
   }
 
   async sendMessage(
@@ -385,10 +682,61 @@ export class HopeAISystem {
         confidence: 0
       }
 
+      // 📊 METADATA COLLECTION: Recolectar metadata operativa ANTES de routing
+      // Esta metadata está disponible para todos los tipos de routing
+      console.log(`[HopeAI] Collecting operational metadata`)
+      const operationalMetadata = await this.collectOperationalMetadata(
+        sessionId,
+        currentState.userId,
+        currentState,
+        patientReference
+      );
+
+      // 🚨 EDGE CASE PRE-CHECK: Detectar contenido sensible ANTES de orchestration
+      // Si detectamos contenido sensible, forzamos routing estándar con override al clínico
+      const hasSensitiveContent = this.detectSensitiveContent(message, operationalMetadata);
+
+      // 🚨 RISK STATE PERSISTENCE: Verificar si la sesión ya está marcada como de riesgo
+      const isExistingRiskSession = currentState.riskState?.isRiskSession || false;
+      const consecutiveSafeTurns = currentState.riskState?.consecutiveSafeTurns || 0;
+
+      // Decidir si forzar routing estándar:
+      // 1. Si detectamos contenido sensible en este turno
+      // 2. Si la sesión ya está marcada como de riesgo Y no ha habido suficientes turnos seguros
+      const SAFE_TURNS_THRESHOLD = 3; // Número de turnos seguros para desescalar
+      const forceStandardRouting = hasSensitiveContent ||
+                                   (isExistingRiskSession && consecutiveSafeTurns < SAFE_TURNS_THRESHOLD);
+
+      if (hasSensitiveContent) {
+        console.log(`🚨 [HopeAI] SENSITIVE CONTENT DETECTED - Forcing standard routing with edge case detection`);
+
+        // Actualizar estado de riesgo en la sesión
+        currentState.riskState = {
+          isRiskSession: true,
+          riskLevel: operationalMetadata.risk_level,
+          detectedAt: currentState.riskState?.detectedAt || new Date(),
+          riskType: 'sensitive_content',
+          lastRiskCheck: new Date(),
+          consecutiveSafeTurns: 0 // Reset contador
+        };
+      } else if (isExistingRiskSession) {
+        console.log(`⚠️ [HopeAI] RISK SESSION ACTIVE - Maintaining standard routing (safe turns: ${consecutiveSafeTurns}/${SAFE_TURNS_THRESHOLD})`);
+
+        // Incrementar contador de turnos seguros
+        currentState.riskState!.consecutiveSafeTurns = consecutiveSafeTurns + 1;
+        currentState.riskState!.lastRiskCheck = new Date();
+
+        // Si alcanzamos el umbral, desescalar
+        if (currentState.riskState!.consecutiveSafeTurns >= SAFE_TURNS_THRESHOLD) {
+          console.log(`✅ [HopeAI] RISK SESSION DEESCALATED - Returning to normal orchestration`);
+          currentState.riskState!.isRiskSession = false;
+        }
+      }
+
       // Determinar si usar orquestación avanzada o routing directo
-      let routingResult: { enrichedContext: any; targetAgent: any }; 
+      let routingResult: { enrichedContext: any; targetAgent: any; routingDecision?: any };
       let orchestrationResult = null;
-      
+
       if (suggestedAgent) {
         console.log(`[HopeAI] Usando agente sugerido por orquestador: ${suggestedAgent}`)
         routingResult = {
@@ -398,9 +746,10 @@ export class HopeAISystem {
             confidence: 0.95,
             extractedEntities: [],
             isExplicitRequest: false
-          }
+          },
+          routingDecision: undefined // No hay decisión de routing explícita
         }
-      } else if (this.useAdvancedOrchestration && this.dynamicOrchestrator) {
+      } else if (this.useAdvancedOrchestration && this.dynamicOrchestrator && !forceStandardRouting) {
         // 🧠 USAR ORQUESTACIÓN AVANZADA CON APRENDIZAJE CROSS-SESSION
         console.log(`[HopeAI] 🧠 Using Advanced Orchestration with cross-session learning`)
         
@@ -470,14 +819,37 @@ export class HopeAISystem {
         }
       } else {
         // Usar el router inteligente para clasificar la intención y enrutar automáticamente
-        console.log(`[HopeAI] Using standard intelligent routing`)
+        console.log(`[HopeAI] Using standard intelligent routing with metadata-informed decisions`)
+
+        // Construir historial en formato Content[] para el router
+        const sessionContextArray = (currentState.history || []).map((msg: ChatMessage) => ({
+          role: msg.role,
+          parts: [{ text: msg.content }]
+        }))
+
+        // 🚨 RISK STATE: Enriquecer metadata con estado de riesgo de la sesión
+        const enrichedMetadata = {
+          ...operationalMetadata,
+          session_risk_state: currentState.riskState
+        };
+
+        // 🔍 DEBUG: Verificar que el estado de riesgo se está pasando
+        if (enrichedMetadata.session_risk_state?.isRiskSession) {
+          console.log(`🔍 [HopeAI] Passing risk state to router:`, {
+            isRiskSession: enrichedMetadata.session_risk_state.isRiskSession,
+            consecutiveSafeTurns: enrichedMetadata.session_risk_state.consecutiveSafeTurns,
+            riskType: enrichedMetadata.session_risk_state.riskType
+          });
+        }
+
         routingResult = await this.intentRouter.routeUserInput(
           message,
-          enrichedSessionContext,
+          sessionContextArray,
           currentState.activeAgent,
-          enrichedSessionContext
+          enrichedSessionContext,
+          enrichedMetadata
         )
-        
+
         // 🎯 CALLBACK: Notificar al frontend del agente seleccionado INMEDIATAMENTE
         if (onAgentSelected && routingResult.enrichedContext) {
           onAgentSelected({
@@ -607,6 +979,12 @@ export class HopeAISystem {
 
       currentState.history.push(userMessage)
 
+      console.log('📝 [HopeAI] Mensaje del usuario agregado al historial:', {
+        historyLength: currentState.history.length,
+        userMessageId: userMessage.id,
+        userMessageContent: userMessage.content.substring(0, 50)
+      })
+
       // Si se detectó un cambio de agente (routing automático), actualizar la sesión
       if (routingResult.targetAgent !== currentState.activeAgent) {
         console.log(`[HopeAI] Intelligent routing: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
@@ -644,12 +1022,16 @@ export class HopeAISystem {
       // La búsqueda académica ahora es manejada por el agente como herramienta (tool)
       // Session files are handled through conversation history, not as attachments
       // 🏥 PATIENT CONTEXT: Include patient context from sessionMeta
+      // 📊 METADATA: Include operational metadata and routing decision
       const enrichedAgentContext = {
         ...routingResult.enrichedContext,
         // Ensure document context is available to the agent at generation time
         sessionFiles: resolvedSessionFiles || [],
         patient_reference: patientReference,
-        patient_summary: patientSummary
+        patient_summary: patientSummary,
+        // NUEVO: Metadata operativa y decisión de routing
+        operationalMetadata: operationalMetadata,
+        routingDecision: routingResult.routingDecision
       }
 
       console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
@@ -665,6 +1047,11 @@ export class HopeAISystem {
       // Save state with user message immediately (for both streaming and non-streaming)
       currentState.metadata.lastUpdated = new Date()
       await this.saveChatSessionBoth(currentState)
+
+      console.log('💾 [HopeAI] Estado guardado en DB con mensaje del usuario:', {
+        sessionId: sessionId,
+        historyLength: currentState.history.length
+      })
 
       // Handle response based on streaming or not
       let responseContent = ""
@@ -844,10 +1231,21 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
   ): Promise<void> {
     if (!this._initialized) await this.initialize()
 
+    console.log('🔍 [addStreamingResponseToHistory] Cargando estado desde DB para sessionId:', sessionId)
+
     const currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
       throw new Error(`Session not found: ${sessionId}`)
     }
+
+    console.log('📊 [addStreamingResponseToHistory] Estado cargado desde DB:', {
+      historyLength: currentState.history.length,
+      lastMessages: currentState.history.slice(-3).map((m: ChatMessage) => ({
+        role: m.role,
+        content: m.content.substring(0, 50),
+        id: m.id
+      }))
+    })
 
     // Add AI response to history
     const aiMessage: ChatMessage = {
@@ -941,41 +1339,33 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
   }
 
   /**
-   * ARQUITECTURA OPTIMIZADA: Gestión de archivos separada del historial
-   * Implementa las mejores prácticas del SDK de GenAI para manejo eficiente de contexto
-   * CORREGIDO: Solo devuelve archivos que NO han sido enviados en mensajes anteriores
+   * 🔧 FIX: Obtener TODOS los archivos procesados de una sesión
+   *
+   * CAMBIO CRÍTICO: Ya NO filtramos por "archivos no enviados" porque:
+   * 1. Cliente y servidor tienen DBs separadas (IndexedDB vs SQLite)
+   * 2. El historial del cliente no se sincroniza con el servidor
+   * 3. El clinical-agent-router YA tiene lógica para manejar archivos enviados previamente
+   *
+   * El router usa filesFullySentMap para detectar primer turno y enviar archivo completo,
+   * luego solo envía referencias ligeras en turnos subsecuentes.
    */
   async getPendingFilesForSession(sessionId: string): Promise<ClinicalFile[]> {
     if (!this._initialized) await this.initialize()
-    
+
     try {
       console.log(`📋 [OPTIMIZED] Getting pending files for session: ${sessionId}`)
-      
-      // Obtener archivos clínicos de la sesión desde el almacenamiento
+
+      // Obtener TODOS los archivos clínicos procesados de la sesión
       const clinicalFiles = await this.storage.getClinicalFiles(sessionId)
-      
-      // Obtener el historial de la sesión para verificar qué archivos ya fueron enviados
-      const sessionState = await this.storage.loadChatSession(sessionId)
-      const sentFileIds = new Set<string>()
-      
-      // Recopilar todos los IDs de archivos que ya fueron enviados en mensajes
-      if (sessionState?.history) {
-        sessionState.history.forEach((message: any) => {
-          if (message.fileReferences && message.fileReferences.length > 0) {
-            message.fileReferences.forEach((fileId: string) => sentFileIds.add(fileId))
-          }
-        })
-      }
-      
-      // Filtrar archivos que pertenecen a esta sesión, están procesados Y NO han sido enviados
-      const pendingFiles = clinicalFiles.filter((file: ClinicalFile) => 
-        file.sessionId === sessionId && 
-        file.status === 'processed' &&
-        !sentFileIds.has(file.id) // Solo archivos que NO han sido enviados
+
+      // Filtrar solo archivos que están procesados (listos para usar)
+      const processedFiles = clinicalFiles.filter((file: ClinicalFile) =>
+        file.sessionId === sessionId &&
+        file.status === 'processed'
       )
-      
-      console.log(`📋 [OPTIMIZED] Found ${pendingFiles.length} truly pending files for session ${sessionId} (${clinicalFiles.length} total, ${sentFileIds.size} already sent)`)
-      return pendingFiles
+
+      console.log(`📋 [OPTIMIZED] Found ${processedFiles.length} truly pending files for session ${sessionId} (${clinicalFiles.length} total, 0 already sent)`)
+      return processedFiles
     } catch (error) {
       console.error(`❌ Error getting pending files for session ${sessionId}:`, error)
       return []

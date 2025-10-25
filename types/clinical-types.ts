@@ -98,6 +98,15 @@ export interface ChatState {
     sessionType: string
     confidentialityLevel: "high" | "medium" | "low"
   }
+  // 🚨 RISK STATE: Mantiene el estado de riesgo durante toda la sesión
+  riskState?: {
+    isRiskSession: boolean;           // Si la sesión tiene contenido de riesgo
+    riskLevel: 'low' | 'medium' | 'high' | 'critical';
+    detectedAt: Date;                 // Cuándo se detectó el riesgo
+    riskType?: 'risk' | 'stress' | 'sensitive_content';
+    lastRiskCheck: Date;              // Última vez que se verificó el riesgo
+    consecutiveSafeTurns: number;     // Turnos consecutivos sin contenido de riesgo
+  }
 }
 
 export interface FichaClinicaState {

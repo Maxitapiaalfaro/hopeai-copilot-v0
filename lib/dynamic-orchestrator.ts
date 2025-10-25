@@ -168,50 +168,12 @@ export class DynamicOrchestrator {
         sessionContext.currentAgent
       );
       
-      // 🎯 FUNCIONALIDAD MEJORADA: Generar bullets progresivos DESPUÉS de la orquestación
-      // para usar el razonamiento real del agente seleccionado
+      // ⚠️ BULLETS INHABILITADOS: Añaden ~500-1000ms de latencia al streaming
+      // Los bullets hacen un LLM call separado que retrasa el inicio del texto principal
+      // TODO: Reimplementar bullets DESPUÉS del streaming, no antes
       if (onBulletUpdate) {
-        this.log('info', `Generando bullets progresivos coherentes para agente ${orchestrationResult.selectedAgent}`);
-        // Determinar conversación a usar para bullets: preferir historia completa externa (usuario + modelo)
-        const bulletConversation: Content[] = (externalConversationHistory && externalConversationHistory.length > 0)
-          ? externalConversationHistory.slice(-6) // tomar últimos 6 turnos para coherencia temporal
-          : sessionContext.conversationHistory.slice(-6);
-
-        // 🚀 OPTIMIZACIÓN: Reutilizar entidades ya extraídas por orchestrateWithTools
-        // Evita llamada API duplicada (~500ms ahorrados)
-        const extractedEntities: any[] = []; // Temporal - las entidades ya se usan internamente en orchestrateWithTools
-
-        // Crear contexto enriquecido para generación de bullets
-        const bulletContext: BulletGenerationContext = {
-          userInput,
-          sessionContext: bulletConversation,
-          selectedAgent: orchestrationResult.selectedAgent,
-          extractedEntities, // ✅ Reutilizar entidades (ya extraídas, ~500ms ahorrados)
-          clinicalContext: {
-            patientId: patientId,
-            patientSummary: patientSummary,
-            sessionType: sessionType || 'general'
-          },
-          // NUEVO: Incluir el razonamiento real del orquestador
-          orchestrationReasoning: orchestrationResult.reasoning,
-          agentConfidence: orchestrationResult.confidence,
-          contextualTools: orchestrationResult.contextualTools
-        };
-        
-        // Generar bullets progresivos que reflejen el razonamiento real
-        const bulletGenerator = this.generateReasoningBullets(bulletContext, onBulletUpdate);
-        
-        // Procesar bullets de forma asíncrona
-        (async () => {
-          try {
-            for await (const bullet of bulletGenerator) {
-              // Los bullets ahora reflejan el razonamiento real del agente
-              this.log('debug', `Bullet coherente generado: ${bullet.content}`);
-            }
-          } catch (error) {
-            this.log('warn', `Error generando bullets coherentes: ${error}`);
-          }
-        })();
+        this.log('info', `⚠️ Bullets inhabilitados para optimizar latencia de streaming`);
+        // No generar bullets - priorizar velocidad de respuesta
       }
       
       // 4. Optimizar selección de herramientas

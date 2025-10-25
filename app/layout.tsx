@@ -37,7 +37,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <head />
+      <head>
+        <link rel="preconnect" href="/api/send-message" />
+      </head>
       <body className={`${ibmPlexSans.variable} ${ibmPlexSans.variable}`}>
         <DisplayPreferencesProvider>
           <ThemeProvider

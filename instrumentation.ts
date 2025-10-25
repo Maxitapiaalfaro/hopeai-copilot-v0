@@ -84,6 +84,12 @@ if (isProduction && !FORCE_ENABLE_LOGS) {
       return true;
     }
 
+    // Permitir logs de pre-warming e instrumentación
+    if (message.includes('[Prewarm]') ||
+        message.includes('[Instrumentation]')) {
+      return true;
+    }
+
     return false;
   };
 
@@ -119,6 +125,11 @@ import * as Sentry from '@sentry/nextjs';
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     await import('./sentry.server.config');
+
+    // 🔥 PREWARM: Inicializar HopeAI system antes del primer request
+    console.log('🚀 [Instrumentation] Starting HopeAI pre-warming...')
+    await import('./lib/server-prewarm');
+    console.log('✅ [Instrumentation] HopeAI pre-warming triggered')
   }
 
   if (process.env.NEXT_RUNTIME === 'edge') {
