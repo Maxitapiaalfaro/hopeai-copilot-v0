@@ -306,7 +306,7 @@ export function PatientConversationHistory({
                 <p className="font-sans text-xs sm:text-sm">
                   {searchQuery 
                     ? 'Intenta con otros términos de búsqueda o ajusta los filtros'
-                    : 'Inicia una nueva conversación con este paciente'}
+            : 'Inicia una nueva conversación con este caso clínico'}
                 </p>
               </div>
             </CardContent>

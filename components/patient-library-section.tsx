@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -145,6 +145,8 @@ interface PatientLibrarySectionProps {
   onDialogOpenChange?: (isOpen: boolean) => void
   clearSelectionTrigger?: number // Trigger para limpiar selección desde fuera
   onOpenFicha?: (patient: PatientRecord) => void // Callback específico para abrir ficha (usado en mobile para no cerrar el nav)
+  createDialogTrigger?: number
+  onConsumeCreateTrigger?: () => void
 }
 
 export function PatientLibrarySection({
@@ -155,7 +157,9 @@ export function PatientLibrarySection({
   onConversationSelect,
   onDialogOpenChange,
   clearSelectionTrigger,
-  onOpenFicha: onOpenFichaFromParent
+  onOpenFicha: onOpenFichaFromParent,
+  createDialogTrigger,
+  onConsumeCreateTrigger
 }: PatientLibrarySectionProps) {
   const {
     patients,
@@ -188,6 +192,10 @@ export function PatientLibrarySection({
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
   const [historyPatient, setHistoryPatient] = useState<PatientRecord | null>(null)
   const [patientInsights, setPatientInsights] = useState<Map<string, number>>(new Map())
+  // Autosave support for Create dialog
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
+  const saveTimeoutRef = useRef<number | undefined>(undefined)
+  const CREATE_DRAFT_KEY = 'aurora_patient_create_draft_v1'
 
   // Notificar al componente padre cuando se abre/cierra un diálogo o dropdown
   useEffect(() => {
@@ -203,6 +211,30 @@ export function PatientLibrarySection({
     }
   }, [clearSelectionTrigger, selectPatient])
 
+  // Abrir diálogo de creación programáticamente desde el padre
+  useEffect(() => {
+    // Si recibimos un trigger de creación, abrir el diálogo de "Agregar Paciente"
+    if (typeof createDialogTrigger === 'number' && createDialogTrigger > 0) {
+      setIsCreateDialogOpen(true)
+      // Consumir el trigger para evitar reaperturas en futuros montajes
+      onConsumeCreateTrigger?.()
+    }
+  }, [createDialogTrigger, onConsumeCreateTrigger])
+
+  // Limpiar estado de modales al cerrar o cambiar de pestaña/panel
+  useEffect(() => {
+    if (!isOpen) {
+      // Cerrar todos los diálogos y limpiar estados relacionados
+      setIsCreateDialogOpen(false)
+      setIsEditDialogOpen(false)
+      setIsFichaOpen(false)
+      setShowConversationHistory(false)
+      setOpenDropdownId(null)
+      setEditingPatient(null)
+      setHistoryPatient(null)
+    }
+  }, [isOpen])
+
   // CRÍTICO: Limpiar formulario cuando se abre el diálogo de CREACIÓN
   // Esto previene que datos de edición previa contaminen un nuevo registro
   useEffect(() => {
@@ -210,6 +242,20 @@ export function PatientLibrarySection({
       resetForm()
     }
   }, [isCreateDialogOpen, editingPatient])
+
+  // Cargar borrador autosalvado al abrir el diálogo de creación
+  useEffect(() => {
+    if (isCreateDialogOpen) {
+      try {
+        const draftStr = localStorage.getItem(CREATE_DRAFT_KEY)
+        if (draftStr) {
+          const draft = JSON.parse(draftStr)
+          setFormData(prev => ({ ...prev, ...draft }))
+          setDraftSavedAt(Date.now())
+        }
+      } catch {}
+    }
+  }, [isCreateDialogOpen])
 
   // CRÍTICO: Limpiar estado cuando se CIERRA el diálogo de edición
   // Esto asegura que no queden datos residuales del paciente editado
@@ -275,6 +321,23 @@ export function PatientLibrarySection({
     confidentialityLevel: "medium" as "high" | "medium" | "low"
   })
 
+  // Autosave el borrador del formulario de creación
+  useEffect(() => {
+    if (!isCreateDialogOpen) return
+    if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current)
+    saveTimeoutRef.current = window.setTimeout(() => {
+      try {
+        localStorage.setItem(CREATE_DRAFT_KEY, JSON.stringify(formData))
+        setDraftSavedAt(Date.now())
+      } catch {}
+    }, 300)
+    return () => {
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [formData, isCreateDialogOpen])
+
   const resetForm = () => {
     setFormData({
       displayName: "",
@@ -307,6 +370,7 @@ export function PatientLibrarySection({
       await createPatient(patientData)
       setIsCreateDialogOpen(false)
       resetForm()
+      try { localStorage.removeItem(CREATE_DRAFT_KEY) } catch {}
     } catch (err) {
       console.error("Failed to create patient:", err)
     }
@@ -466,16 +530,16 @@ export function PatientLibrarySection({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 flex-shrink-0"
-                title="Agregar paciente"
+                title="Agregar caso clínico"
               >
                 <Plus className="h-4 w-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise">
+            <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise font-sans">
               <DialogHeader className="space-y-3">
-                <DialogTitle className="font-sans text-2xl">Agregar Paciente</DialogTitle>
+                <DialogTitle className="font-sans text-2xl">Agregar Caso Clínico</DialogTitle>
                 <DialogDescription className="font-sans text-muted-foreground">
-                  Crea un nuevo registro de paciente para conversaciones contextualizadas.
+                  Crea un nuevo registro de caso clínico para conversaciones contextualizadas.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-5 py-6 font-sans">
@@ -487,9 +551,16 @@ export function PatientLibrarySection({
                     id="displayName"
                     value={formData.displayName}
                     onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
-                    placeholder="ej. Paciente A, Caso 001"
-                    className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
+                    placeholder="ej. Caso Clínico A, Caso 001"
+                    aria-invalid={!formData.displayName.trim()}
+                    className={cn(
+                      "h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all",
+                      !formData.displayName.trim() ? "border-destructive/50 focus-visible:border-destructive/50 focus-visible:ring-destructive/30" : ""
+                    )}
                   />
+                  {!formData.displayName.trim() && (
+                    <p className="mt-1 text-xs text-destructive">Este campo es obligatorio.</p>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -582,11 +653,15 @@ export function PatientLibrarySection({
                 </div>
               </div>
               <DialogFooter className="flex-col sm:flex-row gap-3 pt-4 border-t border-border/40">
+                <div className="mr-auto text-xs text-muted-foreground">
+                  {draftSavedAt ? 'Guardado automáticamente' : 'Se guarda automáticamente'}
+                </div>
                 <Button
                   variant="outline"
                   onClick={() => {
                     setIsCreateDialogOpen(false)
                     resetForm()
+                    try { localStorage.removeItem(CREATE_DRAFT_KEY) } catch {}
                   }}
                   className="w-full sm:w-auto h-11 rounded-xl border-border/60 hover:bg-ash transition-all"
                 >
@@ -597,7 +672,7 @@ export function PatientLibrarySection({
                   disabled={!formData.displayName.trim()}
                   className="w-full sm:w-auto h-11 rounded-xl bg-foreground text-background hover:bg-foreground/90 shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Crear Paciente
+                  Crear Caso Clínico
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -608,7 +683,7 @@ export function PatientLibrarySection({
             variant="secondary"
             className="text-xs font-sans ml-auto"
           >
-            {getPatientCount()} {getPatientCount() === 1 ? 'paciente' : 'pacientes'}
+            {getPatientCount()} {getPatientCount() === 1 ? 'caso clínico' : 'casos clínicos'}
           </Badge>
         </div>
 
@@ -616,7 +691,7 @@ export function PatientLibrarySection({
         <div className="relative mt-3">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar pacientes..."
+            placeholder="Buscar casos clínicos..."
             value={searchQuery}
             onChange={(e) => searchPatients(e.target.value)}
             className="pl-9 h-9 text-sm"
@@ -632,7 +707,7 @@ export function PatientLibrarySection({
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
                 <RefreshCw className="h-5 w-5 animate-spin text-clarity-blue-600" />
-                <span className="font-sans text-sm text-muted-foreground font-medium">Cargando pacientes...</span>
+                <span className="font-sans text-sm text-muted-foreground font-medium">Cargando casos clínicos...</span>
               </div>
             </div>
           ) : filteredPatients.length === 0 ? (
@@ -640,11 +715,11 @@ export function PatientLibrarySection({
               <div className="bg-ash rounded-xl p-6 border border-ash">
                 <User className="h-10 w-10 mx-auto mb-3 opacity-40" />
                 <p className="font-sans text-sm font-medium">
-                  {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
+                  {searchQuery ? 'No se encontraron casos clínicos' : 'No hay casos clínicos registrados'}
                 </p>
                 {!searchQuery && (
                   <p className="font-sans text-xs mt-1 opacity-70">
-                    Crea tu primer paciente
+                    Crea tu primer caso clínico
                   </p>
                 )}
               </div>
@@ -828,7 +903,7 @@ export function PatientLibrarySection({
                         className="gap-2 cursor-pointer"
                       >
                         <Edit className="h-4 w-4" />
-                        <span>Editar paciente</span>
+                        <span>Editar caso clínico</span>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <AlertDialog>
@@ -838,12 +913,12 @@ export function PatientLibrarySection({
                             className="gap-2 cursor-pointer text-destructive focus:text-white focus:bg-destructive/90"
                           >
                             <Trash2 className="h-4 w-4" />
-                            <span>Eliminar paciente</span>
+                            <span>Eliminar caso clínico</span>
                           </DropdownMenuItem>
                         </AlertDialogTrigger>
                         <AlertDialogContent onClick={(e) => e.stopPropagation()}>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>¿Eliminar paciente?</AlertDialogTitle>
+                            <AlertDialogTitle>¿Eliminar caso clínico?</AlertDialogTitle>
                             <AlertDialogDescription>
                               Esta acción no se puede deshacer. El registro de "{patient.displayName}" 
                               será eliminado permanentemente.
@@ -875,11 +950,11 @@ export function PatientLibrarySection({
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise">
+        <DialogContent className="w-[95vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-gradient-to-b from-secondary/20 to-background paper-noise font-sans">
           <DialogHeader className="space-y-3">
-            <DialogTitle className="font-sans text-2xl">Editar Paciente</DialogTitle>
+            <DialogTitle className="font-sans text-2xl">Editar Caso Clínico</DialogTitle>
             <DialogDescription className="font-sans text-muted-foreground">
-              Modifica la información del paciente.
+              Modifica la información del caso clínico.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-5 py-6 font-sans">
@@ -891,7 +966,7 @@ export function PatientLibrarySection({
                 id="edit-displayName"
                 value={formData.displayName}
                 onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
-                placeholder="ej. Paciente A, Caso 001"
+                placeholder="ej. Caso Clínico A, Caso 001"
                 className="h-11 rounded-xl border-border/60 focus-visible:ring-clarity-blue-200 focus-visible:border-clarity-blue-400 transition-all"
               />
             </div>

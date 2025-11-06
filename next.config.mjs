@@ -74,9 +74,7 @@ const nextConfig = {
   },
 
   // 🔒 SEGURIDAD: Habilitar instrumentation hook
-  experimental: {
-    instrumentationHook: true,
-  },
+  
 
   // 🔒 SEGURIDAD: Configuración de producción
   productionBrowserSourceMaps: false, // No exponer source maps en producción

@@ -160,7 +160,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
                     onClearPatientContext()
                   }}
                   className="group relative flex items-center justify-center w-5 h-5 md:w-6 md:h-6 rounded-full bg-secondary hover:bg-destructive/10 dark:hover:bg-destructive/20 border border-border hover:border-destructive/20 dark:hover:border-destructive/40 transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
-                  title="Remover contexto del paciente"
+  title="Remover contexto del caso clínico"
                 >
                   <XIcon className="h-2.5 w-2.5 md:h-3 md:w-3 text-muted-foreground group-hover:text-destructive transition-colors duration-200" />
                   

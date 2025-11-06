@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PaperPlaneRightIcon, PaperclipIcon, MicrophoneIcon, MicrophoneSlashIcon, UserIcon, LightningIcon, CaretDownIcon, BrainIcon, MagnifyingGlassIcon, StethoscopeIcon, BookOpenIcon, ArrowsOutIcon, ArrowsInIcon, FileTextIcon, CopyIcon, CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CaretRightIcon, FoldersIcon } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
-import type { AgentType, ChatState, ClinicalFile, ReasoningBullet } from "@/types/clinical-types"
+import type { AgentType, ChatState, ClinicalFile, ReasoningBullet, PatientRecord } from "@/types/clinical-types"
 import { VoiceInputButton, VoiceStatus } from "@/components/voice-input-button"
 import { useSpeechToText } from "@/hooks/use-speech-to-text"
 import { GeminiVoiceButton } from "@/components/gemini-voice-button"
@@ -23,6 +23,10 @@ import { FileUploadButton } from "@/components/file-upload-button"
 import { MessageFileAttachments } from "@/components/message-file-attachments"
 import { getFilesByIds } from "@/lib/hopeai-system"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { usePatientLibrary } from "@/hooks/use-patient-library"
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
 import { ReasoningBullets } from "@/components/reasoning-bullets"
@@ -60,11 +64,15 @@ interface ChatInterfaceProps {
   onDiscardFicha?: () => void
   onOpenFichaClinica?: (tab?: "ficha" | "insights") => void
   onOpenPatientLibrary?: () => void
+  onOpenAddPatient?: () => void
+  onStartConversationWithPatient?: (patient: PatientRecord) => void
   hasExistingFicha?: boolean
   fichaLoading?: boolean
   generateLoading?: boolean
   canRevertFicha?: boolean
   reasoningBullets?: ReasoningBulletsState
+  // Nombre del caso clínico activo para personalizar el placeholder del input
+  patientDisplayName?: string
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
@@ -105,7 +113,7 @@ function FichaClinicaDisabledButton({
           e.preventDefault()
           setShowTooltip(!showTooltip)
         }}
-        title={!isTouchDevice ? "Crea o selecciona un paciente para acceder a la Ficha Clínica" : undefined}
+        title={!isTouchDevice ? "Crea o selecciona un caso clínico para acceder a la Ficha Clínica" : undefined}
       >
         <span className="text-sm font-medium">Ficha Clínica</span>
       </Button>
@@ -177,7 +185,165 @@ function FichaClinicaDisabledButton({
   )
 }
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets }: ChatInterfaceProps) {
+// Subcomponente: Acciones rápidas de paciente con menú y modal de selección
+function PatientQuickActions({
+  onOpenAddPatient,
+  onStartConversationWithPatient,
+  disabled,
+  buttonClassName,
+}: {
+  onOpenAddPatient?: () => void
+  onStartConversationWithPatient?: (patient: PatientRecord) => void
+  disabled?: boolean
+  buttonClassName?: string
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [selectOpen, setSelectOpen] = useState(false)
+  const {
+    patients,
+    filteredPatients,
+    isLoading,
+    error,
+    searchQuery,
+    searchPatients,
+    loadPatients,
+    selectPatient,
+  } = usePatientLibrary()
+
+  useEffect(() => {
+    if (selectOpen && patients.length === 0 && !isLoading) {
+      // Cargar pacientes al abrir el modal si aún no están
+      loadPatients().catch(() => {})
+    }
+  }, [selectOpen, patients.length, isLoading, loadPatients])
+
+  return (
+    <>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={buttonClassName}
+            title="Agregar caso clínico"
+            disabled={disabled}
+          >
+            <UserIcon className="h-4 w-4" weight="bold" />
+            <span className="hidden md:inline">Agregar caso clínico</span>
+            <CaretDownIcon className="ml-1 h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64 font-sans">
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setMenuOpen(false)
+              onOpenAddPatient?.()
+            }}
+          >
+            Crear nuevo caso clínico
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setMenuOpen(false)
+              setSelectOpen(true)
+            }}
+          >
+            Seleccionar caso clínico existente…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Modal de selección de caso clínico existente */}
+      <Dialog
+        open={selectOpen}
+        onOpenChange={(open) => {
+          setSelectOpen(open)
+          if (!open) {
+            // Limpiar estado de búsqueda y selección al cerrar el modal
+            try {
+              searchPatients("")
+              selectPatient(null)
+            } catch {}
+          }
+        }}
+      >
+        <DialogContent className="w-[95vw] max-w-[560px] max-h-[85vh] overflow-hidden font-sans">
+          <DialogHeader className="font-sans">
+            <DialogTitle className="font-sans text-2xl">Seleccionar caso clínico</DialogTitle>
+            <DialogDescription className="font-sans">
+              Busca y selecciona un caso clínico para iniciar una conversación contextualizada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-2">
+            <Input
+              value={searchQuery}
+              onChange={(e) => searchPatients(e.target.value)}
+              placeholder="Buscar por nombre, etiqueta o nota clínica"
+            />
+
+            <div className="text-sm text-muted-foreground">
+              {isLoading ? "Cargando casos clínicos…" : `${filteredPatients.length} resultados`}
+            </div>
+
+            <div className="rounded-xl border bg-card">
+              <ScrollArea className="h-[42vh]">
+                <div className="p-2">
+                  {error && (
+                    <div className="text-destructive text-sm px-2 py-1">{error}</div>
+                  )}
+
+                  {!isLoading && filteredPatients.length === 0 && !error && (
+                    <div className="px-2 py-8 text-center text-muted-foreground text-sm font-sans">
+                      No hay casos clínicos en la lista.
+                    </div>
+                  )}
+
+                  {filteredPatients.map((p) => (
+                    <button
+                      key={p.id}
+                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-muted/60 focus:bg-muted/60 transition-colors"
+                      onClick={() => {
+                        selectPatient(p)
+                        onStartConversationWithPatient?.(p)
+                        toast({
+                          title: "Caso clínico seleccionado",
+                          description: `${p.displayName}`,
+                        })
+                        setSelectOpen(false)
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium">{p.displayName}</div>
+                        {p.tags && p.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {p.tags.slice(0, 3).map((t) => (
+                              <Badge key={t} variant="secondary" className="text-xs">
+                                {t}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {p.notes && (
+                        <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{p.notes}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, onOpenAddPatient, onStartConversationWithPatient, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets, patientDisplayName }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -349,17 +515,17 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   // Minimal, unobtrusive rotating capability hint for new sessions
   const capabilityHints = [
     // Perspectiva adicional sobre casos difíciles - con contexto suficiente
-    'Paciente de 28 años con depresión no responde a TCC tras 8 sesiones. ¿Qué hipótesis alternativas considerar?',
+    'Caso clínico de 28 años con depresión no responde a TCC tras 8 sesiones. ¿Qué hipótesis alternativas considerar?',
     'Adolescente de 16 años evita hablar de conflictos familiares y desvía con humor. ¿Cómo abordar esta resistencia?',
-    'Paciente con ansiedad mejora en sesión pero no aplica técnicas en casa. ¿Qué podría estar bloqueando la generalización?',
+    'Caso clínico con ansiedad mejora en sesión pero no aplica técnicas en casa. ¿Qué podría estar bloqueando la generalización?',
     // Cuestionar suposiciones y aprender - con contexto clínico
-    'Paciente llega tarde, cancela sesiones y me critica sutilmente. ¿Es transferencia negativa o algo más?',
+    'Caso clínico llega tarde, cancela sesiones y me critica sutilmente. ¿Es transferencia negativa o algo más?',
     'Mujer de 35 años con relaciones inestables y miedo al abandono. ¿Apego ansioso o patrón borderline?',
     '¿Cuál es la diferencia práctica entre reestructuración cognitiva y defusión cognitiva en ACT?',
     // Estructurar sesiones y planificación - casos concretos
     'Primera sesión con adolescente de 15 años derivado por colegio, no quiere estar aquí. ¿Cómo estructurarla?',
-    'Paciente con trauma de abuso infantil, lista para procesamiento. ¿Cómo planificar protocolo EMDR en 6 sesiones?',
-    'Paciente intelectualiza todo y evita emociones. ¿Qué intervenciones experienciales usar en terapia cognitiva?'
+    'Caso clínico con trauma de abuso infantil, listo para procesamiento. ¿Cómo planificar protocolo EMDR en 6 sesiones?',
+    'Caso clínico intelectualiza todo y evita emociones. ¿Qué intervenciones experienciales usar en terapia cognitiva?'
   ]
 
   // Resetear animación cuando se ocultan las sugerencias
@@ -921,7 +1087,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {(!currentSession?.history || currentSession.history.length === 0) && (
             <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-2">
               <h1 className="font-sans text-4xl md:text-5xl tracking-tight text-foreground mb-4">
-                ¿En qué piensas?
+                {patientDisplayName ? `Conversemos sobre ${patientDisplayName}` : '¿En qué piensas?'}
               </h1>
               {!isLoadingUIPreferences && shouldShowDynamicSuggestions && (
                 <div className="mt-8 md:mt-12 w-full max-w-3xl mx-auto px-4">
@@ -1770,6 +1936,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     pendingFiles={pendingFiles}
                     onRemoveFile={onRemoveFile}
                     buttonClassName={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
+                  />
+
+                  {/* Quick action: Agregar paciente con menú y selección */}
+                  <PatientQuickActions
+                    onOpenAddPatient={onOpenAddPatient ?? onOpenPatientLibrary}
+                    onStartConversationWithPatient={onStartConversationWithPatient}
+                    disabled={isProcessing || isStreaming || isUploading || isTranscribing}
+                    buttonClassName={cn("gap-1.5", config.ghostButton.hoverBg, config.ghostButton.text)}
                   />
 
                   {(onOpenFichaClinica || onGenerateFichaClinica) ? (

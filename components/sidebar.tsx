@@ -54,6 +54,8 @@ interface SidebarProps {
   clearPatientSelectionTrigger?: number
   onNewChat?: () => void
   hasOpenDialog?: boolean
+  createDialogTrigger?: number
+  onConsumeCreateTrigger?: () => void
 }
 
 // Mapeo de agentes para compatibilidad con el sistema anterior
@@ -71,7 +73,7 @@ const agentLabels = {
   'orquestador': 'Orquestador',
 }
 
-export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTabChange, userId, createSession: createSessionProp, onConversationSelect, onPatientConversationStart, onClearPatientContext, clearPatientSelectionTrigger, onNewChat, hasOpenDialog }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTabChange, userId, createSession: createSessionProp, onConversationSelect, onPatientConversationStart, onClearPatientContext, clearPatientSelectionTrigger, onNewChat, hasOpenDialog, createDialogTrigger, onConsumeCreateTrigger }: SidebarProps) {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
   const [hasOpenPatientDialog, setHasOpenPatientDialog] = useState(false)
   
@@ -519,6 +521,8 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
               }}
               onClearPatientContext={onClearPatientContext}
               clearSelectionTrigger={clearPatientSelectionTrigger}
+              createDialogTrigger={createDialogTrigger}
+              onConsumeCreateTrigger={onConsumeCreateTrigger}
               onPatientSelect={(patient) => {
                 // Handle patient selection if needed
               }}

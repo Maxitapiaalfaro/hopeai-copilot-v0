@@ -51,6 +51,8 @@ interface MobileNavProps {
   clearPatientSelectionTrigger?: number
   onNewChat?: () => void
   initialTab?: 'conversations' | 'patients'
+  createDialogTrigger?: number
+  onConsumeCreateTrigger?: () => void
 }
 
 // Mapeo de agentes para etiquetas legibles
@@ -60,7 +62,7 @@ const agentLabels: Record<string, string> = {
   investigador: 'Investigador'
 }
 
-export function MobileNav({ userId, createSession, onConversationSelect, isOpen: externalIsOpen, onOpenChange: externalOnOpenChange, onPatientConversationStart, onClearPatientContext, clearPatientSelectionTrigger, onNewChat, initialTab = 'conversations' }: MobileNavProps) {
+export function MobileNav({ userId, createSession, onConversationSelect, isOpen: externalIsOpen, onOpenChange: externalOnOpenChange, onPatientConversationStart, onClearPatientContext, clearPatientSelectionTrigger, onNewChat, initialTab = 'conversations', createDialogTrigger, onConsumeCreateTrigger }: MobileNavProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [activeTab, setActiveTab] = useState<'conversations' | 'patients'>(initialTab)
@@ -363,26 +365,28 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                   </div>
                 ) : (
                   <div className="h-full overflow-auto">
-                    <PatientLibrarySection
-                      isOpen={true}
-                      onPatientSelect={() => {
-                        // Patient selected but no automatic conversation start
-                        // User must explicitly start conversation
-                      }}
-                      onStartConversation={(patient) => {
-                        onPatientConversationStart?.(patient)
-                        setIsOpen(false)
-                      }}
-                      onClearPatientContext={onClearPatientContext}
-                      clearSelectionTrigger={clearPatientSelectionTrigger}
-                      onConversationSelect={async (sessionId: string) => {
-                        // Handle conversation selection from patient history modal
-                        console.log('📱 Mobile: Conversación seleccionada desde historial de paciente:', sessionId);
-                        await onConversationSelect(sessionId);
-                        setIsOpen(false); // Close mobile nav after selecting conversation
-                      }}
-                      onOpenFicha={handleOpenFicha}
-                    />
+                  <PatientLibrarySection
+                    isOpen={true}
+                    onPatientSelect={() => {
+                      // Patient selected but no automatic conversation start
+                      // User must explicitly start conversation
+                    }}
+                    onStartConversation={(patient) => {
+                      onPatientConversationStart?.(patient)
+                      setIsOpen(false)
+                    }}
+                    onClearPatientContext={onClearPatientContext}
+                    clearSelectionTrigger={clearPatientSelectionTrigger}
+                    createDialogTrigger={createDialogTrigger}
+                    onConsumeCreateTrigger={onConsumeCreateTrigger}
+                    onConversationSelect={async (sessionId: string) => {
+                      // Handle conversation selection from patient history modal
+                      console.log('📱 Mobile: Conversación seleccionada desde historial de paciente:', sessionId);
+                      await onConversationSelect(sessionId);
+                      setIsOpen(false); // Close mobile nav after selecting conversation
+                    }}
+                    onOpenFicha={handleOpenFicha}
+                  />
                   </div>
                 )}
               </div>

@@ -47,6 +47,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const [sidebarActiveTab, setSidebarActiveTab] = useState<'conversations' | 'patients'>('conversations')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [mobileNavInitialTab, setMobileNavInitialTab] = useState<'conversations' | 'patients'>('conversations')
+  const [createDialogTrigger, setCreateDialogTrigger] = useState(0)
 
   const [pendingFiles, setPendingFiles] = useState<ClinicalFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -166,6 +167,21 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
   }, [sidebarOpen])
+
+  // Abrir diálogo de "Agregar paciente" desde acciones rápidas
+  const handleOpenAddPatient = () => {
+    if (isMobile) {
+      setMobileNavInitialTab('patients')
+      setMobileNavOpen(true)
+    } else {
+      setSidebarActiveTab('patients')
+      if (!sidebarOpen) {
+        setSidebarOpen(true)
+      }
+    }
+    // Disparar efecto en PatientLibrarySection para abrir el diálogo de creación
+    setCreateDialogTrigger(Date.now())
+  }
 
   // Manejar cambio de agente con métricas Sentry
   const handleAgentChange = async (agent: AgentType) => {
@@ -764,6 +780,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           onPatientConversationStart={handlePatientConversationStart}
           onClearPatientContext={handleClearPatientContext}
           clearPatientSelectionTrigger={clearPatientSelectionTrigger}
+          createDialogTrigger={createDialogTrigger}
+          onConsumeCreateTrigger={() => setCreateDialogTrigger(0)}
           onNewChat={() => {
             // Reset local pending UI state and HopeAI system
             setPendingFiles([])
@@ -802,6 +820,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               resetSystem()
             }}
             initialTab={mobileNavInitialTab}
+            createDialogTrigger={createDialogTrigger}
+            onConsumeCreateTrigger={() => setCreateDialogTrigger(0)}
           />
         )}
 
@@ -820,10 +840,12 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               transitionState={systemState.transitionState}
               routingInfo={systemState.routingInfo}
               reasoningBullets={systemState.reasoningBullets}
+              patientDisplayName={patient?.displayName}
               onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
               onCancelFichaGeneration={handleCancelFichaGeneration}
               onDiscardFicha={lastGeneratedFichaId ? handleDiscardFichaAndRevert : undefined}
               onOpenFichaClinica={patient ? handleOpenFichaFromChat : undefined}
+              onStartConversationWithPatient={handlePatientConversationStart}
               onOpenPatientLibrary={() => {
                 // Mobile: Abrir MobileNav en tab de pacientes
                 if (isMobile) {
@@ -837,6 +859,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
                   }
                 }
               }}
+              onOpenAddPatient={handleOpenAddPatient}
               hasExistingFicha={(fichasClinicasLocal && fichasClinicasLocal.length > 0) || false}
               fichaLoading={isFichaLoading}
               generateLoading={isGenerateFichaLoading}

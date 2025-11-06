@@ -250,7 +250,7 @@ export function PatternMirrorPanel({
             </div>
             <div className="space-y-2">
               <p className="font-sans text-sm font-medium text-gray-700">
-                No hay análisis disponibles para este paciente
+  No hay análisis disponibles para este caso clínico
               </p>
               <p className="font-sans text-xs text-gray-500 max-w-sm mx-auto">
                 Genera un nuevo análisis longitudinal para identificar patrones clínicos en el proceso terapéutico.
