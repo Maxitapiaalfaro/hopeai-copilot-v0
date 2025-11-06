@@ -602,23 +602,28 @@ export class HopeAISystem {
       // PATIENT CONTEXT: Retrieve full patient summary if available
       let patientSummary: string | undefined = undefined;
       const patientReference = sessionMeta?.patient?.reference || currentState.clinicalContext?.patientId;
-      
-      if (patientReference) {
+
+      // 🔹 Prefer client-provided summaryText on first turn to avoid client-only persistence lookup
+      const providedSummary = sessionMeta?.patient?.summaryText;
+      if (providedSummary) {
+        patientSummary = providedSummary;
+        console.log(`🏥 [HopeAI] Using provided patient summaryText from sessionMeta (length=${providedSummary.length})`);
+      } else if (patientReference) {
         try {
           const patientPersistence = getPatientPersistence();
           const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
-          
+
           if (patientRecord) {
             // 🎯 OPTIMIZACIÓN: Detectar si es el primer mensaje con este paciente
-            const isFirstPatientMessage = currentState.history.length === 0 || 
+            const isFirstPatientMessage = currentState.history.length === 0 ||
               !currentState.history.some((msg: any) => msg.content?.includes(patientRecord.displayName));
-            
+
             console.log(`🏥 [HopeAI] Checking if first patient message:`, {
               historyLength: currentState.history.length,
               patientName: patientRecord.displayName,
               isFirstMessage: isFirstPatientMessage
             })
-            
+
             if (isFirstPatientMessage) {
               // 📋 PRIMER MENSAJE: Cargar ficha clínica completa
               let latestFicha = null;
@@ -627,17 +632,17 @@ export class HopeAISystem {
                 latestFicha = fichas
                   .filter((f: any) => f.estado === 'completado')
                   .sort((a: any, b: any) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0];
-                
+
                 if (latestFicha) {
                   console.log(`🏥 [HopeAI] Found latest ficha clínica (version ${latestFicha.version}) for ${patientRecord.displayName}`);
                 }
               } catch (fichaError) {
                 console.warn(`🏥 [HopeAI] Error loading ficha clínica for ${patientReference}:`, fichaError);
               }
-              
+
               // Usar getSummaryWithFicha que prioriza ficha sobre summary
               patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patientRecord, latestFicha);
-              
+
               if (latestFicha) {
                 console.log(`🏥 [HopeAI] ✅ First message: Using FULL ficha clínica v${latestFicha.version} as patient context`);
               } else if (patientRecord.summaryCache && PatientSummaryBuilder.isCacheValid(patientRecord)) {
@@ -951,6 +956,8 @@ export class HopeAISystem {
           return {
             response: {
               text: confirmationResponse.text,
+              // Mark non-streaming confirmation as already persisted server-side
+              persistedInServer: true,
               routingInfo: {
                 detectedIntent: 'explicit_agent_switch',
                 targetAgent: routingResult.targetAgent,
@@ -978,6 +985,13 @@ export class HopeAISystem {
       }
 
       currentState.history.push(userMessage)
+
+      // Derivar título de conversación si es el primer mensaje del usuario y no existe título
+      const userMessageCount = currentState.history.filter((m: ChatMessage) => m.role === 'user').length
+      if (!currentState.title && userMessageCount === 1) {
+        const derivedTitle = this.deriveConversationTitleFromFirstUserMessage(userMessage.content, 50)
+        currentState.title = derivedTitle || `Sesión ${currentState.activeAgent}`
+      }
 
       console.log('📝 [HopeAI] Mensaje del usuario agregado al historial:', {
         historyLength: currentState.history.length,
@@ -1121,6 +1135,8 @@ export class HopeAISystem {
       return { 
         response: {
           ...response,
+          // Mark non-streaming responses as already persisted server-side
+          persistedInServer: true,
           routingInfo: {
             detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
             targetAgent: routingResult.targetAgent,
@@ -1222,6 +1238,22 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
            `El usuario me ha solicitado cambiar al modo ${targetAgent}. Por favor, confirma la activación y pregunta en qué puedo ayudar.`
   }
 
+  /**
+   * Deriva el título de la conversación a partir del primer mensaje del usuario.
+   * Aplica truncado inteligente a 50 caracteres con '...'.
+   */
+  private deriveConversationTitleFromFirstUserMessage(text: string, maxChars = 50): string {
+    const normalized = (text || '').replace(/\s+/g, ' ').trim()
+    if (!normalized) return ''
+    if (normalized.length <= maxChars) return normalized
+    const truncated = normalized.slice(0, maxChars)
+    const lastSpace = truncated.lastIndexOf(' ')
+    if (lastSpace > Math.floor(maxChars * 0.6)) {
+      return truncated.slice(0, lastSpace) + '...'
+    }
+    return truncated + '...'
+  }
+
   async addStreamingResponseToHistory(
     sessionId: string,
     responseContent: string,
@@ -1246,8 +1278,39 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
         id: m.id
       }))
     })
+    // Idempotency: if the last model message has identical content, merge extras instead of duplicating
+    const normalize = (s?: string) => (s || '').replace(/\s+/g, ' ').trim()
+    const lastMessage = currentState.history[currentState.history.length - 1]
+    if (lastMessage && lastMessage.role === 'model' && normalize(lastMessage.content) === normalize(responseContent)) {
+      // Merge grounding URLs (unique by URL)
+      if (groundingUrls && groundingUrls.length > 0) {
+        const existing = Array.isArray((lastMessage as any).groundingUrls) ? (lastMessage as any).groundingUrls : []
+        const combined = [...existing, ...groundingUrls]
+        const seen = new Set<string>()
+        ;(lastMessage as any).groundingUrls = combined.filter((ref: any) => {
+          const key = (ref && typeof ref === 'object') ? (ref.url || `${ref.title}-${ref.domain || ''}`) : String(ref)
+          if (!key) return false
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+      }
 
-    // Add AI response to history
+      // Attach reasoning bullets if not already present
+      if (reasoningBullets && reasoningBullets.length > 0) {
+        const existingBullets: ReasoningBullet[] | undefined = (lastMessage as any).reasoningBullets
+        if (!existingBullets || existingBullets.length === 0) {
+          (lastMessage as any).reasoningBullets = [...reasoningBullets]
+        }
+      }
+
+      // Update metadata and save without adding tokens again
+      currentState.metadata.lastUpdated = new Date()
+      await this.saveChatSessionBoth(currentState)
+      return
+    }
+
+    // Add AI response to history (no duplicate detected)
     const aiMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       content: responseContent,
@@ -1762,3 +1825,7 @@ export async function getFilesByIds(fileIds: string[]): Promise<ClinicalFile[]> 
   const instance = await HopeAISystemSingleton.getInitializedInstance()
   return instance.getFilesByIds(fileIds)
 }
+
+// Re-export control de orquestación del bridge para endpoints de métricas/alerts
+// Evita importaciones directas de lib/orchestration-singleton en rutas críticas
+export { getGlobalOrchestrationSystem as getBridgeOrchestrationSystem } from './orchestration-singleton'

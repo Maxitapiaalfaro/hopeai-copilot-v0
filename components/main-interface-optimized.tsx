@@ -21,7 +21,7 @@ import { DebugPioneerInvitation } from "@/components/debug-pioneer-invitation"
 import type { AgentType, ClinicalFile, PatientRecord, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
 import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
-import { PatientContextComposer } from "@/lib/patient-summary-builder"
+import { PatientContextComposer, PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
 import { clinicalStorage } from "@/lib/clinical-context-storage"
 
@@ -332,6 +332,22 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       
       // Crear el metadata del paciente SIN sessionId (se creará lazily)
       const composer = new PatientContextComposer()
+
+      // Generar resumen del paciente priorizando ficha clínica más reciente si existe
+      let patientSummary: string
+      try {
+        const { getStorageAdapter } = await import("@/lib/server-storage-adapter")
+        const storage = await getStorageAdapter()
+        const fichas = await storage.getFichasClinicasByPaciente(patient.id)
+        const latestFicha = fichas
+          .filter((f: FichaClinicaState) => f.estado === 'completado')
+          .sort((a: FichaClinicaState, b: FichaClinicaState) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
+        patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patient, latestFicha)
+      } catch (e) {
+        console.warn('⚠️ No se pudo cargar ficha clínica, usando resumen estándar:', e)
+        patientSummary = PatientSummaryBuilder.getSummary(patient)
+      }
+
       const patientSessionMeta = composer.createSessionMetadata(
         patient,
         {
@@ -339,7 +355,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           userId: systemState.userId || "demo_user",
           clinicalMode: "clinical",
           activeAgent: 'socratico' // Agente por defecto
-        }
+        },
+        patientSummary
       )
       
       // Establecer el contexto del paciente ANTES de crear la sesión
@@ -802,6 +819,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               onRemoveFile={handleRemoveFile}
               transitionState={systemState.transitionState}
               routingInfo={systemState.routingInfo}
+              reasoningBullets={systemState.reasoningBullets}
               onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
               onCancelFichaGeneration={handleCancelFichaGeneration}
               onDiscardFicha={lastGeneratedFichaId ? handleDiscardFichaAndRevert : undefined}

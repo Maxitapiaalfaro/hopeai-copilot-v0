@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ai } from '@/lib/google-genai-config'
+import { aiFiles } from '@/lib/google-genai-config'
 import * as Sentry from '@sentry/nextjs'
 
 /**
@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Subir archivo a Gemini Files API
-    const uploadResult = await ai.files.upload({
+    // Subir archivo a Gemini Files API (Google AI Studio)
+    const uploadResult = await aiFiles.files.upload({
       file: audioFile,
       config: {
         mimeType: audioFile.type,
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const maxAttempts = 60
     
     while (!fileReady && attempts < maxAttempts) {
-      const fileInfo = await ai.files.get({ name: uploadResult.name! })
+      const fileInfo = await aiFiles.files.get({ name: uploadResult.name! })
       
       if (fileInfo.state === 'ACTIVE') {
         fileReady = true
@@ -104,8 +104,8 @@ export async function POST(request: NextRequest) {
     
     console.log('✅ Archivo listo para transcripción')
     
-    // Transcribir el audio usando Gemini
-    const response = await ai.models.generateContent({
+    // Transcribir el audio usando Gemini (Google AI Studio client)
+    const response = await aiFiles.models.generateContent({
       model: 'gemini-2.5-flash-lite',
       contents: [
         {
@@ -146,7 +146,7 @@ Transcripción:`
     
     // Limpiar el archivo de Gemini de forma asíncrona (no bloquear respuesta)
     if (uploadResult.name) {
-      ai.files.delete({ name: uploadResult.name })
+      aiFiles.files.delete({ name: uploadResult.name })
         .then(() => console.log('🗑️ Archivo temporal eliminado'))
         .catch(err => console.warn('No se pudo eliminar archivo temporal:', err))
     }

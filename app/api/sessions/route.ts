@@ -1,32 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getGlobalOrchestrationSystem } from '@/lib/orchestration-singleton'
+import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 
 // POST: Create new session
 export async function POST(request: NextRequest) {
   try {
-    const { userId, mode, agent } = await request.json()
+    const { userId, mode, agent, patientSessionMeta } = await request.json()
     
     console.log('🔄 API: Creando nueva sesión...', { userId, mode, agent })
     
-    const orchestrationSystem = await getGlobalOrchestrationSystem()
-    
-    // Usar el sistema de orquestación para crear la sesión
-    const sessionId = `new-session-${Date.now()}`
-    const result = await orchestrationSystem.orchestrate(
-      `Crear nueva sesión clínica`,
-      sessionId,
+    const hopeAISystem = await getGlobalOrchestrationSystem()
+
+    // Crear sesión clínica usando el sistema HopeAI
+    const { sessionId, chatState } = await hopeAISystem.createClinicalSession(
       userId,
-      {
-        forceMode: 'dynamic',
-        previousAgent: agent
-      }
+      mode,
+      agent,
+      undefined,
+      patientSessionMeta
     )
-    
-    console.log('✅ API: Sesión creada exitosamente')
-    
+
+    console.log('✅ API: Sesión creada exitosamente', { sessionId })
+
     return NextResponse.json({
       success: true,
-      result
+      sessionId,
+      chatState
     })
   } catch (error) {
     console.error('❌ API Error (Create Session):', error)
@@ -55,12 +53,9 @@ export async function GET(request: NextRequest) {
     
     console.log('🔄 API: Obteniendo sesiones del usuario:', userId)
     
-    // Asegurar que el sistema esté inicializado
-    const orchestrationSystem = await getGlobalOrchestrationSystem()
-    
-    // Por ahora retornamos un array vacío ya que la funcionalidad de getUserSessions
-    // necesita ser implementada en el nuevo sistema
-    const sessions: any[] = []
+    // Obtener sesiones del usuario mediante el singleton de HopeAI
+    const hopeAISystem = await getGlobalOrchestrationSystem()
+    const sessions = await hopeAISystem.getUserSessions(userId)
     
     console.log('✅ API: Sesiones obtenidas:', sessions.length)
     

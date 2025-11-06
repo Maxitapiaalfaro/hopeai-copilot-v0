@@ -168,12 +168,44 @@ export class DynamicOrchestrator {
         sessionContext.currentAgent
       );
       
-      // ⚠️ BULLETS INHABILITADOS: Añaden ~500-1000ms de latencia al streaming
-      // Los bullets hacen un LLM call separado que retrasa el inicio del texto principal
-      // TODO: Reimplementar bullets DESPUÉS del streaming, no antes
+      // ✅ REACTIVACIÓN DE BULLETS: Ejecutar generación en paralelo para no bloquear el streaming
+      // Se lanza un generador asíncrono "fire-and-forget" que emite eventos SSE mediante onBulletUpdate.
       if (onBulletUpdate) {
-        this.log('info', `⚠️ Bullets inhabilitados para optimizar latencia de streaming`);
-        // No generar bullets - priorizar velocidad de respuesta
+        try {
+          const bulletContext: BulletGenerationContext = {
+            userInput,
+            // Usamos el historial de conversación ya gestionado por el orquestador
+            sessionContext: externalConversationHistory && externalConversationHistory.length > 0
+              ? externalConversationHistory
+              : sessionContext.conversationHistory,
+            selectedAgent: orchestrationResult.selectedAgent,
+            // Para evitar latencia extra, no ejecutamos extracción adicional aquí
+            extractedEntities: [],
+            clinicalContext: {
+              patientId,
+              patientSummary,
+              sessionType: sessionType || 'general'
+            },
+            orchestrationReasoning: orchestrationResult.reasoning,
+            agentConfidence: orchestrationResult.confidence,
+            contextualTools: orchestrationResult.contextualTools as any[]
+          };
+
+          // Lanzar en paralelo sin esperar a que finalice
+          (async () => {
+            try {
+              for await (const _ of this.generateReasoningBullets(bulletContext, onBulletUpdate)) {
+                // La emisión ya ocurre dentro del generador; aquí no hacemos nada adicional
+              }
+            } catch (bulletErr) {
+              this.log('warn', `Generación de bullets falló: ${bulletErr}`);
+            }
+          })();
+
+          this.log('info', `🧷 Generación de bullets lanzada en paralelo (no bloquea streaming)`);
+        } catch (bulletSetupErr) {
+          this.log('warn', `No se pudieron preparar bullets: ${bulletSetupErr}`);
+        }
       }
       
       // 4. Optimizar selección de herramientas

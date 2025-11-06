@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getGlobalOrchestrationSystem } from '@/lib/orchestration-singleton'
+import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 
 export async function POST(request: NextRequest) {
   try {
@@ -7,24 +7,18 @@ export async function POST(request: NextRequest) {
     
     console.log('🔄 API: Cambiando agente...', { sessionId, newAgent })
     
-    const orchestrationSystem = await getGlobalOrchestrationSystem()
-    
-    // Usar el sistema de orquestación para manejar el cambio de agente
-    const result = await orchestrationSystem.orchestrate(
-      `Cambiar al agente: ${newAgent}`,
-      sessionId,
-      'default-user',
-      {
-        forceMode: 'dynamic',
-        previousAgent: newAgent
-      }
-    )
-    
+    const hopeAISystem = await getGlobalOrchestrationSystem()
+
+    // Usar la API explícita de cambio de agente del sistema HopeAI
+    const updatedState = await hopeAISystem.switchAgent(sessionId, newAgent)
+
     console.log('✅ API: Agente cambiado exitosamente')
-    
+
     return NextResponse.json({
       success: true,
-      result
+      sessionId: updatedState.sessionId,
+      activeAgent: updatedState.activeAgent,
+      metadata: updatedState.metadata
     })
   } catch (error) {
     console.error('❌ API Error (Switch Agent):', error)

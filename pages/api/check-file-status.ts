@@ -1,7 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { GoogleGenAI } from '@google/genai'
-
-const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! })
+import { ai } from '@/lib/google-genai-config'
 
 export default async function handler(
   req: NextApiRequest,
@@ -18,8 +16,8 @@ export default async function handler(
       return res.status(400).json({ error: 'geminiFileId is required' })
     }
 
-    // Verificar el estado del archivo en Google AI Files API
-    const fileInfo = await genai.files.get({ name: geminiFileId })
+    // Verificar el estado del archivo con el cliente compartido (Vertex/Gemini según entorno)
+    const fileInfo = await ai.files.get({ name: geminiFileId })
     
     return res.status(200).json({
       state: fileInfo.state,

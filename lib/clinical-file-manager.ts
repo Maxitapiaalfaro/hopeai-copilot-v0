@@ -1,4 +1,4 @@
-import { ai } from "./google-genai-config"
+import { aiFiles } from "./google-genai-config"
 import { getStorageAdapter } from "./server-storage-adapter"
 import type { ClinicalFile } from "@/types/clinical-types"
 
@@ -28,8 +28,8 @@ export class ClinicalFileManager {
         sessionId,
       })
 
-      // Upload to Google AI Files API
-      const uploadResult = await ai.files.upload({
+      // Upload to Google AI Files API (Google AI Studio client)
+      const uploadResult = await aiFiles.files.upload({
         file: file,
         config: {
           mimeType: file.type,
@@ -81,6 +81,24 @@ export class ClinicalFileManager {
         sessionId,
       })
 
+      // Normalize common errors
+      if (error instanceof Error) {
+        const msg = error.message || ''
+        if (/Vertex AI does not support uploading files/i.test(msg)) {
+          throw new Error('Upload failed: Files API is not supported on Vertex. Using API-key client is required and has been configured. Please verify GOOGLE_AI_API_KEY permissions.')
+        }
+        if (/permission/i.test(msg) || /403/.test(msg)) {
+          const e = new Error('Permission denied while uploading file')
+          ;(e as any).code = 'PERMISSION_DENIED'
+          throw e
+        }
+        if (/size/i.test(msg)) {
+          const e = new Error('File size exceeds the allowed limit (10MB)')
+          ;(e as any).code = 'FILE_TOO_LARGE'
+          throw e
+        }
+      }
+
       throw error
     }
   }
@@ -111,7 +129,7 @@ export class ClinicalFileManager {
 
   async getFileInfo(geminiFileId: string): Promise<any> {
     try {
-      return await ai.files.get({ name: geminiFileId })
+      return await aiFiles.files.get({ name: geminiFileId })
     } catch (error) {
       console.error("Error getting file info:", error)
       throw error
@@ -155,7 +173,7 @@ export class ClinicalFileManager {
       const file = files.find((f: ClinicalFile) => f.id === fileId)
 
       if (file?.geminiFileId) {
-        await ai.files.delete({ name: file.geminiFileId })
+        await aiFiles.files.delete({ name: file.geminiFileId })
       }
 
       // Remove from IndexedDB (implement delete method)
@@ -179,7 +197,9 @@ export class ClinicalFileManager {
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/rtf",
       "text/plain",
+      "text/markdown",
       "image/jpeg",
       "image/png",
       "image/gif",
@@ -188,6 +208,23 @@ export class ClinicalFileManager {
     const maxSize = 10 * 1024 * 1024 // 10MB
 
     return allowedTypes.includes(file.type) && file.size <= maxSize
+  }
+}
+
+/**
+ * Crea un objeto `Part` para adjuntar a un prompt de `GenerativeModel`
+ * a partir de una URI de archivo de Gemini.
+ *
+ * @param uri - La URI del archivo (p. ej., `files/nombre-del-archivo`).
+ * @param mimeType - El tipo MIME del archivo.
+ * @returns Un objeto `Part` compatible con la API.
+ */
+export function createPartFromUri(uri: string, mimeType: string) {
+  return {
+    fileData: {
+      mimeType,
+      fileUri: uri,
+    },
   }
 }
 

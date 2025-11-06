@@ -213,6 +213,8 @@ export interface PatientSessionMeta {
     summaryHash: string
     version: number
     confidentialityLevel: "high" | "medium" | "low"
+    // Optional full summary text for first-turn enrichment
+    summaryText?: string
   }
   clinicalMode: string
   activeAgent: string

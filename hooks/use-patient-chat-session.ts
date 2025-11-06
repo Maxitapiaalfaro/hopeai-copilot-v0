@@ -117,7 +117,7 @@ export function usePatientChatSession(): UsePatientChatSessionReturn {
             userId: systemState.userId,
             clinicalMode,
             activeAgent: defaultAgent
-          })
+          }, patientSummary)
           
           console.log('🔗 Session metadata created for patient:', sessionMeta.patient.reference)
           

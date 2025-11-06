@@ -228,7 +228,8 @@ export class PatientContextComposer {
       userId: string
       clinicalMode: string
       activeAgent: string
-    }
+    },
+    patientSummaryText?: string
   ): PatientSessionMeta {
     return {
       sessionId: sessionConfig.sessionId,
@@ -237,7 +238,8 @@ export class PatientContextComposer {
         reference: patient.id,
         summaryHash: PatientSummaryBuilder.generateSummaryHash(patient),
         version: patient.summaryCache?.version || 1,
-        confidentialityLevel: patient.confidentiality?.accessLevel || 'medium'
+        confidentialityLevel: patient.confidentiality?.accessLevel || 'medium',
+        summaryText: patientSummaryText
       },
       clinicalMode: sessionConfig.clinicalMode,
       activeAgent: sessionConfig.activeAgent,

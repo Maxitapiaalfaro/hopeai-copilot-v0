@@ -1,6 +1,6 @@
-import { ai, clinicalModelConfig } from "./google-genai-config"
-import { createPartFromUri, createUserContent } from "@google/genai"
-import { clinicalFileManager } from "./clinical-file-manager"
+import { ai, aiFiles, clinicalModelConfig } from "./google-genai-config"
+import { createUserContent } from "@google/genai"
+import { clinicalFileManager, createPartFromUri } from "./clinical-file-manager"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 // Academic source validation and multi-source search
 import { academicSourceValidator } from "./academic-source-validator"
@@ -1689,7 +1689,8 @@ Basado en esta evidencia, opciones razonadas:
       throw new Error(`Chat session not found: ${sessionId}. Active sessions: ${Array.from(this.activeChatSessions.keys()).join(', ')}`)
     }
 
-    const { chat, agent } = sessionData
+    let chat = sessionData.chat
+    const agent = sessionData.agent
 
     // 🧹 CLEANUP: Update session activity on every message
     this.updateSessionActivity(sessionId)
@@ -1715,6 +1716,34 @@ Basado en esta evidencia, opciones razonadas:
         const agentConfig = this.agents.get(agent);
         const modelUsed = agentConfig?.config?.model || 'gemini-2.5-flash';
         sessionMetricsTracker.recordModelCallStart(interactionId, modelUsed, contextTokens);
+      }
+
+      // 🔁 CLIENTE CORRECTO PARA ARCHIVOS: Si hay archivos adjuntos, cambiar a cliente de Google AI Studio (API key)
+      const hasFileAttachments = Array.isArray(enrichedContext?.sessionFiles) && enrichedContext.sessionFiles.length > 0
+      if (hasFileAttachments) {
+        try {
+          const agentConfig = this.agents.get(agent)
+          const geminiHistory = await this.convertHistoryToGeminiFormat(sessionId, sessionData.history || [], agent)
+          const fileChat = aiFiles.chats.create({
+            model: agentConfig?.config?.model || 'gemini-2.5-flash',
+            config: {
+              temperature: agentConfig?.config?.temperature,
+              topK: agentConfig?.config?.topK,
+              topP: agentConfig?.config?.topP,
+              maxOutputTokens: agentConfig?.config?.maxOutputTokens,
+              safetySettings: agentConfig?.config?.safetySettings,
+              systemInstruction: agentConfig?.systemInstruction,
+              tools: agentConfig?.tools && agentConfig?.tools.length > 0 ? agentConfig.tools : undefined,
+              thinkingConfig: agentConfig?.config?.thinkingConfig,
+            },
+            history: geminiHistory,
+          })
+          this.activeChatSessions.set(sessionId, { chat: fileChat, agent })
+          chat = fileChat
+          console.log('[ClinicalRouter] 🔄 Switched to Google AI Studio client for file-attached message')
+        } catch (switchErr) {
+          console.warn('[ClinicalRouter] ⚠️ Could not switch to Studio client for file-attached message:', switchErr)
+        }
       }
 
       // Construir las partes del mensaje (texto + archivos adjuntos)

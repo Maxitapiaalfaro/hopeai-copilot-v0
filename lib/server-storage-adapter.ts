@@ -29,11 +29,22 @@ export class ServerStorageAdapter {
 
   private async ensureStorage(): Promise<HIPAAStorage> {
     if (!this.storage) {
-      console.log('🔧 [ServerStorageAdapter] Creating HIPAACompliantStorage instance...')
-      // Dynamic import para evitar bundling en cliente
-      const { HIPAACompliantStorage } = await import('./hipaa-compliant-storage')
-      this.storage = new HIPAACompliantStorage()
-      console.log('✅ [ServerStorageAdapter] HIPAACompliantStorage instance created')
+      // Detectar entorno Vercel o modo memoria forzado
+      const isVercel = !!process.env.VERCEL || typeof process.env.VERCEL_ENV !== 'undefined'
+      const forceMemory = process.env.HOPEAI_STORAGE_MODE === 'memory'
+
+      if (isVercel || forceMemory) {
+        console.log('🔧 [ServerStorageAdapter] Using MemoryServerStorage (Vercel/serverless-safe)')
+        const { MemoryServerStorage } = await import('./server-storage-memory')
+        this.storage = new MemoryServerStorage()
+        console.log('✅ [ServerStorageAdapter] MemoryServerStorage instance created')
+      } else {
+        console.log('🔧 [ServerStorageAdapter] Creating HIPAACompliantStorage instance...')
+        // Dynamic import para evitar bundling en cliente
+        const { HIPAACompliantStorage } = await import('./hipaa-compliant-storage')
+        this.storage = new HIPAACompliantStorage()
+        console.log('✅ [ServerStorageAdapter] HIPAACompliantStorage instance created')
+      }
     }
     return this.storage
   }

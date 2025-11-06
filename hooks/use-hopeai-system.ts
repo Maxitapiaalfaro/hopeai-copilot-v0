@@ -355,6 +355,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         // ARQUITECTURA OPTIMIZADA: Solo usar fileReferences con IDs
         fileReferences: attachedFiles?.map(file => file.id) || []
       }
+      const localUserMessageId = userMessage.id
 
       // NUEVA FUNCIONALIDAD: Limpiar bullets temporales del mensaje anterior
       setCurrentMessageBullets([])
@@ -376,6 +377,36 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
         }
       })
+
+      // 💾 Persistencia inmediata en IndexedDB para no perder el mensaje del usuario en un reload
+      try {
+        const existingState = await hopeAISystem.current.getChatState(sessionIdToUse!)
+        const updatedState: ChatState = {
+          ...(existingState || {
+            sessionId: sessionIdToUse!,
+            userId: systemState.userId || 'demo_user',
+            mode: systemState.mode || 'clinical_supervision',
+            activeAgent: systemState.activeAgent,
+            history: [],
+            metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
+            clinicalContext: {
+              sessionType: systemState.mode || 'clinical_supervision',
+              confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
+              patientId: systemState.sessionMeta?.patient?.reference
+            }
+          }),
+          history: [...((existingState?.history) || []), userMessage],
+          metadata: {
+            ...((existingState?.metadata) || { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] }),
+            lastUpdated: new Date(),
+            fileReferences: Array.from(new Set([...(existingState?.metadata?.fileReferences || []), ...(userMessage.fileReferences || [])]))
+          }
+        }
+        await hopeAISystem.current.storageAdapter.saveChatSession(updatedState)
+        console.log('💾 [IndexedDB] Mensaje de usuario persistido inmediatamente:', { sessionId: sessionIdToUse, messageId: localUserMessageId })
+      } catch (persistError) {
+        console.error('❌ [IndexedDB] Error al persistir el mensaje del usuario:', persistError)
+      }
 
       console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
 
@@ -410,6 +441,28 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             transitionState: 'specialist_responding'
           }
         })
+
+        // 💾 Persistir actualización del agente para el último mensaje de usuario en IndexedDB
+        void (async () => {
+          try {
+            const existingState = await hopeAISystem.current!.getChatState(sessionIdToUse!)
+            if (existingState) {
+              const updatedHistory = existingState.history.map(m =>
+                m.id === localUserMessageId ? { ...m, agent: routingInfo.targetAgent as AgentType } : m
+              )
+              const updatedState: ChatState = {
+                ...existingState,
+                activeAgent: routingInfo.targetAgent as AgentType,
+                history: updatedHistory,
+                metadata: { ...existingState.metadata, lastUpdated: new Date() }
+              }
+              await hopeAISystem.current!.storageAdapter.saveChatSession(updatedState)
+              console.log('💾 [IndexedDB] Agente del mensaje de usuario actualizado en persistencia')
+            }
+          } catch (e) {
+            console.warn('⚠️ [IndexedDB] No se pudo actualizar el agente en persistencia:', e)
+          }
+        })()
       }
 
       // Simular estado de selección de agente
@@ -460,6 +513,16 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   }))
                   console.log('🎯 Agente seleccionado:', responseData.response.routingInfo.targetAgent)
                 }
+
+                // 🛠️ FIX: Finalizar indicador de generación de bullets si el backend
+                // no envía bullets progresivos (o ya terminó la generación)
+                setSystemState(prev => ({
+                  ...prev,
+                  reasoningBullets: {
+                    ...prev.reasoningBullets,
+                    isGenerating: false
+                  }
+                }))
               },
               onError: (error, details) => {
                 console.error('❌ Error SSE:', error, details)
@@ -467,6 +530,14 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               },
               onComplete: () => {
                 console.log('✅ Stream SSE completado')
+                // 🛠️ FIX: Asegurar que isGenerating quede en false al cerrar el stream
+                setSystemState(prev => ({
+                  ...prev,
+                  reasoningBullets: {
+                    ...prev.reasoningBullets,
+                    isGenerating: false
+                  }
+                }))
               }
             }
           )) {

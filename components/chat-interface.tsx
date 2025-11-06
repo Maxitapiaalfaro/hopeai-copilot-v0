@@ -733,8 +733,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               functionCallsCount: response.functionCalls?.length || 0
             })
             
-            // Agregar la respuesta al historial
-            if (response.text.trim() && addStreamingResponseToHistory) {
+            // Agregar la respuesta al historial únicamente si NO fue persistida por el servidor
+            if (response.text.trim() && addStreamingResponseToHistory && !response.persistedInServer) {
               try {
                 // Usar el agente de la información de enrutamiento si está disponible,
                 // de lo contrario usar el agente activo actual
@@ -892,10 +892,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     ? currentSession.history[currentSession.history.length - 1]
     : undefined
   const lastModelMessageHasBullets = !!(
-    lastHistoryMessage &&
-    lastHistoryMessage.role === 'model' &&
-    lastHistoryMessage.reasoningBullets &&
-    lastHistoryMessage.reasoningBullets.length > 0
+    lastHistoryMessage?.role === 'model' &&
+    ((lastHistoryMessage?.reasoningBullets?.length ?? 0) > 0)
   )
 
   return (
@@ -998,6 +996,16 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       : `${messageAgentConfig.bgColor} ${messageAgentConfig.borderColor}`,
                   )}
                 >
+                  {/* Indicador mínimo de archivo adjunto (solo icono) */}
+                  {message.role === "user" && (message.fileReferences?.length ?? 0) > 0 && (
+                    <div className="absolute top-2 right-2" title="Archivo adjunto">
+                      <PaperclipIcon
+                        className="w-3 h-3 text-mineral-gray-600/70 hover:text-mineral-gray-800 transition-colors"
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only">Archivo adjunto</span>
+                    </div>
+                  )}
                   {/* Agent Context Header - Aurora v2.0 Design */}
                   {message.role === "model" && (
                     <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
@@ -1024,8 +1032,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                             )}>
                               {messageAgentConfig.name}
                             </h3>
-                            {/* ⚠️ BULLETS INHABILITADOS: Botón de toggle deshabilitado */}
-                            {false && message.reasoningBullets && message.reasoningBullets.length > 0 && (
+                            {/* Toggle de bullets para mensajes históricos */}
+                            {((message.reasoningBullets?.length ?? 0) > 0) && (
                               <button
                                 type="button"
                                 onClick={() => toggleMessageBullets(message.id)}
@@ -1046,11 +1054,11 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       </div>
                     </div>
                   )}
-                  {/* ⚠️ BULLETS INHABILITADOS: Bullets en mensajes históricos deshabilitados */}
-                  {false && message.role === 'model' && message.reasoningBullets && message.reasoningBullets.length > 0 && !collapsedMessageBullets[message.id] && (
+                  {/* Reasoning bullets en mensajes históricos */}
+                  {message.role === 'model' && ((message.reasoningBullets?.length ?? 0) > 0) && !collapsedMessageBullets[message.id] && (
                     <div className="p-3 md:p-4">
                       <ReasoningBullets
-                        bullets={message.reasoningBullets}
+                        bullets={message.reasoningBullets ?? []}
                         isGenerating={false}
                         showHeader={false}
                         className="text-sm"
@@ -1263,8 +1271,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           >
                             {realConfig.name}
                           </motion.h3>
-                          {/* ⚠️ BULLETS INHABILITADOS: Botón de toggle en streaming deshabilitado */}
-                          {false && reasoningBullets?.bullets && reasoningBullets.bullets.length > 0 && (
+                          {/* Toggle de bullets en streaming */}
+                          {((reasoningBullets?.bullets?.length ?? 0) > 0) && (
                             <button
                               type="button"
                               onClick={() => setAreBulletsCollapsed(prev => !prev)}
@@ -1291,11 +1299,11 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     </div>
                   </div>
                 {/* ⚠️ BULLETS INHABILITADOS: Bullets dentro de streaming deshabilitados para optimizar latencia */}
-                {false && reasoningBullets?.bullets && reasoningBullets.bullets.length > 0 && !areBulletsCollapsed && (
+                {((reasoningBullets?.bullets?.length ?? 0) > 0) && !areBulletsCollapsed && (
                   <div className="px-4 pt-4 pb-2">
                     <ReasoningBullets
-                      bullets={reasoningBullets.bullets}
-                      isGenerating={reasoningBullets.isGenerating}
+                      bullets={reasoningBullets?.bullets ?? []}
+                      isGenerating={!!reasoningBullets?.isGenerating}
                       className="w-full"
                       showHeader={false}
                     />
@@ -1592,10 +1600,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             )
           })()}
 
-          {/* ⚠️ BULLETS INHABILITADOS: Contenedor de bullets externos deshabilitado para optimizar latencia */}
+          {/* Contenedor de bullets externos (post-stream) con toggle y colapsado por defecto */}
           {/* Los bullets añadían ~500-1000ms de latencia al streaming */}
-          {false && !isStreaming && reasoningBullets && (
-            reasoningBullets.isGenerating || ((reasoningBullets?.bullets?.length ?? 0) > 0 && !lastModelMessageHasBullets)
+          {!isStreaming && reasoningBullets && (
+            (!!reasoningBullets?.isGenerating) || ((reasoningBullets?.bullets?.length ?? 0) > 0 && !lastModelMessageHasBullets)
           ) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -1623,7 +1631,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     weight="duotone"
                   />
                 </div>
-                {/* Agent Context Header - Aurora v2.0 */}
+                {/* Agent Context Header - Aurora v2.0 con toggle */}
                 <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
                   <div className="flex items-start gap-3">
                     <div className={cn(
@@ -1638,26 +1646,43 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       />
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
-                      <h3 className={cn(
-                        "text-base font-semibold font-sans tracking-tight mb-1.5",
-                        config.textColor
-                      )}>
-                        {config.name}
-                      </h3>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <h3 className={cn(
+                          "text-base font-semibold font-sans tracking-tight",
+                          config.textColor
+                        )}>
+                          {config.name}
+                        </h3>
+                        {((reasoningBullets?.bullets?.length ?? 0) > 0) && (
+                          <button
+                            type="button"
+                            onClick={() => setAreBulletsCollapsed(prev => !prev)}
+                            className={cn(
+                              "inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium rounded-lg transition-all",
+                              "hover:bg-secondary text-muted-foreground hover:text-foreground"
+                            )}
+                            aria-label={areBulletsCollapsed ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
+                          >
+                            {areBulletsCollapsed ? 'Mostrar' : 'Ocultar'}
+                          </button>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground/80 font-sans leading-relaxed">
                         {config.description}
                       </p>
                     </div>
                   </div>
                 </div>
-                <div className="p-4">
-                  <ReasoningBullets
-                    bullets={reasoningBullets.bullets}
-                    isGenerating={reasoningBullets.isGenerating}
-                    className="w-full"
-                    showHeader={false}
-                  />
-                </div>
+                {!areBulletsCollapsed && (
+                  <div className="p-4">
+                    <ReasoningBullets
+                      bullets={reasoningBullets?.bullets ?? []}
+                      isGenerating={!!reasoningBullets?.isGenerating}
+                      className="w-full"
+                      showHeader={false}
+                    />
+                  </div>
+                )}
               </motion.div>
             </motion.div>
           )}

@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -13,21 +13,16 @@ interface ReasoningBulletsProps {
 }
 
 export function ReasoningBullets({ bullets, isGenerating = false, className = '', showHeader = true }: ReasoningBulletsProps) {
-  // ⚠️ BULLETS INHABILITADOS: No mostrar nada (optimización de latencia)
-  // Los bullets añadían ~500-1000ms de latencia al streaming
-  return null
-
   // Si no hay bullets y no está generando, no mostrar nada
   if (!bullets || (bullets.length === 0 && !isGenerating)) {
     return null
   }
 
   const getBulletIcon = (bullet: ReasoningBullet) => {
-    // ARQUITECTURA MEJORADA: Manejo de separadores visuales
+    // Separadores no tienen icono
     if (bullet.type === 'separator') {
-      return null // Los separadores no tienen icono
+      return null
     }
-    
     switch (bullet.status) {
       case 'completed':
         return <CheckCircle className="w-4 h-4 text-serene-teal-500 dark:text-serene-teal-400 flex-shrink-0" />
@@ -41,11 +36,9 @@ export function ReasoningBullets({ bullets, isGenerating = false, className = ''
   }
 
   const getBulletTextColor = (bullet: ReasoningBullet) => {
-    // ARQUITECTURA MEJORADA: Estilo especial para separadores
     if (bullet.type === 'separator') {
       return 'text-muted-foreground text-xs font-medium border-t border-border pt-2 mt-2'
     }
-    
     switch (bullet.status) {
       case 'completed':
         return 'text-foreground'
@@ -59,59 +52,45 @@ export function ReasoningBullets({ bullets, isGenerating = false, className = ''
   }
 
   return (
-    <div className={`w-full ${className}`}>
-      {/* Header intentionally removed to avoid showing fixed label text */}
-      
-      <div className="space-y-1">
-        <AnimatePresence>
-          {bullets.map((bullet, index) => (
-            <motion.div
+    <div className={className}>
+      {showHeader && (
+        <div className="flex items-center gap-2 pb-2">
+          <span className="text-xs font-semibold text-muted-foreground">Proceso</span>
+          {isGenerating && (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Pensando
+            </span>
+          )}
+        </div>
+      )}
+      <ul className="space-y-2">
+        <AnimatePresence initial={false}>
+          {bullets.map((bullet) => (
+            <motion.li
               key={bullet.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              transition={{ 
-                duration: 0.2, 
-                delay: index * 0.05
-              }}
-              className={bullet.type === 'separator' 
-                ? "py-1" 
-                : "flex items-start gap-2 py-1 w-full"
-              }
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18 }}
+              className={bullet.type === 'separator' ? 'pt-1' : ''}
             >
               {bullet.type === 'separator' ? (
-                <div className="text-xs text-muted-foreground font-semibold tracking-wide uppercase opacity-80 mt-1">
-                  {bullet.content}
-                </div>
+                <div className={getBulletTextColor(bullet)}>{bullet.content}</div>
               ) : (
-                <>
-                  <div className="w-1 h-1 rounded-full bg-muted-foreground/40 mt-2 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="block text-xs text-muted-foreground leading-relaxed break-words whitespace-pre-wrap hyphens-auto">
-                      {bullet.content}
-                    </span>
+                <div className="flex items-start gap-2">
+                  <div className="mt-0.5">
+                    {getBulletIcon(bullet)}
                   </div>
-                </>
+                  <div className={`text-sm leading-relaxed ${getBulletTextColor(bullet)}`}>
+                    {bullet.content}
+                  </div>
+                </div>
               )}
-            </motion.div>
+            </motion.li>
           ))}
         </AnimatePresence>
-        
-        {isGenerating && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 py-1"
-          >
-            <Loader2 className="w-3 h-3 text-muted-foreground animate-spin flex-shrink-0" />
-            <span className="text-xs text-muted-foreground italic">
-              Analizando...
-            </span>
-          </motion.div>
-        )}
-      </div>
+      </ul>
     </div>
   )
 }
-
-export default ReasoningBullets
