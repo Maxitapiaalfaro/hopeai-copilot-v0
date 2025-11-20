@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react"
 import { uiPreferencesStorage, type UIPreferences } from "@/lib/ui-preferences-storage"
-
-const DEFAULT_USER_ID = "default_user"
+import { getEffectiveUserId } from "@/lib/user-identity"
 
 /**
  * Hook to manage UI preferences with IndexedDB persistence
  */
-export function useUIPreferences(userId: string = DEFAULT_USER_ID) {
+export function useUIPreferences(userId?: string) {
   const [preferences, setPreferences] = useState<UIPreferences | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -14,13 +13,14 @@ export function useUIPreferences(userId: string = DEFAULT_USER_ID) {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const prefs = await uiPreferencesStorage.getPreferences(userId)
+        const effectiveUserId = getEffectiveUserId(userId)
+        const prefs = await uiPreferencesStorage.getPreferences(effectiveUserId)
         setPreferences(prefs)
       } catch (error) {
         console.error("Error loading UI preferences:", error)
         // Set default preferences on error
         setPreferences({
-          userId,
+          userId: getEffectiveUserId(userId),
           showDynamicSuggestions: true,
           lastUpdated: new Date().toISOString(),
         })
@@ -42,7 +42,7 @@ export function useUIPreferences(userId: string = DEFAULT_USER_ID) {
     if (!preferences) return
 
     try {
-      await uiPreferencesStorage.updatePreference(key, value, userId)
+      await uiPreferencesStorage.updatePreference(key, value, preferences.userId)
       
       // Update local state
       setPreferences({

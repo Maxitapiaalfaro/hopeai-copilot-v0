@@ -37,6 +37,8 @@ const PRODUCTION_REQUIRED_VARS = [
 const RECOMMENDED_VARS = [
   'SENTRY_ORG',
   'SENTRY_PROJECT',
+  'MONGODB_URI',
+  'MONGODB_DB_NAME',
 ];
 
 /**
@@ -134,6 +136,24 @@ export function validateEnvironment(): EnvValidationResult {
         }
       }
     });
+  }
+
+  const storageMode = process.env.HOPEAI_STORAGE_MODE;
+  const mongoUri = process.env.MONGODB_URI;
+  const mongoDb = process.env.MONGODB_DB_NAME;
+  const usesMongo = storageMode === 'mongodb' || process.env.USE_MONGODB_STORAGE === 'true' || !!process.env.NEXTAUTH_URL;
+  if (usesMongo) {
+    if (!mongoUri) {
+      errors.push('Missing MongoDB URI: MONGODB_URI');
+    } else {
+      const validUri = /^mongodb(\+srv)?:\/\//.test(mongoUri);
+      if (!validUri) {
+        errors.push('Invalid MongoDB URI format: MONGODB_URI');
+      }
+    }
+    if (!mongoDb) {
+      warnings.push('Missing MongoDB DB name: MONGODB_DB_NAME (using default)');
+    }
   }
 
   // 3. Validar variables recomendadas
@@ -284,4 +304,3 @@ export default {
   isSecureMode,
   detectEnvironment
 };
-

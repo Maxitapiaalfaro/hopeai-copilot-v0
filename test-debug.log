@@ -1,0 +1,183 @@
+[dotenv@17.2.3] injecting env (1) from .env.test -- tip: ­ƒöÉ prevent committing .env to code: https://dotenvx.com/precommit
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mC:/Users/david/hopeai-copilot-v0[39m
+
+[90mstdout[2m | tests/auth-sync-integration.test.ts
+[22m[39mÔ£à Setup de tests inicializado - Mocks globales configurados
+
+stderr | tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 4. Sincronizaci├│n entre Almacenamiento Local y Remoto > debe sincronizar nueva sesi├│n de chat con el servidor
+­ƒÆ¥ ÔØî [STORAGE] Sync operation failed
+­ƒÆ¥ ÔØî [STORAGE] Forced sync failed
+
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m1. Autenticaci├│n de Usuario[2m > [22mdebe autenticar usuario exitosamente
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m1. Autenticaci├│n de Usuario[2m > [22mdebe manejar error de autenticaci├│n
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m2. Inicializaci├│n de Almacenamiento[2m > [22mdebe inicializar el sistema de sincronizaci├│n despu├®s de autenticaci├│n
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m2. Inicializaci├│n de Almacenamiento[2m > [22mdebe crear instancias de almacenamiento local y remoto
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m3. Operaciones de Almacenamiento Local[2m > [22mdebe guardar y recuperar sesi├│n de chat en almacenamiento local
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m3. Operaciones de Almacenamiento Local[2m > [22mdebe guardar y recuperar registro de paciente en almacenamiento local
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m3. Operaciones de Almacenamiento Local[2m > [22mdebe rastrear cambios en almacenamiento local
+stderr | tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 4. Sincronizaci├│n entre Almacenamiento Local y Remoto > debe manejar escenario offline y sincronizar al volver online
+API request failed: GET /api/storage/sync-metadata Error: Network error
+    at C:\Users\david\hopeai-copilot-v0\tests\auth-sync-integration.test.ts:355:24
+    at mockCall (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/spy/dist/index.js:61:17)
+    at spy (file:///C:/Users/david/hopeai-copilot-v0/node_modules/tinyspy/dist/index.js:45:80)
+    at APIClientAdapter.makeRequest (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:75:30)
+    at APIClientAdapter.getSyncMetadata (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:194:25)
+    at SyncOrchestrator.performSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:298:51)
+    at SyncOrchestrator.forceSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:228:22)
+    at C:\Users\david\hopeai-copilot-v0\tests\auth-sync-integration.test.ts:363:22
+    at file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:533:5
+    at runTest (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:1056:11)
+­ƒÆ¥ ÔØî [STORAGE] Sync operation failed
+­ƒÆ¥ ÔØî [STORAGE] Forced sync failed
+
+ [31m├ù[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m4. Sincronizaci├│n entre Almacenamiento Local y Remoto[2m > [22mdebe sincronizar nueva sesi├│n de chat con el servidor[33m 1017[2mms[22m[39m
+[31m   ÔåÆ expected undefined to be defined[39m
+stderr | tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 4. Sincronizaci├│n entre Almacenamiento Local y Remoto > debe detectar y resolver conflictos de sincronizaci├│n
+API request failed: GET /api/storage/sync-metadata Error: API request failed
+    at APIClientAdapter.makeRequest (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:85:15)
+    at APIClientAdapter.getSyncMetadata (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:194:14)
+    at SyncOrchestrator.performSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:298:26)
+    at SyncOrchestrator.forceSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:228:22)
+    at C:\Users\david\hopeai-copilot-v0\tests\auth-sync-integration.test.ts:428:26
+    at file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:533:5
+    at runTest (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:1056:11)
+    at runSuite (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:1205:15)
+API request failed: GET /api/storage/changes?since=1970-01-01T00:00:00.000Z Error: API request failed
+    at APIClientAdapter.makeRequest (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:85:15)
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at processImmediate (node:internal/timers:459:9)
+    at APIClientAdapter.getChangesSince (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:225:12)
+    at SyncOrchestrator.detectServerChanges (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:428:14)
+    at SyncOrchestrator.performSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:306:29)
+    at SyncOrchestrator.forceSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:228:22)
+    at C:\Users\david\hopeai-copilot-v0\tests\auth-sync-integration.test.ts:428:26
+    at file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:533:5
+    at runTest (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:1056:11)
+­ƒÆ¥ ÔØî [STORAGE] Failed to detect server changes
+API request failed: POST /api/storage/chat-sessions Error: API request failed
+    at APIClientAdapter.makeRequest (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:85:15)
+    at APIClientAdapter.saveChatSession (C:\Users\david\hopeai-copilot-v0\lib\storage\api-client-adapter.ts:97:5)
+    at SyncOrchestrator.pushLocalChangeToServer (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:605:9)
+    at SyncOrchestrator.processPendingOperation (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:686:9)
+    at SyncOrchestrator.processPendingOperations (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:666:11)
+    at SyncOrchestrator.performSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:338:7)
+    at SyncOrchestrator.forceSync (C:\Users\david\hopeai-copilot-v0\lib\sync\sync-orchestrator.ts:228:22)
+    at C:\Users\david\hopeai-copilot-v0\tests\auth-sync-integration.test.ts:428:26
+    at file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:533:5
+    at runTest (file:///C:/Users/david/hopeai-copilot-v0/node_modules/@vitest/runner/dist/index.js:1056:11)
+­ƒÆ¥ ÔØî [STORAGE] Local operation 1762559261980-ew460y36o failed permanently
+
+[90mstdout[2m | tests/auth-sync-integration.test.ts[2m > [22m[2mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m[2m4. Sincronizaci├│n entre Almacenamiento Local y Remoto[2m > [22m[2mdebe detectar y resolver conflictos de sincronizaci├│n
+[22m[39mSync result: {
+  "success": true,
+  "changesProcessed": 1,
+  "timestamp": "2025-11-07T23:47:41.980Z",
+  "metadata": {
+    "lastSyncAt": "2025-11-07T23:47:41.980Z",
+    "lastLocalUpdate": "2025-11-07T23:47:41.983Z",
+    "lastServerUpdate": "2025-11-07T23:47:41.980Z",
+    "syncVersion": 1,
+    "checksum": "1762559261983-p67txh",
+    "deviceId": "device-1762559261979-6k8y4fkxb",
+    "userId": "user-123"
+  },
+  "conflictsDetected": 0,
+  "conflictsResolved": 0,
+  "conflictsRequireReview": 0,
+  "isOffline": true
+}
+Sync result details: {
+  success: [33mtrue[39m,
+  error: [90mundefined[39m,
+  changesProcessed: [33m1[39m,
+  conflictsDetected: [33m0[39m,
+  conflictsResolved: [33m0[39m
+}
+
+stderr | tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 6. Escenarios de Error y Recuperaci├│n > debe manejar errores de red y reintentar sincronizaci├│n
+­ƒÆ¥ ÔØî [STORAGE] Sync operation failed
+­ƒÆ¥ ÔØî [STORAGE] Forced sync failed
+
+ [31m├ù[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m4. Sincronizaci├│n entre Almacenamiento Local y Remoto[2m > [22mdebe manejar escenario offline y sincronizar al volver online[33m 1020[2mms[22m[39m
+[31m   ÔåÆ expected 0 to be greater than 0[39m
+ [31m├ù[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m4. Sincronizaci├│n entre Almacenamiento Local y Remoto[2m > [22mdebe detectar y resolver conflictos de sincronizaci├│n
+[31m   ÔåÆ expected undefined to be defined[39m
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m5. Gesti├│n de Estado y M├®tricas[2m > [22mdebe proporcionar estad├¡sticas de almacenamiento
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m5. Gesti├│n de Estado y M├®tricas[2m > [22mdebe manejar cierre de sesi├│n y limpieza
+ [32mÔ£ô[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m6. Escenarios de Error y Recuperaci├│n[2m > [22mdebe manejar errores de autenticaci├│n y recuperarse
+[90mstdout[2m | tests/auth-sync-integration.test.ts[2m > [22m[2mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m[2m6. Escenarios de Error y Recuperaci├│n[2m > [22m[2mdebe manejar errores de red y reintentar sincronizaci├│n
+[22m[39mNetwork retry test - callCount: [33m2[39m
+Network retry test - syncResult: {
+  "success": false,
+  "error": "Sync already in progress",
+  "timestamp": "2025-11-07T23:47:43.023Z"
+}
+
+ [31m├ù[39m tests/auth-sync-integration.test.ts[2m > [22mFlujo Completo: Autenticaci├│n y Sincronizaci├│n[2m > [22m6. Escenarios de Error y Recuperaci├│n[2m > [22mdebe manejar errores de red y reintentar sincronizaci├│n[33m 1016[2mms[22m[39m
+[31m   ÔåÆ expected false to be true // Object.is equality[39m
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ» Failed Tests 4 ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»
+
+ FAIL  tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 4. Sincronizaci├│n entre Almacenamiento Local y Remoto > debe sincronizar nueva sesi├│n de chat con el servidor
+AssertionError: expected undefined to be defined
+ ÔØ» tests/auth-sync-integration.test.ts:343:24
+    341|         call[0].includes('/api/storage/chat-sessions')
+    342|       )
+    343|       expect(syncCall).toBeDefined()
+       |                        ^
+    344|     })
+    345| 
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[1/4]ÔÄ»
+
+ FAIL  tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 4. Sincronizaci├│n entre Almacenamiento Local y Remoto > debe manejar escenario offline y sincronizar al volver online
+AssertionError: expected 0 to be greater than 0
+ ÔØ» tests/auth-sync-integration.test.ts:370:33
+    368|       // Verificar que hay operaciones pendientes
+    369|       const pendingOps = await localStorage.getPendingOperations()
+    370|       expect(pendingOps.length).toBeGreaterThan(0)
+       |                                 ^
+    371|       
+    372|       // Simular reconexi├│n - mock exitoso
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[2/4]ÔÄ»
+
+ FAIL  tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 4. Sincronizaci├│n entre Almacenamiento Local y Remoto > debe detectar y resolver conflictos de sincronizaci├│n
+AssertionError: expected undefined to be defined
+ ÔØ» tests/auth-sync-integration.test.ts:447:28
+    445|         call[0].includes('/api/storage/conflicts/resolve')
+    446|       )
+    447|       expect(conflictCall).toBeDefined()
+       |                            ^
+    448|     })
+    449|   })
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[3/4]ÔÄ»
+
+ FAIL  tests/auth-sync-integration.test.ts > Flujo Completo: Autenticaci├│n y Sincronizaci├│n > 6. Escenarios de Error y Recuperaci├│n > debe manejar errores de red y reintentar sincronizaci├│n
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ÔØ» tests/auth-sync-integration.test.ts:568:34
+    566|       // Assert - deber├¡a haber reintentado y eventualmente tener ├®xito
+    567|       expect(callCount).toBeGreaterThan(1)
+    568|       expect(syncResult.success).toBe(true)
+       |                                  ^
+    569|     })
+    570|   })
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[4/4]ÔÄ»
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m10 passed[39m[22m[90m (14)[39m
+[2m   Start at [22m 20:47:36
+[2m   Duration [22m 5.82s[2m (transform 167ms, setup 65ms, collect 1.45s, tests 3.10s, environment 793ms, prepare 144ms)[22m
+

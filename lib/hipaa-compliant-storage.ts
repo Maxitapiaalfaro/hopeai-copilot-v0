@@ -72,6 +72,67 @@ export class HIPAACompliantStorage {
   private cleanupTimer: NodeJS.Timeout | null = null
   private initialized = false
 
+  // Normaliza diferentes formatos encriptados a Buffer para decrypt()
+  private ensureEncryptedBuffer(data: any): Buffer {
+    if (!data) throw new Error('Encrypted data missing')
+    if (Buffer.isBuffer(data)) return data
+    if (data instanceof Uint8Array) return Buffer.from(data)
+    if (data instanceof ArrayBuffer) return Buffer.from(new Uint8Array(data))
+    if (data && (data as any).buffer != null) {
+      const b = (data as any).buffer
+      if (Buffer.isBuffer(b)) return b as Buffer
+      if (b instanceof Uint8Array) return Buffer.from(b)
+      if (b instanceof ArrayBuffer) return Buffer.from(new Uint8Array(b))
+    }
+    if (data && typeof (data as any).value === 'function') {
+      try {
+        const v = (data as any).value(true)
+        if (Buffer.isBuffer(v)) return v
+        if (v instanceof Uint8Array) return Buffer.from(v)
+      } catch {}
+    }
+    if (data && Array.isArray((data as any).data) && (data as any).type === 'Buffer') {
+      return Buffer.from((data as any).data)
+    }
+    if (typeof data === 'string') {
+      const s = data.trim()
+      // Intentar parsear JSON del formato antiguo { data, iv, tag }
+      if (s.startsWith('{') && s.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(s)
+          return this.ensureEncryptedBuffer(parsed)
+        } catch {
+          // continuar
+        }
+      }
+      const isHex = /^[0-9a-fA-F]+$/.test(s)
+      if (isHex && s.length % 2 === 0) {
+        return Buffer.from(s, 'hex')
+      }
+      try {
+        return Buffer.from(s, 'base64')
+      } catch {
+        return Buffer.from(s, 'utf8')
+      }
+    }
+    if (data && typeof data === 'object') {
+      const maybe = data as any
+      if (maybe.data && maybe.iv && maybe.tag) {
+        const decode = (x: string): Buffer => {
+          if (typeof x !== 'string') return Buffer.from([])
+          const hex = /^[0-9a-fA-F]+$/.test(x)
+          if (hex && x.length % 2 === 0) return Buffer.from(x, 'hex')
+          try { return Buffer.from(x, 'base64') } catch { return Buffer.from(x, 'utf8') }
+        }
+        const iv = decode(maybe.iv)
+        const tag = decode(maybe.tag)
+        const ct = decode(maybe.data)
+        return Buffer.concat([iv, tag, ct])
+      }
+    }
+    throw new Error('Encrypted data is not a Buffer/Binary/Uint8Array')
+  }
+
   /**
    * Inicializa el sistema de storage
    */
@@ -309,7 +370,7 @@ export class HIPAACompliantStorage {
       }
 
       // Desencriptar
-      const decryptedData = decrypt(row.encrypted_data)
+      const decryptedData = decrypt(this.ensureEncryptedBuffer(row.encrypted_data))
       const chatState = JSON.parse(decryptedData) as ChatState
 
       // Calentar cache
@@ -467,11 +528,11 @@ export class HIPAACompliantStorage {
         LIMIT ? OFFSET ?
       `)
 
-      const rows = stmt.all(userId, pageSize, offset) as { encrypted_data: Buffer }[]
+      const rows = stmt.all(userId, pageSize, offset) as { encrypted_data: Buffer | string | any }[]
 
       // Desencriptar sesiones
       const items: ChatState[] = rows.map(row => {
-        const decrypted = decrypt(row.encrypted_data)
+        const decrypted = decrypt(this.ensureEncryptedBuffer(row.encrypted_data))
         return JSON.parse(decrypted) as ChatState
       })
 
@@ -557,18 +618,18 @@ export class HIPAACompliantStorage {
 
     try {
       let stmt: Database.Statement
-      let rows: { encrypted_data: Buffer }[]
+      let rows: { encrypted_data: Buffer | string | any }[]
 
       if (sessionId) {
         stmt = this.db.prepare('SELECT encrypted_data FROM clinical_files WHERE session_id = ?')
-        rows = stmt.all(sessionId) as { encrypted_data: Buffer }[]
+        rows = stmt.all(sessionId) as { encrypted_data: Buffer | string | any }[]
       } else {
         stmt = this.db.prepare('SELECT encrypted_data FROM clinical_files')
-        rows = stmt.all() as { encrypted_data: Buffer }[]
+        rows = stmt.all() as { encrypted_data: Buffer | string | any }[]
       }
 
       return rows.map(row => {
-        const decrypted = decrypt(row.encrypted_data)
+        const decrypted = decrypt(this.ensureEncryptedBuffer(row.encrypted_data))
         return JSON.parse(decrypted) as ClinicalFile
       })
 
@@ -586,11 +647,11 @@ export class HIPAACompliantStorage {
 
     try {
       const stmt = this.db.prepare('SELECT encrypted_data FROM clinical_files WHERE file_id = ?')
-      const row = stmt.get(fileId) as { encrypted_data: Buffer } | undefined
+      const row = stmt.get(fileId) as { encrypted_data: Buffer | string | any } | undefined
 
       if (!row) return null
 
-      const decrypted = decrypt(row.encrypted_data)
+      const decrypted = decrypt(this.ensureEncryptedBuffer(row.encrypted_data))
       return JSON.parse(decrypted) as ClinicalFile
 
     } catch (error) {
@@ -658,11 +719,11 @@ export class HIPAACompliantStorage {
 
     try {
       const stmt = this.db.prepare('SELECT encrypted_data FROM fichas_clinicas WHERE ficha_id = ?')
-      const row = stmt.get(fichaId) as { encrypted_data: Buffer } | undefined
+      const row = stmt.get(fichaId) as { encrypted_data: Buffer | string | any } | undefined
 
       if (!row) return null
 
-      const decrypted = decrypt(row.encrypted_data)
+      const decrypted = decrypt(this.ensureEncryptedBuffer(row.encrypted_data))
       return JSON.parse(decrypted) as FichaClinicaState
 
     } catch (error) {
@@ -679,10 +740,10 @@ export class HIPAACompliantStorage {
 
     try {
       const stmt = this.db.prepare('SELECT encrypted_data FROM fichas_clinicas WHERE paciente_id = ?')
-      const rows = stmt.all(pacienteId) as { encrypted_data: Buffer }[]
+      const rows = stmt.all(pacienteId) as { encrypted_data: Buffer | string | any }[]
 
       return rows.map(row => {
-        const decrypted = decrypt(row.encrypted_data)
+        const decrypted = decrypt(this.ensureEncryptedBuffer(row.encrypted_data))
         return JSON.parse(decrypted) as FichaClinicaState
       })
 

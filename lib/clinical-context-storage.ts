@@ -2,7 +2,7 @@ import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinica
 
 export class ClinicalContextStorage {
   private dbName = "hopeai_clinical_db"
-  private version = 5
+  private version = 9
   private db: IDBDatabase | null = null
 
   async initialize(): Promise<void> {

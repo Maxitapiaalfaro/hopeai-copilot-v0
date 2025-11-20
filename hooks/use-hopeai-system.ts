@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
+import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system-client"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
+import { getEffectiveUserId } from '@/lib/user-identity'
 import { getSSEClient } from '@/lib/sse-client'
 
 // ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
@@ -70,7 +71,7 @@ interface UseHopeAISystemReturn {
 export function useHopeAISystem(): UseHopeAISystemReturn {
   const [systemState, setSystemState] = useState<HopeAISystemState>({
     sessionId: null,
-    userId: 'demo_user',
+    userId: '',
     mode: 'clinical_supervision',
     activeAgent: 'socratico',
     isLoading: false,
@@ -212,6 +213,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         hopeAISystem.current = await HopeAISystemSingleton.getInitializedInstance()
         console.log('🚀 HopeAI Singleton System inicializado con Intelligent Intent Router')
         
+        // Set effective userId for client-side operations (authenticated or anonymous)
+        const effectiveUserId = getEffectiveUserId()
+        console.log('👤 Effective userId resolved for client:', effectiveUserId)
+        
         // Automatic session restoration disabled to prevent unwanted conversation loading
         // when users navigate to the Patients tab. Sessions should only be restored
         // through explicit user actions (e.g., clicking on a conversation or starting a new one)
@@ -219,6 +224,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         
         setSystemState(prev => ({
           ...prev,
+          userId: effectiveUserId,
           isInitialized: true,
           isLoading: false
         }))
@@ -311,7 +317,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     let sessionMetaToUse = sessionMeta || systemState.sessionMeta
     
     if (!sessionIdToUse) {
-      const userId = systemState.userId || 'demo_user'
+      const userId = systemState.userId
       const mode = systemState.mode || 'clinical_supervision'
       const agent = systemState.activeAgent || 'socratico'
       
@@ -475,6 +481,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       // 🔥 NUEVA ARQUITECTURA: Usar SSE Client y retornar AsyncGenerator para streaming real
       const sseClient = getSSEClient()
+      try { sseClient.cancel() } catch {}
 
       // Variables para acumular datos durante el streaming
       let finalRoutingInfo: any = null
@@ -488,9 +495,12 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               sessionId: sessionIdToUse!,
               message,
               useStreaming,
-              userId: systemState.userId || 'demo_user',
+              userId: systemState.userId,
               suggestedAgent: undefined,
-              sessionMeta: sessionMetaToUse
+              sessionMeta: {
+                ...sessionMetaToUse,
+                userId: systemState.userId
+              }
             },
             {
               onBullet: handleBulletUpdate,

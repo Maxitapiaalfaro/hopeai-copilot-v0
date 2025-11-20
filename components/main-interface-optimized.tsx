@@ -11,7 +11,6 @@ import { X } from "lucide-react"
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
-import { HopeAISystemSingleton } from "@/lib/hopeai-system"
 import { useSessionMetrics } from "@/hooks/use-session-metrics"
 import { useConversationHistory } from "@/hooks/use-conversation-history"
 import { usePioneerInvitation } from "@/hooks/use-pioneer-invitation"
@@ -24,6 +23,9 @@ import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
 import { PatientContextComposer, PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
 import { clinicalStorage } from "@/lib/clinical-context-storage"
+import { useAuth } from "@/hooks/use-auth"
+import { useToast } from "@/components/ui/use-toast"
+import { AuthModal } from "@/components/auth/auth-modal"
 
 // Componente de métricas de rendimiento (opcional, para desarrollo)
 function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
@@ -43,6 +45,7 @@ function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
 }
 
 export function MainInterfaceOptimized({ showDebugElements = true }: { showDebugElements?: boolean }) {
+  const { isAuthenticated, isLoading: isAuthLoading, openAuthModal } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarActiveTab, setSidebarActiveTab] = useState<'conversations' | 'patients'>('conversations')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -61,6 +64,13 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const [lastGeneratedFichaId, setLastGeneratedFichaId] = useState<string | null>(null)
   const [clearPatientSelectionTrigger, setClearPatientSelectionTrigger] = useState(0)
   const [fichaInitialTab, setFichaInitialTab] = useState<"ficha" | "insights">("ficha")
+
+  // Efecto para mostrar modal de autenticación si no está autenticado
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      openAuthModal()
+    }
+  }, [isAuthenticated, isAuthLoading, openAuthModal])
   const isMobile = useMediaQuery("(max-width: 768px)")
 
   // Usar el sistema HopeAI
@@ -89,7 +99,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     trackAgentChange,
     getSessionStats
   } = useSessionMetrics({
-    userId: systemState.userId || "demo_user",
+    userId: systemState.userId,
     sessionId: systemState.sessionId || "temp_session",
     currentAgent: systemState.activeAgent
   })
@@ -99,7 +109,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
   // Cargar conversaciones para asegurar que tenemos el conteo correcto
   useEffect(() => {
-    const userId = systemState.userId || "demo_user"
+    const userId = systemState.userId
     if (userId) {
       loadConversations(userId)
     }
@@ -112,7 +122,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     recordResponse,
     eligibilityMetrics
   } = usePioneerInvitation({
-    userId: systemState.userId || "demo_user",
+    userId: systemState.userId,
     sessionId: systemState.sessionId || "temp_session",
     currentAgent: systemState.activeAgent,
     isActive: true,
@@ -136,8 +146,19 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     const loadPendingFiles = async () => {
       if (systemState.sessionId) {
         try {
-          const files = await HopeAISystemSingleton.getPendingFilesForSession(systemState.sessionId)
-          setPendingFiles(files)
+          const res = await fetch(`/api/documents?sessionId=${encodeURIComponent(systemState.sessionId)}`)
+          if (!res.ok) {
+            console.error('❌ Error HTTP cargando documentos:', res.status)
+            setPendingFiles([])
+            return
+          }
+          const data = await res.json()
+          if (data && data.success && Array.isArray(data.documents)) {
+            setPendingFiles(data.documents)
+          } else {
+            console.warn('⚠️ Respuesta inesperada al cargar documentos:', data)
+            setPendingFiles([])
+          }
         } catch (error) {
           console.error('❌ Error cargando archivos pendientes:', error)
         }
@@ -352,9 +373,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       // Generar resumen del paciente priorizando ficha clínica más reciente si existe
       let patientSummary: string
       try {
-        const { getStorageAdapter } = await import("@/lib/server-storage-adapter")
-        const storage = await getStorageAdapter()
-        const fichas = await storage.getFichasClinicasByPaciente(patient.id)
+        const fichas = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
         const latestFicha = fichas
           .filter((f: FichaClinicaState) => f.estado === 'completado')
           .sort((a: FichaClinicaState, b: FichaClinicaState) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
@@ -918,5 +937,53 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         </div>
       )}
     </div>
+  )
+}
+
+// Agregar el componente AuthModal al final del archivo
+export function MainInterfaceOptimizedWithAuth({ showDebugElements = true }: { showDebugElements?: boolean }) {
+  const { isAuthenticated, isLoading, isAuthModalOpen, openAuthModal, closeAuthModal, authModalMode } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="text-muted-foreground">Verificando autenticación...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <div className="flex h-screen w-full items-center justify-center bg-background">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-primary mb-4">Aurora</h1>
+            <p className="text-muted-foreground mb-8">Tu asistente clínico de inteligencia artificial</p>
+            <Button onClick={() => openAuthModal()} size="lg">
+              Iniciar Sesión
+            </Button>
+          </div>
+        </div>
+        <AuthModal 
+          isOpen={isAuthModalOpen} 
+          onClose={closeAuthModal}
+          defaultTab={authModalMode}
+        />
+      </>
+    )
+  }
+
+  return (
+    <>
+      <MainInterfaceOptimized showDebugElements={showDebugElements} />
+      <AuthModal 
+         isOpen={isAuthModalOpen} 
+         onClose={closeAuthModal}
+         defaultTab={authModalMode}
+       />
+    </>
   )
 }

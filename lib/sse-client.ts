@@ -8,6 +8,7 @@
  */
 
 import type { ReasoningBullet } from '@/types/clinical-types'
+import authService from '@/lib/auth/auth-service'
 
 /**
  * Tipos de eventos SSE
@@ -63,10 +64,14 @@ export class SSEClient {
     try {
       console.log('🔄 [SSEClient] Enviando mensaje vía SSE...')
 
-      const response = await fetch('/api/send-message', {
+      const tokens = authService.getCurrentTokens()
+      const authToken = tokens?.access || ''
+      let response = await fetch('/api/send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          ...(params.userId ? { 'X-User-Id': params.userId } : {}),
         },
         body: JSON.stringify({
           sessionId: params.sessionId,
@@ -77,6 +82,7 @@ export class SSEClient {
           sessionMeta: params.sessionMeta,
         }),
         signal: this.abortController.signal,
+        credentials: 'include'
       })
 
       if (!response.ok) {
@@ -131,10 +137,14 @@ export class SSEClient {
     try {
       console.log('🔄 [SSEClient] Enviando mensaje vía SSE (streaming)...')
 
+      const tokens = authService.getCurrentTokens()
+      const authToken = tokens?.access || ''
       const response = await fetch('/api/send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          ...(params.userId ? { 'X-User-Id': params.userId } : {}),
         },
         body: JSON.stringify({
           sessionId: params.sessionId,
@@ -145,6 +155,7 @@ export class SSEClient {
           sessionMeta: params.sessionMeta,
         }),
         signal: this.abortController.signal,
+        credentials: 'include'
       })
 
       if (!response.ok) {

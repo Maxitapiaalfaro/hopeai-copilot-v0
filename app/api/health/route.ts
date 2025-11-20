@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminRequest } from '@/lib/security/admin-auth';
 import { getConfigSummary, isSecureMode } from '@/lib/env-validator';
 import { getPrewarmStatus } from '@/lib/server-prewarm';
+import { databaseService } from '@/lib/database';
 
 /**
  * 🔒 HEALTH CHECK API - Endpoint de health check con autenticación
@@ -34,6 +35,16 @@ export async function GET(request: NextRequest) {
     const prewarmStatus = getPrewarmStatus()
 
     // Health check básico (público)
+    let dbStatus: { connected: boolean; pingMs?: number; error?: string } = { connected: false };
+    try {
+      const t0 = Date.now();
+      await databaseService.initialize();
+      await databaseService.db.command({ ping: 1 });
+      dbStatus = { connected: true, pingMs: Date.now() - t0 };
+    } catch (e) {
+      dbStatus = { connected: false, error: String((e as any)?.message || e as any) };
+    }
+
     const basicHealth = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -42,7 +53,8 @@ export async function GET(request: NextRequest) {
       prewarm: {
         ready: prewarmStatus.isPrewarmed,
         duration: prewarmStatus.duration
-      }
+      },
+      database: dbStatus
     };
 
     // Si no se solicita detalle, devolver solo básico
@@ -90,7 +102,8 @@ export async function GET(request: NextRequest) {
           prewarming: prewarmStatus.isPrewarming,
           prewarmDuration: prewarmStatus.duration,
           prewarmError: prewarmStatus.error
-        }
+        },
+        database: dbStatus
       }
     };
 

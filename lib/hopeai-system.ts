@@ -498,7 +498,8 @@ export class HopeAISystem {
     if (!this._initialized) await this.initialize()
 
     // 🎯 START COMPREHENSIVE METRICS TRACKING
-    const interactionId = sessionMetricsTracker.startInteraction(sessionId, 'demo_user', message);
+    const metricsUserId = sessionMeta?.userId ?? 'default-user'
+    const interactionId = sessionMetricsTracker.startInteraction(sessionId, metricsUserId, message);
 
     // Load current session state or create a new one if it doesn't exist
     let currentState = await this.storage.loadChatSession(sessionId)
@@ -506,14 +507,15 @@ export class HopeAISystem {
       console.log(`[HopeAI] Creating new session: ${sessionId}`)
       currentState = {
         sessionId,
-        userId: 'default-user',
-        activeAgent: 'socratic-philosopher', // Default agent
+        userId: sessionMeta?.userId ?? 'default-user',
+        // Ensure required fields
+        mode: (sessionMeta?.clinicalMode as ClinicalMode) ?? 'therapeutic_assistance',
+        activeAgent: (sessionMeta?.activeAgent as AgentType) ?? 'socratico',
         history: [],
         metadata: {
           createdAt: new Date(),
           lastUpdated: new Date(),
           totalTokens: 0,
-          messageCount: 0,
           fileReferences: []
         },
         clinicalContext: {
@@ -524,6 +526,13 @@ export class HopeAISystem {
       }
       // Save the new session
       await this.saveChatSessionBoth(currentState)
+      // Ensure router has an active chat session for this new conversation
+      try {
+        await clinicalAgentRouter.createChatSession(sessionId, currentState.activeAgent, currentState.history)
+        console.log(`[HopeAI] Agent router session opened for ${sessionId} with agent ${currentState.activeAgent}`)
+      } catch (e) {
+        console.error(`[HopeAI] Failed to open agent router session for ${sessionId}:`, e)
+      }
     } else if (sessionMeta?.patient?.reference && currentState.clinicalContext?.patientId !== sessionMeta.patient.reference) {
       // Update existing session with patient context if provided and different
       console.log(`🏥 [HopeAI] Updating existing session with patient context: ${sessionMeta.patient.reference}`)
@@ -772,7 +781,7 @@ export class HopeAISystem {
         orchestrationResult = await this.dynamicOrchestrator.orchestrate(
           message,
           sessionId,
-          currentState.userId || 'demo_user',
+          currentState.userId || 'default-user',
           resolvedSessionFiles,
           onBulletUpdate,
           externalConversationHistory,
@@ -880,7 +889,7 @@ export class HopeAISystem {
             () => {
               // Registrar métricas del cambio de agente
               trackAgentSwitch({
-                userId: currentState.userId || 'demo_user',
+                userId: currentState.userId || 'default-user',
                 sessionId,
                 fromAgent: currentState.activeAgent,
                 toAgent: routingResult.targetAgent,
@@ -1009,7 +1018,7 @@ export class HopeAISystem {
           () => {
             // Registrar métricas del cambio de agente
             trackAgentSwitch({
-              userId: currentState.userId || 'demo_user',
+              userId: currentState.userId || 'default-user',
               sessionId,
               fromAgent: currentState.activeAgent,
               toAgent: routingResult.targetAgent,
@@ -1049,6 +1058,18 @@ export class HopeAISystem {
       }
 
       console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
+
+      // Safety: ensure the router has an active session before sending
+      try {
+        const hasActiveSession = clinicalAgentRouter.getActiveChatSessions().has(sessionId)
+        if (!hasActiveSession) {
+          const agentForRouter = routingResult?.targetAgent || currentState.activeAgent
+          console.log(`[HopeAI] 🔧 No active router session. Creating for agent: ${agentForRouter}`)
+          await clinicalAgentRouter.createChatSession(sessionId, agentForRouter, currentState.history)
+        }
+      } catch (e) {
+        console.warn(`[HopeAI] Could not verify/create router session:`, e)
+      }
 
       const response = await clinicalAgentRouter.sendMessage(
         sessionId,
@@ -1167,7 +1188,7 @@ export class HopeAISystem {
       async () => {
         // Registrar métricas del cambio de agente
         trackAgentSwitch({
-          userId: currentState.userId || 'demo_user',
+          userId: currentState.userId || 'default-user',
           sessionId,
           fromAgent: currentState.activeAgent,
           toAgent: newAgent,

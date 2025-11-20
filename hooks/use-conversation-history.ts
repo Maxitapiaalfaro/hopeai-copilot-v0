@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { clinicalStorage } from "@/lib/clinical-context-storage"
-import { getStorageAdapter } from "@/lib/server-storage-adapter"
+import { APIClientAdapter } from "@/lib/storage/api-client-adapter"
+import type { StorageAdapterConfig } from "@/lib/storage/unified-storage-interface"
+import { AuthService } from "@/lib/auth/auth-service"
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse } from "@/types/clinical-types"
 
 interface ConversationSummary {
@@ -56,6 +58,33 @@ export function useConversationHistory(): UseConversationHistoryReturn {
   const conversationCache = useRef<Map<string, ConversationSummary>>(new Map())
   const lastLoadedUserId = useRef<string | null>(null)
 
+  // Cliente API (evita importar storage del servidor en cliente)
+  const apiClientRef = useRef<APIClientAdapter | null>(null)
+  const apiClientUserRef = useRef<string | null>(null)
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || '/api'
+  const apiConfig: StorageAdapterConfig = {
+    enableEncryption: false,
+    maxRetryAttempts: 3,
+    syncInterval: 60_000,
+    offlineTimeout: 15_000,
+  }
+
+  const ensureApiClient = useCallback(async (userId: string): Promise<APIClientAdapter> => {
+    const tokens = AuthService.getInstance().getCurrentTokens()
+    const authToken = tokens?.access
+    if (!authToken) {
+      throw new Error('Usuario no autenticado. Inicie sesión para continuar.')
+    }
+
+    if (!apiClientRef.current || apiClientUserRef.current !== userId) {
+      const client = new APIClientAdapter(baseURL, authToken, apiConfig)
+      await client.initialize(userId)
+      apiClientRef.current = client
+      apiClientUserRef.current = userId
+    }
+    return apiClientRef.current!
+  }, [baseURL])
+
   // Función para convertir ChatState a ConversationSummary
   const createConversationSummary = useCallback((chatState: ChatState): ConversationSummary => {
     const lastUserMessage = chatState.history
@@ -102,15 +131,13 @@ export function useConversationHistory(): UseConversationHistoryReturn {
 
     try {
       console.log(`🔄 Cargando conversaciones paginadas para usuario: ${userId}`)
-      
-      const storage = await getStorageAdapter()
+      const apiClient = await ensureApiClient(userId)
       const paginationOptions: PaginationOptions = {
         pageSize: 20, // Tamaño de página optimizado según el SDK
         sortBy: 'lastUpdated',
         sortOrder: 'desc'
       }
-      
-      const result = await storage.getUserSessionsPaginated(userId, paginationOptions)
+      const result = await apiClient.getUserSessions(paginationOptions)
       
       console.log(`📊 Cargada página con ${result.items.length} conversaciones de ${result.totalCount} totales`)
       
@@ -149,16 +176,14 @@ export function useConversationHistory(): UseConversationHistoryReturn {
 
     try {
       console.log(`🔄 Cargando más conversaciones...`)
-      
-      const storage = await getStorageAdapter()
+      const apiClient = await ensureApiClient(currentUserId)
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
         pageToken: nextPageToken,
         sortBy: 'lastUpdated',
         sortOrder: 'desc'
       }
-      
-      const result = await storage.getUserSessionsPaginated(currentUserId, paginationOptions)
+      const result = await apiClient.getUserSessions(paginationOptions)
       
       console.log(`📊 Cargadas ${result.items.length} conversaciones adicionales`)
       
@@ -196,9 +221,9 @@ export function useConversationHistory(): UseConversationHistoryReturn {
   const openConversation = useCallback(async (sessionId: string): Promise<ChatState | null> => {
     try {
       setError(null)
-      
-      const storage = await getStorageAdapter()
-      const chatState = await storage.loadChatSession(sessionId)
+      const userId = currentUserId || AuthService.getInstance().getCurrentUser()?.id || ''
+      const apiClient = await ensureApiClient(userId)
+      const chatState = await apiClient.loadChatSession(sessionId)
       
       if (!chatState) {
         throw new Error(`Conversación no encontrada: ${sessionId}`)
@@ -218,9 +243,9 @@ export function useConversationHistory(): UseConversationHistoryReturn {
   const deleteConversation = useCallback(async (sessionId: string) => {
     try {
       setError(null)
-      
-      const storage = await getStorageAdapter()
-      await storage.deleteChatSession(sessionId)
+      const userId = currentUserId || AuthService.getInstance().getCurrentUser()?.id || ''
+      const apiClient = await ensureApiClient(userId)
+      await apiClient.deleteChatSession(sessionId)
       
       // Actualizar la lista local
       const updatedConversations = allConversations.filter(conv => conv.sessionId !== sessionId)

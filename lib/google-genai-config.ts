@@ -61,12 +61,8 @@ function createGenAIClient(): GoogleGenAI {
   // Check if we're in a browser environment
   if (typeof window !== 'undefined') {
     // Browser environment - use NEXT_PUBLIC_GOOGLE_AI_API_KEY
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
-    if (!apiKey) {
-      throw new Error('NEXT_PUBLIC_GOOGLE_AI_API_KEY no está configurada en el entorno del navegador');
-    }
-    // Browser must use Gemini API via apiKey
-    return new GoogleGenAI({ apiKey });
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY || ''
+    return new GoogleGenAI({ apiKey })
   } else {
     // Server environment - use Vertex AI with Google Cloud credentials
     const project = process.env.GOOGLE_CLOUD_PROJECT;
@@ -117,7 +113,6 @@ function createGenAIClient(): GoogleGenAI {
 
 export const genAI = createGenAIClient()
 
-// Export the ai instance for the new SDK API
 export const ai = genAI
 
 // ---------------------------------------------------------------------------
@@ -141,6 +136,47 @@ function createFilesClient(): GoogleGenAI {
 }
 
 export const aiFiles = createFilesClient()
+
+function createIntentClient(): GoogleGenAI {
+  const apiKeyServer = process.env.GOOGLE_AI_API_KEY || process.env.GENAI_API_KEY
+  const apiKeyBrowser = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY
+  const apiKey = typeof window === 'undefined' ? (apiKeyServer || apiKeyBrowser) : apiKeyBrowser
+  if (!apiKey) {
+    throw new Error('GOOGLE_AI_API_KEY (or NEXT_PUBLIC_GOOGLE_AI_API_KEY) is required for intent classification')
+  }
+  return new GoogleGenAI({ apiKey })
+}
+
+export const aiIntent = createIntentClient()
+
+function createGlobalVertexClient(): GoogleGenAI {
+  const project = process.env.GOOGLE_CLOUD_PROJECT
+  if (!project) {
+    throw new Error('GOOGLE_CLOUD_PROJECT no está configurada para Vertex AI en entorno de servidor')
+  }
+  const googleAuthOptions = resolveGoogleAuthOptions()
+  const hasExplicitCreds = !!(googleAuthOptions.credentials || googleAuthOptions.keyFilename)
+  if (!hasExplicitCreds) {
+    throw new Error(
+      'Credenciales de Google Cloud no configuradas para Vertex AI. ' +
+      'Configure GOOGLE_APPLICATION_CREDENTIALS_JSON, GOOGLE_SERVICE_ACCOUNT_EMAIL/GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY, ' +
+      'o GOOGLE_APPLICATION_CREDENTIALS con una ruta válida.'
+    )
+  }
+  return new GoogleGenAI({
+    vertexai: true,
+    project,
+    location: 'global',
+    googleAuthOptions,
+    apiVersion: process.env.GENAI_API_VERSION || 'v1'
+  })
+}
+
+export const aiGlobal = (typeof window === 'undefined')
+  ? createGlobalVertexClient()
+  : new GoogleGenAI({
+      apiKey: process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY || ''
+    })
 
 // Clinical safety settings for healthcare applications
 export const clinicalSafetySettings = [

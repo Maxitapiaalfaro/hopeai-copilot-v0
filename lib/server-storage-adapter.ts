@@ -32,12 +32,18 @@ export class ServerStorageAdapter {
       // Detectar entorno Vercel o modo memoria forzado
       const isVercel = !!process.env.VERCEL || typeof process.env.VERCEL_ENV !== 'undefined'
       const forceMemory = process.env.HOPEAI_STORAGE_MODE === 'memory'
+      const useMongo = process.env.HOPEAI_STORAGE_MODE === 'mongodb' || process.env.USE_MONGODB_STORAGE === 'true'
 
       if (isVercel || forceMemory) {
         console.log('🔧 [ServerStorageAdapter] Using MemoryServerStorage (Vercel/serverless-safe)')
         const { MemoryServerStorage } = await import('./server-storage-memory')
         this.storage = new MemoryServerStorage()
         console.log('✅ [ServerStorageAdapter] MemoryServerStorage instance created')
+      } else if (useMongo) {
+        console.log('🔧 [ServerStorageAdapter] Using MongoServerStorage for chat sessions')
+        const { MongoServerStorage } = await import('./storage/mongo-server-storage')
+        this.storage = new MongoServerStorage()
+        console.log('✅ [ServerStorageAdapter] MongoServerStorage instance created')
       } else {
         console.log('🔧 [ServerStorageAdapter] Creating HIPAACompliantStorage instance...')
         // Dynamic import para evitar bundling en cliente
@@ -203,11 +209,13 @@ export async function getStorageAdapter() {
   console.log('🔍 [getStorageAdapter] Environment check:', {
     isServer,
     hasWindow: typeof window !== 'undefined',
-    nodeEnv: process.env.NODE_ENV
+    nodeEnv: process.env.NODE_ENV,
+    storageMode: process.env.HOPEAI_STORAGE_MODE
   })
 
   if (isServer) {
-    console.log('🖥️ [getStorageAdapter] Running on SERVER - using SQLite storage')
+    const storageMode = process.env.HOPEAI_STORAGE_MODE || 'sqlite'
+    console.log(`🖥️ [getStorageAdapter] Running on SERVER - storage mode: ${storageMode}`)
     // Usar singleton global verdadero para mantener el estado entre llamadas API
     if (!globalThis.__hopeai_storage_adapter__) {
       console.log('🔧 [getStorageAdapter] Creating new ServerStorageAdapter instance (Singleton Global)')

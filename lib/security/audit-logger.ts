@@ -14,7 +14,8 @@ export type AuditEventType =
   | 'admin_access'
   | 'security_violation'
   | 'authentication_failure'
-  | 'authentication_success';
+  | 'authentication_success'
+  | 'user_action';
 
 export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
 
@@ -317,6 +318,18 @@ export const auditLog = {
       userAgent,
       endpoint,
       metadata
+    });
+  },
+
+  userAction: (userId: string, action: string, status: 'success' | 'failed', metadata?: Record<string, any>) => {
+    getAuditLogger().log({
+      type: 'user_action',
+      severity: status === 'failed' ? 'medium' : 'low',
+      message: `User ${userId} performed ${action} (${status})`,
+      ip: metadata?.ip || 'unknown',
+      userAgent: metadata?.userAgent || 'unknown',
+      endpoint: 'user-action',
+      metadata: { ...metadata, userId, action, status }
     });
   }
 };

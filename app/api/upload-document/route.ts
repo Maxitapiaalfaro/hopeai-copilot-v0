@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { HopeAISystemSingleton } from '@/lib/hopeai-system'
 import { ClinicalFileManager } from '@/lib/clinical-file-manager'
+import { userIdentityFromRequest } from '@/lib/auth/server-identity'
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const sessionId = formData.get('sessionId') as string
-    const userId = formData.get('userId') as string
+    const identity = await userIdentityFromRequest(request)
+    const userIdFromForm = formData.get('userId') as string
+    const userId = identity?.userId || userIdFromForm
     
     if (!file || !sessionId || !userId) {
       return NextResponse.json(
-        { error: 'file, sessionId y userId son requeridos' },
+        { error: 'file y sessionId son requeridos; usuario debe estar autenticado' },
         { status: 400 }
       )
     }

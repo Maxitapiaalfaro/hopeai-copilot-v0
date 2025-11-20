@@ -477,8 +477,13 @@ export class EntityExtractionEngine {
     const startTime = Date.now()
     
     try {
+      const approxTokens = Math.ceil((text || '').length / 4)
+      let inputText = text
+      if (approxTokens > 8000) {
+        inputText = (text || '').slice(0, 32000)
+      }
       // Construir prompt contextual
-      const contextualPrompt = this.buildContextualPrompt(text, sessionContext)
+      const contextualPrompt = this.buildContextualPrompt(inputText, sessionContext)
       
       // Ejecutar extracción usando Google GenAI
       const extractionResult = await ai.models.generateContent({

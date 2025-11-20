@@ -13,7 +13,7 @@
 
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionDeclaration } from '@google/genai';
 import { ai } from './google-genai-config';
-import type { ChatMessage } from '@/types/clinical-types';
+import type { ChatMessage } from '../types/clinical-types';
 import * as Sentry from '@sentry/nextjs';
 
 /**

@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { clinicalStorage } from "@/lib/clinical-context-storage"
-import { getStorageAdapter } from "@/lib/server-storage-adapter"
+import { APIClientAdapter } from "@/lib/storage/api-client-adapter"
+import type { StorageAdapterConfig } from "@/lib/storage/unified-storage-interface"
+import { AuthService } from "@/lib/auth/auth-service"
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse, PatientRecord } from "@/types/clinical-types"
 
 interface PatientConversationSummary {
@@ -66,6 +68,33 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
   const conversationCache = useRef<Map<string, PatientConversationSummary>>(new Map())
   const lastLoadedPatientId = useRef<string | null>(null)
   const lastLoadedUserId = useRef<string | null>(null)
+
+  // Cliente API (evita importar storage del servidor en cliente)
+  const apiClientRef = useRef<APIClientAdapter | null>(null)
+  const apiClientUserRef = useRef<string | null>(null)
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || '/api'
+  const apiConfig: StorageAdapterConfig = {
+    enableEncryption: false,
+    maxRetryAttempts: 3,
+    syncInterval: 60_000,
+    offlineTimeout: 15_000,
+  }
+
+  const ensureApiClient = useCallback(async (userId: string): Promise<APIClientAdapter> => {
+    const tokens = AuthService.getInstance().getCurrentTokens()
+    const authToken = tokens?.access
+    if (!authToken) {
+      throw new Error('Usuario no autenticado. Inicie sesión para continuar.')
+    }
+
+    if (!apiClientRef.current || apiClientUserRef.current !== userId) {
+      const client = new APIClientAdapter(baseURL, authToken, apiConfig)
+      await client.initialize(userId)
+      apiClientRef.current = client
+      apiClientUserRef.current = userId
+    }
+    return apiClientRef.current!
+  }, [baseURL])
 
   // Función para convertir ChatState a PatientConversationSummary
   const createPatientConversationSummary = useCallback((chatState: ChatState): PatientConversationSummary | null => {
@@ -138,8 +167,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
 
     try {
       console.log(`🔄 Cargando conversaciones para paciente: ${patientId}`)
-      
-      const storage = await getStorageAdapter()
+      const apiClient = await ensureApiClient(userId)
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
         sortBy: 'lastUpdated',
@@ -147,7 +175,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
       }
       
       // Cargar todas las conversaciones del usuario y filtrar por paciente
-      const result = await storage.getUserSessionsPaginated(userId, paginationOptions)
+      const result = await apiClient.getUserSessions(paginationOptions)
       
       console.log(`📊 Procesando ${result.items.length} conversaciones para filtrar por paciente`)
       
@@ -205,8 +233,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
 
     try {
       console.log(`🔄 Cargando más conversaciones para paciente: ${currentPatientId}`)
-      
-      const storage = await getStorageAdapter()
+      const apiClient = await ensureApiClient(currentUserId)
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
         pageToken: nextPageToken,
@@ -214,7 +241,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
         sortOrder: 'desc'
       }
       
-      const result = await storage.getUserSessionsPaginated(currentUserId, paginationOptions)
+      const result = await apiClient.getUserSessions(paginationOptions)
       
       // Filtrar nuevas conversaciones del paciente
       const newPatientSummaries = result.items
@@ -254,8 +281,9 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     
     try {
       console.log(`🔓 Abriendo conversación: ${sessionId}`)
-      const storage = await getStorageAdapter()
-      const chatState = await storage.loadChatSession(sessionId)
+      const userId = currentUserId || AuthService.getInstance().getCurrentUser()?.id || ''
+      const apiClient = await ensureApiClient(userId)
+      const chatState = await apiClient.loadChatSession(sessionId)
       
       if (!chatState) {
         throw new Error('Conversación no encontrada')
@@ -277,8 +305,9 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     
     try {
       console.log(`🗑️ Eliminando conversación: ${sessionId}`)
-      const storage = await getStorageAdapter()
-      await storage.deleteChatSession(sessionId)
+      const userId = currentUserId || AuthService.getInstance().getCurrentUser()?.id || ''
+      const apiClient = await ensureApiClient(userId)
+      await apiClient.deleteChatSession(sessionId)
       
       // Actualizar estado local
       const updatedConversations = allConversations.filter(conv => conv.sessionId !== sessionId)
@@ -305,8 +334,9 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
       console.log(`✏️ Actualizando título de conversación: ${sessionId} -> ${newTitle}`)
       
       // Primero actualizar en el storage persistente
-      const storage = await getStorageAdapter()
-      const chatState = await storage.loadChatSession(sessionId)
+      const userId = currentUserId || AuthService.getInstance().getCurrentUser()?.id || ''
+      const apiClient = await ensureApiClient(userId)
+      const chatState = await apiClient.loadChatSession(sessionId)
       
       if (chatState) {
         // Actualizar el título en el ChatState
@@ -316,7 +346,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
         }
         
         // Guardar en storage
-        await storage.saveChatSession(updatedChatState)
+        await apiClient.saveChatSession(updatedChatState)
         console.log(`💾 Título guardado en storage persistente`)
       }
       

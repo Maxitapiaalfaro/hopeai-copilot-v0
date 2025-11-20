@@ -6,6 +6,8 @@ import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ReasoningBullet } from '@/types/clinical-types'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
+import { userIdentityFromRequest } from '@/lib/auth/server-identity'
+import { authMiddleware } from '@/lib/auth/middleware'
 
 /**
  * SSE Event Types
@@ -36,8 +38,22 @@ export async function POST(request: NextRequest) {
   })
 
   try {
+    // Autenticación obligatoria
+    const authError = await authMiddleware(request)
+    if (authError) return authError
+
     requestBody = await request.json()
-    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta } = requestBody
+    const { sessionId, message, useStreaming = true, suggestedAgent } = requestBody
+    let sessionMeta = requestBody.sessionMeta || {}
+    const identity = await userIdentityFromRequest(request)
+    const userId = identity?.userId
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Ensure sessionMeta carries user identity for downstream storage
+    sessionMeta = { ...sessionMeta, userId }
+    
 
     console.log('🔄 [API /send-message] Enviando mensaje con sistema optimizado...', {
       sessionId,
@@ -52,9 +68,12 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
+        let heartbeat: any = null
+        let isOpen = true
 
         // Helper para enviar y hacer flush inmediato
         const sendSSE = (event: SSEEvent) => {
+          if (!isOpen) return
           const data = formatSSE(event)
           const encoded = encoder.encode(data)
           controller.enqueue(encoded)
@@ -68,6 +87,9 @@ export async function POST(request: NextRequest) {
           // 🔥 CRÍTICO: Enviar evento inicial inmediatamente para establecer conexión SSE
           // Esto previene buffering y confirma que el stream está activo
           controller.enqueue(encoder.encode(': connected\n\n'))
+          heartbeat = setInterval(() => {
+            controller.enqueue(encoder.encode(': ping\n\n'))
+          }, 15000)
 
           console.log('🔧 [API /send-message] Getting global orchestration system...')
           const systemStartTime = Date.now()
@@ -225,6 +247,8 @@ export async function POST(request: NextRequest) {
             }
           })
         } finally {
+          if (heartbeat) clearInterval(heartbeat)
+          isOpen = false
           controller.close()
         }
       }

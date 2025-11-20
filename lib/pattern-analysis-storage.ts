@@ -47,7 +47,7 @@ export class PatternAnalysisStorage {
   private static instance: PatternAnalysisStorage | null = null;
   private db: IDBDatabase | null = null;
   private readonly dbName = 'hopeai_clinical_db'; // Shared with ClinicalContextStorage
-  private readonly dbVersion = 5; // Must match ClinicalContextStorage version
+  private readonly dbVersion = 9; // Must match ClinicalContextStorage/EnhancedIndexedDBAdapter version
   private readonly storeName = 'pattern_analyses';
   private readonly patientIndexName = 'patientId'; // Match index name in schema
 

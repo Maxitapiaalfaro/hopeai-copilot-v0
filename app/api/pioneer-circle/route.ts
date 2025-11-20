@@ -3,6 +3,8 @@ import * as Sentry from '@sentry/nextjs'
 import { trackConversion } from '@/lib/enhanced-sentry-metrics-tracker'
 import { getGlobalOrchestrationSystem } from '@/lib/orchestration-singleton'
 import type { AgentType } from '@/types/clinical-types'
+import { authMiddleware } from '@/lib/auth/middleware'
+import { userIdentityFromRequest } from '@/lib/auth/server-identity'
 
 /**
  * Endpoint especializado para Pioneer Circle
@@ -13,8 +15,17 @@ export async function POST(request: NextRequest) {
   let requestBody: any
 
   try {
+    const authResult = await authMiddleware(request)
+    if (authResult) {
+      return authResult
+    }
+
     requestBody = await request.json()
-    const { email, userMetrics, currentAgent, sessionId, userId } = requestBody
+    const { email, userMetrics, currentAgent, sessionId, userId: userIdInput } = requestBody
+
+    const identity = await userIdentityFromRequest(request)
+    const user = (request as any).user
+    const userId = identity?.userId || userIdInput || user?.id
 
     console.log('🌟 Pioneer Circle: Nueva solicitud recibida', {
       email: email.substring(0, 3) + '***', // Privacy protection
@@ -25,10 +36,17 @@ export async function POST(request: NextRequest) {
     })
 
     // Validar datos requeridos
-    if (!email || !userMetrics || !sessionId || !userId) {
+    if (!email || !userMetrics || !sessionId) {
       return NextResponse.json(
-        { error: 'email, userMetrics, sessionId, y userId son requeridos' },
+        { error: 'email, userMetrics y sessionId son requeridos' },
         { status: 400 }
+      )
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'No authenticated user' },
+        { status: 401 }
       )
     }
 
@@ -138,4 +156,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-} 
+}

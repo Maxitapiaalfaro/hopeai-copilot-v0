@@ -10,7 +10,7 @@
  */
 
 import { GoogleGenAI, FunctionCallingConfigMode, FunctionDeclaration } from '@google/genai';
-import { ai } from './google-genai-config';
+import { aiIntent } from './google-genai-config';
 import { ClinicalAgentRouter } from './clinical-agent-router';
 import { EntityExtractionEngine, ExtractedEntity, EntityExtractionResult } from './entity-extraction-engine';
 import { ToolRegistry, ClinicalTool, ToolCategory, ClinicalDomain } from './tool-registry';
@@ -245,7 +245,7 @@ export class IntelligentIntentRouter {
     agentRouter: ClinicalAgentRouter,
     config: Partial<RouterConfig> = {}
   ) {
-    this.ai = ai; // Usar la instancia configurada del SDK unificado
+    this.ai = aiIntent;
     this.agentRouter = agentRouter;
     this.entityExtractor = new EntityExtractionEngine();
     this.toolRegistry = ToolRegistry.getInstance();
@@ -316,8 +316,14 @@ export class IntelligentIntentRouter {
       };
 
     } catch (error) {
-      console.error('[IntelligentIntentRouter] Error en orquestación:', error);
-      return this.createFallbackOrchestration(userInput, sessionContext, `Orchestration error: ${error}`);
+      const heuristic = this.heuristicClassifyIntent(userInput);
+      return {
+        selectedAgent: this.mapFunctionToAgent(heuristic.functionName),
+        contextualTools: [],
+        toolMetadata: [],
+        confidence: heuristic.confidence,
+        reasoning: 'Heuristic routing due to model error'
+      };
     }
   }
 
@@ -367,7 +373,7 @@ export class IntelligentIntentRouter {
           const safeTurns = operationalMetadata.session_risk_state!.consecutiveSafeTurns;
           const riskType = operationalMetadata.session_risk_state!.riskType || 'unknown';
 
-          console.log(`🚨 [IntentRouter] RISK SESSION ACTIVE - Maintaining clinico routing (safe turns: ${safeTurns})`);
+          console.log(`🚨 [IntentRouter] RISK SESSION ACTIVE - Maintaining socratico routing (safe turns: ${safeTurns})`);
 
           // Extracción básica de entidades para contexto
           const entityExtractionResult = await this.entityExtractor.extractEntities(
@@ -376,7 +382,7 @@ export class IntelligentIntentRouter {
           );
 
           const routingDecision: RoutingDecision = {
-            agent: 'clinico',
+            agent: 'socratico',
             confidence: 1.0,
             reason: RoutingReason.SENSITIVE_CONTENT_OVERRIDE,
             metadata_factors: [
@@ -390,19 +396,19 @@ export class IntelligentIntentRouter {
 
           const enrichedContext = this.createEnrichedContext(
             userInput,
-            'activar_modo_clinico',
+            'activar_modo_socratico',
             entityExtractionResult.entities,
             entityExtractionResult,
             optimizedContext,
             currentAgent,
-            `RISK SESSION ACTIVE: Maintaining clinico routing (safe turns: ${safeTurns}/3)`,
+            `RISK SESSION ACTIVE: Maintaining socratico routing (safe turns: ${safeTurns}/3)`,
             1.0,
             false
           );
 
           return {
             success: true,
-            targetAgent: 'clinico',
+            targetAgent: 'socratico',
             enrichedContext,
             requiresUserClarification: false,
             routingDecision
@@ -415,7 +421,7 @@ export class IntelligentIntentRouter {
         const edgeCaseSensitive = this.isEdgeCaseSensitiveContent(userInput, operationalMetadata);
 
         if (edgeCaseRisk || edgeCaseStress || edgeCaseSensitive) {
-          console.log('🚨 [IntentRouter] EDGE CASE DETECTED - Routing to clinico (robust agent)');
+          console.log('🚨 [IntentRouter] EDGE CASE DETECTED');
 
           // Extracción básica de entidades para contexto
           const entityExtractionResult = await this.entityExtractor.extractEntities(
@@ -439,8 +445,10 @@ export class IntelligentIntentRouter {
             reason = RoutingReason.SENSITIVE_CONTENT_OVERRIDE;
           }
 
+          const targetAgent = edgeCaseRisk ? 'socratico' : 'clinico';
+          const intentName = edgeCaseRisk ? 'activar_modo_socratico' : 'activar_modo_clinico';
           const routingDecision: RoutingDecision = {
-            agent: 'clinico',
+            agent: targetAgent,
             confidence: 1.0,
             reason,
             metadata_factors: [
@@ -454,19 +462,19 @@ export class IntelligentIntentRouter {
 
           const enrichedContext = this.createEnrichedContext(
             userInput,
-            'activar_modo_clinico',
+            intentName,
             entityExtractionResult.entities,
             entityExtractionResult,
             optimizedContext,
             currentAgent,
-            `EDGE CASE OVERRIDE: ${edgeCaseType} detected → Routing to robust agent (clinico)`,
+            `EDGE CASE OVERRIDE: ${edgeCaseType} detected → Routing to ${targetAgent}`,
             1.0,
             false
           );
 
           return {
             success: true,
-            targetAgent: 'clinico',
+            targetAgent: targetAgent,
             enrichedContext,
             requiresUserClarification: false,
             routingDecision
@@ -522,7 +530,28 @@ export class IntelligentIntentRouter {
       const classificationResult = await this.classifyIntent(userInput, optimizedContext, enrichedSessionContext);
       
       if (!classificationResult) {
-        return this.handleFallback(userInput, optimizedContext, 'No se pudo clasificar la intención');
+        const heuristic = this.heuristicClassifyIntent(userInput);
+        const entityExtractionResult = await this.entityExtractor.extractEntities(
+          userInput,
+          enrichedSessionContext
+        );
+        const enrichedContext = this.createEnrichedContext(
+          userInput,
+          heuristic.functionName,
+          entityExtractionResult.entities,
+          entityExtractionResult,
+          optimizedContext,
+          currentAgent,
+          'Heuristic routing due to classification failure',
+          heuristic.confidence,
+          false
+        );
+        return {
+          success: true,
+          targetAgent: this.mapFunctionToAgent(heuristic.functionName),
+          enrichedContext,
+          requiresUserClarification: false
+        };
       }
 
       // Paso 3: Extracción semántica de entidades
@@ -723,6 +752,14 @@ export class IntelligentIntentRouter {
         // 🎯 CRITICAL: Combinar function declarations de intención + entidades
         const entityFunctions = this.entityExtractor.getEntityExtractionFunctions();
         const combinedFunctions = [...this.intentFunctions, ...entityFunctions];
+        const allowedNames: string[] = [
+          'activar_modo_socratico',
+          'activar_modo_clinico',
+          'activar_modo_academico',
+          ...entityFunctions
+            .map(f => f.name)
+            .filter((n): n is string => typeof n === 'string')
+        ];
         
         const result = await this.ai.models.generateContent({
           model: 'gemini-2.5-flash-lite',
@@ -733,7 +770,8 @@ export class IntelligentIntentRouter {
             }],
             toolConfig: {
               functionCallingConfig: {
-                mode: FunctionCallingConfigMode.ANY
+                mode: FunctionCallingConfigMode.ANY,
+                allowedFunctionNames: allowedNames
               }
             },
             temperature: 0.0,
@@ -745,7 +783,8 @@ export class IntelligentIntentRouter {
         });
   
         // Validar respuesta
-        if (!result.candidates || result.candidates.length === 0 || !result.functionCalls || result.functionCalls.length === 0) {
+        const functionCalls = this.extractFunctionCallsFromResult(result);
+        if (!result.candidates || result.candidates.length === 0 || functionCalls.length === 0) {
           console.warn('⚠️ No se recibieron function calls en la respuesta combinada');
           return {
             intentResult: null,
@@ -758,8 +797,6 @@ export class IntelligentIntentRouter {
             }
           };
         }
-  
-        const functionCalls = result.functionCalls;
   
         // Separar function calls de intención vs entidades
         const intentCalls = functionCalls.filter(fc => 
@@ -794,9 +831,9 @@ export class IntelligentIntentRouter {
         return { intentResult, entityResult };
   
       } catch (error) {
-        console.error('[IntelligentIntentRouter] Error en clasificación combinada:', error);
+        const heuristic = this.heuristicClassifyIntent(userInput);
         return {
-          intentResult: null,
+          intentResult: heuristic,
           entityResult: {
             entities: [],
             primaryEntities: [],
@@ -851,8 +888,7 @@ export class IntelligentIntentRouter {
         return null;
       }
 
-      const functionCalls = result.functionCalls;
-
+      const functionCalls = this.extractFunctionCallsFromResult(result);
       if (!functionCalls || functionCalls.length === 0) {
         console.warn('⚠️ No se recibieron function calls en la respuesta');
         return null;
@@ -876,8 +912,7 @@ export class IntelligentIntentRouter {
         requiresClarification: confidence < 0.7
       };
     } catch (error) {
-      console.error('[IntentRouter] Error en clasificación:', error);
-      return null;
+      return this.heuristicClassifyIntent(userInput);
     }
   }
 
@@ -904,6 +939,8 @@ Agente Activo: ${enrichedSessionContext.activeAgent || 'No especificado'}
 `;
     }
 
+    const approxTokens = Math.ceil((userInput || '').length / 4);
+    const displayInput = approxTokens > 8000 ? (userInput || '').slice(0, 32000) : userInput;
     return `Eres el Orquestador Inteligente de HopeAI, especializado en clasificación semántica de intenciones para profesionales de psicología.
 
 **SISTEMA DE ESPECIALISTAS DISPONIBLES:**
@@ -941,7 +978,7 @@ ${(() => {
 })()}
 
 **MENSAJE A CLASIFICAR:**
-"${userInput}"
+"${displayInput}"
 
 **PROTOCOLO DE CLASIFICACIÓN:**
 
@@ -963,6 +1000,44 @@ ${(() => {
 *Académico (0.91):* "Busca metaanálisis sobre la efectividad de TCC en adolescentes con depresión"
 
 **EJECUTA LA CLASIFICACIÓN AHORA:**`;
+  }
+
+  private heuristicClassifyIntent(userInput: string): IntentClassificationResult {
+    const input = (userInput || '').toLowerCase();
+    const clinicoKeys = ['documentar','documentación','nota','resumen','soap','expediente','bitácora','redactar','estructurar','formato','especialista en documentación'];
+    const academicoKeys = ['estudio','evidencia','investigación','paper','científica','metaanálisis','ensayo','rct','académico','investigador académico'];
+    const clinicoMatch = clinicoKeys.some(k => input.includes(k));
+    const academicoMatch = academicoKeys.some(k => input.includes(k));
+    if (clinicoMatch) {
+      return { functionName: 'activar_modo_clinico', parameters: {}, confidence: 0.8, requiresClarification: false };
+    }
+    if (academicoMatch) {
+      return { functionName: 'activar_modo_academico', parameters: {}, confidence: 0.85, requiresClarification: false };
+    }
+    return { functionName: 'activar_modo_socratico', parameters: {}, confidence: 0.75, requiresClarification: false };
+  }
+
+  private extractFunctionCallsFromResult(result: any): Array<{ name?: string; args?: any }> {
+    try {
+      const calls: Array<{ name?: string; args?: any }> = [];
+      const candidates = result?.candidates || [];
+      for (const cand of candidates) {
+        const parts = cand?.content?.parts || [];
+        for (const part of parts) {
+          if (part?.functionCall && part.functionCall.name) {
+            calls.push({ name: part.functionCall.name, args: part.functionCall.args || {} });
+          }
+        }
+      }
+      // Fallback: some SDK shapes may expose functionCalls at root
+      const rootCalls = result?.functionCalls || [];
+      for (const rc of rootCalls) {
+        if (rc?.name) calls.push({ name: rc.name, args: rc.args || {} });
+      }
+      return calls;
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -1134,6 +1209,9 @@ ${(() => {
       /usar (el )?modo cl[íi]nico/,
       /quiero (el )?modo cl[íi]nico/,
       /necesito (el )?modo cl[íi]nico/,
+      /especialista en documentaci[oó]n/,
+      /agente especialista en documentaci[oó]n/,
+      /quiero que me responda el agente (especialista )?en documentaci[oó]n/,
       /switch to clinical/,
       /activate clinical/
     ];
@@ -1145,6 +1223,8 @@ ${(() => {
       /usar (el )?modo acad[ée]mico/,
       /quiero (el )?modo acad[ée]mico/,
       /necesito (el )?modo acad[ée]mico/,
+      /investigador acad[ée]mico/,
+      /agente acad[ée]mico/,
       /switch to academic/,
       /activate academic/
     ];
@@ -1493,13 +1573,14 @@ ${(() => {
     sessionContext: Content[],
     reason: string
   ): OrchestrationResult {
+    const heuristic = this.heuristicClassifyIntent(userInput);
+    const selectedAgent = this.mapFunctionToAgent(heuristic.functionName);
     const fallbackTools = this.toolRegistry.getBasicTools();
-    
     return {
-      selectedAgent: this.config.fallbackAgent,
+      selectedAgent,
       contextualTools: fallbackTools.map(tool => tool.declaration),
       toolMetadata: fallbackTools,
-      confidence: 0.5,
+      confidence: heuristic.confidence,
       reasoning: `Fallback activado: ${reason}`
     };
   }
@@ -1633,9 +1714,9 @@ ${(() => {
   ): RoutingDecision {
     const detectedFactors: string[] = [];
 
-    // 1. DETECCIÓN: Caso límite por riesgo crítico → Clínico
+    // 1. DETECCIÓN: Caso límite por riesgo crítico → Socratico
     if (this.isEdgeCaseRisk(operationalMetadata)) {
-      console.log('🚨 EDGE CASE DETECTED: Risk critical → Routing to clinico');
+      console.log('🚨 EDGE CASE DETECTED: Risk critical → Routing to socratico');
       detectedFactors.push('risk_level_' + operationalMetadata.risk_level);
       if (operationalMetadata.risk_flags_active.length > 0) {
         detectedFactors.push(...operationalMetadata.risk_flags_active.map(flag => 'risk_flag_' + flag));
@@ -1645,7 +1726,7 @@ ${(() => {
       }
 
       return {
-        agent: 'clinico',
+        agent: 'socratico',
         confidence: 1.0,
         reason: RoutingReason.CRITICAL_RISK_OVERRIDE,
         metadata_factors: detectedFactors,

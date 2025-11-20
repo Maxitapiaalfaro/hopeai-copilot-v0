@@ -31,7 +31,7 @@ import { auditLog } from '@/lib/security/audit-logger';
  * Configuración del middleware
  */
 const SECURITY_CONFIG = {
-  enableRateLimiting: process.env.NODE_ENV === 'production',
+  enableRateLimiting: process.env.RATE_LIMIT_ENABLED === 'true',
   enableAdminAuth: process.env.NODE_ENV === 'production',
   enableSecurityHeaders: true,
   logSuspiciousActivity: process.env.NODE_ENV === 'production'
@@ -45,6 +45,17 @@ const EXCLUDED_PATHS = [
   '/static',
   '/favicon.ico',
   '/monitoring', // Sentry tunnel
+];
+
+const CRITICAL_PATHS = [
+  '/api/send-message',
+  '/api/sync',
+  '/api/storage/sync-metadata',
+  '/api/storage/chat-sessions',
+  '/api/storage/clinical-files',
+  '/api/storage/patients',
+  '/api/storage/pattern-analyses',
+  '/api/storage/changes'
 ];
 
 /**
@@ -267,16 +278,23 @@ export async function middleware(request: NextRequest) {
     return applySecurityHeaders(authCheck.response);
   }
 
-  // 🔒 3. Aplicar rate limiting
-  const rateLimitType = getRateLimitType(pathname);
-  const rateLimitCheck = checkRequestRateLimit(request, rateLimitType);
-  if (!rateLimitCheck.allowed && rateLimitCheck.response) {
+  // 🔒 3. Aplicar rate limiting (omitido en rutas críticas de chat/sync)
+  const isCritical = CRITICAL_PATHS.some(path => pathname.startsWith(path));
+  let rateLimitResponse: NextResponse | null = null;
+  if (!isCritical) {
+    const rateLimitType = getRateLimitType(pathname);
+    const rateLimitCheck = checkRequestRateLimit(request, rateLimitType);
+    if (!rateLimitCheck.allowed && rateLimitCheck.response) {
+      rateLimitResponse = rateLimitCheck.response;
+    }
+  }
+  if (rateLimitResponse) {
     // Log rate limit excedido
     const ip = getRequestIdentifier(request);
     const userAgent = request.headers.get('user-agent') || 'unknown';
     auditLog.rateLimitExceeded(ip, userAgent, pathname);
 
-    return applySecurityHeaders(rateLimitCheck.response);
+    return applySecurityHeaders(rateLimitResponse);
   }
 
   // 🔒 4. Continuar con la request y aplicar headers de seguridad
@@ -300,4 +318,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
-

@@ -10,7 +10,7 @@ export class PatientPersistence implements PatientStorageAdapter {
   private static instance: PatientPersistence | null = null
   private db: IDBDatabase | null = null
   private readonly dbName = "HopeAI_PatientLibrary"
-  private readonly dbVersion = 1
+  private readonly dbVersion = 6
   private readonly storeName = "patients"
   private readonly indexName = "patients_index"
 

@@ -123,14 +123,72 @@ export function encrypt(plaintext: string | Buffer): Buffer {
 export function decrypt(encryptedData: Buffer): string {
   try {
     const key = getEncryptionKey()
+
+    const ensureBufferLike = (data: any): Buffer => {
+      if (Buffer.isBuffer(data)) return data
+      if (data instanceof Uint8Array) return Buffer.from(data)
+      if (data instanceof ArrayBuffer) return Buffer.from(new Uint8Array(data))
+      if (data && typeof data === 'object') {
+        if ((data as any).type === 'Buffer' && Array.isArray((data as any).data)) {
+          return Buffer.from((data as any).data)
+        }
+        if (typeof (data as any).value === 'function') {
+          try {
+            const v = (data as any).value(true)
+            if (Buffer.isBuffer(v)) return v
+            if (v instanceof Uint8Array) return Buffer.from(v)
+          } catch {}
+        }
+        if ((data as any).buffer != null) {
+          const b = (data as any).buffer
+          if (Buffer.isBuffer(b)) return b
+          if (b instanceof Uint8Array) return Buffer.from(b)
+          if (b instanceof ArrayBuffer) return Buffer.from(new Uint8Array(b))
+        }
+        const maybe = data as any
+        if (maybe && maybe.data && maybe.iv && maybe.tag) {
+          const decode = (x: string): Buffer => {
+            if (typeof x !== 'string') return Buffer.from([])
+            const hex = /^[0-9a-fA-F]+$/.test(x)
+            if (hex && x.length % 2 === 0) return Buffer.from(x, 'hex')
+            try { return Buffer.from(x, 'base64') } catch { return Buffer.from(x, 'utf8') }
+          }
+          const ivB = decode(maybe.iv)
+          const tagB = decode(maybe.tag)
+          const ctB = decode(maybe.data)
+          return Buffer.concat([ivB, tagB, ctB])
+        }
+      }
+      if (typeof data === 'string') {
+        const s = data.trim()
+        if (s.startsWith('{') && s.endsWith('}')) {
+          try {
+            const parsed = JSON.parse(s)
+            return ensureBufferLike(parsed)
+          } catch {}
+        }
+        const isHex = /^[0-9a-fA-F]+$/.test(s)
+        if (isHex && s.length % 2 === 0) {
+          return Buffer.from(s, 'hex')
+        }
+        try {
+          return Buffer.from(s, 'base64')
+        } catch {
+          return Buffer.from(s, 'utf8')
+        }
+      }
+      throw new Error('Encrypted data is not a Buffer/Binary/Uint8Array')
+    }
+
+    const normalized = ensureBufferLike(encryptedData as any)
     
     // Extraer componentes del buffer
-    const iv = encryptedData.subarray(0, ENCRYPTION_CONFIG.ivLength)
-    const authTag = encryptedData.subarray(
+    const iv = normalized.subarray(0, ENCRYPTION_CONFIG.ivLength)
+    const authTag = normalized.subarray(
       ENCRYPTION_CONFIG.ivLength, 
       ENCRYPTION_CONFIG.ivLength + ENCRYPTION_CONFIG.authTagLength
     )
-    const ciphertext = encryptedData.subarray(
+    const ciphertext = normalized.subarray(
       ENCRYPTION_CONFIG.ivLength + ENCRYPTION_CONFIG.authTagLength
     )
     

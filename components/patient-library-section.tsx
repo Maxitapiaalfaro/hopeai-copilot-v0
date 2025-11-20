@@ -66,7 +66,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePatientLibrary } from "@/hooks/use-patient-library"
-import { useHopeAISystem } from "@/hooks/use-hopeai-system"
+import { useHopeAI } from "@/hooks/use-hopeai"
 import { useToast } from "@/hooks/use-toast"
 import type { PatientRecord } from "@/types/clinical-types"
 import { formatDistanceToNow } from "date-fns"
@@ -81,7 +81,7 @@ import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 function PatientSessionCount({ patient }: { patient: PatientRecord }) {
   const [sessionCount, setSessionCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const { systemState } = useHopeAISystem()
+  const { currentSession } = useHopeAI()
 
   useEffect(() => {
     const loadSessionCount = async () => {
@@ -90,7 +90,7 @@ function PatientSessionCount({ patient }: { patient: PatientRecord }) {
         const { clinicalStorage } = await import('@/lib/clinical-context-storage')
         await clinicalStorage.initialize()
         
-        const allSessions = await clinicalStorage.getUserSessions(systemState.userId || 'demo_user')
+        const allSessions = await clinicalStorage.getUserSessions(currentSession?.userId || 'demo_user')
         const patientSessions = allSessions.filter(session => 
           session.clinicalContext?.patientId === patient.id
         )
@@ -112,7 +112,7 @@ function PatientSessionCount({ patient }: { patient: PatientRecord }) {
     }
     
     loadSessionCount()
-  }, [patient.id, systemState.userId])
+  }, [patient.id, currentSession?.userId])
 
   if (loading) return null
 
@@ -181,7 +181,7 @@ export function PatientLibrarySection({
     loadFichasClinicas,
     fichasClinicas
   } = usePatientLibrary()
-  const { systemState } = useHopeAISystem()
+  const { currentSession } = useHopeAI()
   const { toast } = useToast()
   const [isFichaOpen, setIsFichaOpen] = useState(false)
   const [showConversationHistory, setShowConversationHistory] = useState(false)
@@ -478,11 +478,11 @@ export function PatientLibrarySection({
   const handleGenerateFicha = async (patient: PatientRecord) => {
     try {
       const sessionState = {
-        sessionId: systemState.sessionId || `temp_${Date.now()}`,
-        userId: systemState.userId,
-        mode: systemState.mode,
-        activeAgent: systemState.activeAgent,
-        history: systemState.history,
+        sessionId: currentSession?.sessionId || `temp_${Date.now()}`,
+        userId: currentSession?.userId || 'demo_user',
+        mode: currentSession?.mode || 'clinical_supervision',
+        activeAgent: currentSession?.activeAgent || 'socratico',
+        history: currentSession?.history || [],
         metadata: {
           createdAt: new Date(),
           lastUpdated: new Date(),
@@ -503,7 +503,8 @@ export function PatientLibrarySection({
         notes: patient.notes,
         confidentiality: patient.confidentiality
       }
-      const conversationSummary = systemState.history.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
+      const recentHistory = currentSession?.history || []
+      const conversationSummary = recentHistory.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
       const fichaId = `ficha_${patient.id}_${Date.now()}`
       await generateFichaClinica(patient.id, fichaId, { ...sessionState, patientForm, conversationSummary } as any)
       await loadFichasClinicas(patient.id)
@@ -1109,11 +1110,11 @@ export function PatientLibrarySection({
           onRefresh={async () => { await loadFichasClinicas(selectedPatient.id) }}
           onGenerate={async () => {
             const sessionState = {
-              sessionId: systemState.sessionId || `temp_${Date.now()}`,
-              userId: systemState.userId,
-              mode: systemState.mode,
-              activeAgent: systemState.activeAgent,
-              history: systemState.history,
+              sessionId: currentSession?.sessionId || `temp_${Date.now()}`,
+              userId: currentSession?.userId || 'demo_user',
+              mode: currentSession?.mode || 'clinical_supervision',
+              activeAgent: currentSession?.activeAgent || 'socratico',
+              history: currentSession?.history || [],
               metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
               clinicalContext: { patientId: selectedPatient.id, supervisorId: undefined, sessionType: 'standard', confidentialityLevel: selectedPatient.confidentiality?.accessLevel || 'medium' }
             }
@@ -1124,7 +1125,8 @@ export function PatientLibrarySection({
               notes: selectedPatient.notes,
               confidentiality: selectedPatient.confidentiality
             }
-            const conversationSummary = systemState.history.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
+            const recentHistory = currentSession?.history || []
+            const conversationSummary = recentHistory.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
             const fichaId = `ficha_${selectedPatient.id}_${Date.now()}`
             await generateFichaClinica(selectedPatient.id, fichaId, { ...sessionState, patientForm, conversationSummary } as any)
             await loadFichasClinicas(selectedPatient.id)
@@ -1162,7 +1164,7 @@ export function PatientLibrarySection({
             <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 overflow-y-auto max-h-[calc(100svh-7rem)] sm:max-h-[60vh] overscroll-contain touch-pan-y">
               <PatientConversationHistory
                 patient={historyPatient}
-                userId={"demo_user"}
+                userId={currentSession?.userId || "demo_user"}
                 className="pb-2"
                 onConversationSelect={async (sessionId: string) => {
                     console.log('📱 Cargando conversación desde historial de paciente:', sessionId);

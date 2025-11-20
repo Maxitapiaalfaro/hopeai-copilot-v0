@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon } from "@phosphor-icons/react"
+import { CloudUpload } from "lucide-react"
 import { useTheme } from "next-themes"
 import type { PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
@@ -14,6 +15,10 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { DisplaySettingsPopover } from "@/components/display-settings-popover"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { MigrationManager } from "@/components/migration"
+import { useMigrationProgress, useMigrationNotifications } from "@/components/migration/migration-hooks"
+import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 
 interface HeaderProps {
   onHistoryToggle?: () => void
@@ -32,10 +37,14 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   const [isTouchDevice, setIsTouchDevice] = useState(false)
   const [canShowPreview, setCanShowPreview] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
+  const [isMigrationOpen, setIsMigrationOpen] = useState(false)
   
   const isPatientSession = !!(sessionMeta && patient)
   const patientName = patient?.displayName
   const ultimaFicha = fichas.length > 0 ? fichas[0] : null
+  const { systemState } = useHopeAISystem()
+  const { progress, isActive } = useMigrationProgress(systemState.userId)
+  const { notifications, unreadCount } = useMigrationNotifications()
   
   // Detectar si es dispositivo táctil
   useEffect(() => {
@@ -259,6 +268,28 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
 
       <div className="relative flex items-center gap-1 md:gap-2 flex-shrink-0">
         <DisplaySettingsPopover />
+        {isActive && (
+          <Badge variant="outline" className="hidden md:inline-flex items-center gap-1 px-2 py-1">
+            <CloudUpload className="h-3.5 w-3.5" />
+            <span className="text-xs">Migración {progress.percentage}%</span>
+          </Badge>
+        )}
+        {process.env.NEXT_PUBLIC_MIGRATION_ENABLED === 'true' && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 text-mineral-gray hover:text-clarity-blue-600 hover:bg-clarity-blue-50 dark:text-mineral-gray dark:hover:text-clarity-blue-400 dark:hover:bg-clarity-blue-900/30 transition-colors"
+          onClick={() => setIsMigrationOpen(true)}
+          title="Migrar mis datos a mi cuenta"
+        >
+          <CloudUpload className="h-5 w-5" />
+        </Button>
+        )}
+        {unreadCount > 0 && (
+          <Badge variant="secondary" className="px-1 py-0 h-5 min-w-[20px] justify-center" title="Notificaciones de migración">
+            <span className="text-xs font-semibold">{unreadCount}</span>
+          </Badge>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -273,6 +304,19 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           )}
         </Button>
       </div>
+      {/* Diálogo de Migración de Datos */}
+      {process.env.NEXT_PUBLIC_MIGRATION_ENABLED === 'true' && (
+      <Dialog open={isMigrationOpen} onOpenChange={setIsMigrationOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Migración de datos</DialogTitle>
+          </DialogHeader>
+          <div className="mt-2">
+            <MigrationManager />
+          </div>
+        </DialogContent>
+      </Dialog>
+      )}
     </header>
   )
 }

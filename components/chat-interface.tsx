@@ -21,7 +21,6 @@ import { parseMarkdown } from "@/lib/markdown-parser"
 import { toast } from "@/hooks/use-toast"
 import { FileUploadButton } from "@/components/file-upload-button"
 import { MessageFileAttachments } from "@/components/message-file-attachments"
-import { getFilesByIds } from "@/lib/hopeai-system"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -432,21 +431,42 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   useEffect(() => {
     const loadMessageFiles = async () => {
       const newMessageFiles: Record<string, ClinicalFile[]> = {}
-      
-      for (const message of currentSession?.history || []) {
-        if (message.fileReferences && message.fileReferences.length > 0) {
-          try {
-            const files = await getFilesByIds(message.fileReferences)
-            if (files.length > 0) {
-              newMessageFiles[message.id] = files
+      try {
+        const sessionId = currentSession?.sessionId
+        if (!sessionId) {
+          setMessageFiles({})
+          return
+        }
+
+        const res = await fetch(`/api/documents?sessionId=${encodeURIComponent(sessionId)}`)
+        if (!res.ok) {
+          console.error('Error fetching documents for session:', sessionId, res.status)
+          setMessageFiles({})
+          return
+        }
+
+        const json = await res.json()
+        const documents: ClinicalFile[] = Array.isArray(json?.documents) ? json.documents : []
+        const byId = new Map<string, ClinicalFile>(documents.map((doc) => [doc.id, doc]))
+
+        for (const message of currentSession?.history || []) {
+          if (message.fileReferences && message.fileReferences.length > 0) {
+            const resolved: ClinicalFile[] = []
+            for (const fid of message.fileReferences) {
+              const file = byId.get(fid)
+              if (file) resolved.push(file)
             }
-          } catch (error) {
-            console.error('Error loading files for message:', message.id, error)
+            if (resolved.length > 0) {
+              newMessageFiles[message.id] = resolved
+            }
           }
         }
+
+        setMessageFiles(newMessageFiles)
+      } catch (error) {
+        console.error('Error loading message files via API:', error)
+        setMessageFiles({})
       }
-      
-      setMessageFiles(newMessageFiles)
     }
 
     loadMessageFiles()

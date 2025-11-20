@@ -11,9 +11,10 @@ export interface UIPreferences {
 }
 
 const DB_NAME = "hopeai_ui_preferences"
-const DB_VERSION = 1
+const DB_VERSION = 6
 const STORE_NAME = "ui_preferences"
-const DEFAULT_USER_ID = "default_user" // Para usuarios sin autenticación
+// El ID por defecto ahora se resuelve dinámicamente vía user-identity
+import { getEffectiveUserId } from './user-identity'
 
 export class UIPreferencesStorage {
   private static instance: UIPreferencesStorage | null = null
@@ -66,15 +67,16 @@ export class UIPreferencesStorage {
   /**
    * Get UI preferences for a user
    */
-  async getPreferences(userId: string = DEFAULT_USER_ID): Promise<UIPreferences> {
+  async getPreferences(userId?: string): Promise<UIPreferences> {
     if (!this.db) {
       await this.initialize()
     }
 
     return new Promise((resolve, reject) => {
+      const effectiveUserId = getEffectiveUserId(userId)
       const transaction = this.db!.transaction([STORE_NAME], "readonly")
       const store = transaction.objectStore(STORE_NAME)
-      const request = store.get(userId)
+      const request = store.get(effectiveUserId)
 
       request.onsuccess = () => {
         if (request.result) {
@@ -82,7 +84,7 @@ export class UIPreferencesStorage {
         } else {
           // Return default preferences if none exist
           resolve({
-            userId,
+            userId: effectiveUserId,
             showDynamicSuggestions: true,
             lastUpdated: new Date().toISOString(),
           })
@@ -133,9 +135,10 @@ export class UIPreferencesStorage {
   async updatePreference(
     key: keyof Omit<UIPreferences, "userId" | "lastUpdated">,
     value: boolean,
-    userId: string = DEFAULT_USER_ID
+    userId?: string
   ): Promise<void> {
-    const preferences = await this.getPreferences(userId)
+    const effectiveUserId = getEffectiveUserId(userId)
+    const preferences = await this.getPreferences(effectiveUserId)
     preferences[key] = value
     await this.savePreferences(preferences)
   }
@@ -143,16 +146,18 @@ export class UIPreferencesStorage {
   /**
    * Check if dynamic suggestions should be shown
    */
-  async shouldShowDynamicSuggestions(userId: string = DEFAULT_USER_ID): Promise<boolean> {
-    const preferences = await this.getPreferences(userId)
+  async shouldShowDynamicSuggestions(userId?: string): Promise<boolean> {
+    const effectiveUserId = getEffectiveUserId(userId)
+    const preferences = await this.getPreferences(effectiveUserId)
     return preferences.showDynamicSuggestions
   }
 
   /**
    * Hide dynamic suggestions permanently
    */
-  async hideDynamicSuggestions(userId: string = DEFAULT_USER_ID): Promise<void> {
-    await this.updatePreference("showDynamicSuggestions", false, userId)
+  async hideDynamicSuggestions(userId?: string): Promise<void> {
+    const effectiveUserId = getEffectiveUserId(userId)
+    await this.updatePreference("showDynamicSuggestions", false, effectiveUserId)
   }
 }
 
