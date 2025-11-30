@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+// @deprecated - LEGACY HOOK - Migrar a useSessionsList (API v2)
+// TODO FASE 4: Reemplazar este hook con useSessionsList completamente
+// Este hook ya NO debe usarse en nuevos componentes
 import { clinicalStorage } from "@/lib/clinical-context-storage"
-import { APIClientAdapter } from "@/lib/storage/api-client-adapter"
-import type { StorageAdapterConfig } from "@/lib/storage/unified-storage-interface"
-import { AuthService } from "@/lib/auth/auth-service"
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse } from "@/types/clinical-types"
 
 interface ConversationSummary {
@@ -58,33 +58,6 @@ export function useConversationHistory(): UseConversationHistoryReturn {
   const conversationCache = useRef<Map<string, ConversationSummary>>(new Map())
   const lastLoadedUserId = useRef<string | null>(null)
 
-  // Cliente API (evita importar storage del servidor en cliente)
-  const apiClientRef = useRef<APIClientAdapter | null>(null)
-  const apiClientUserRef = useRef<string | null>(null)
-  const baseURL = process.env.NEXT_PUBLIC_API_URL || '/api'
-  const apiConfig: StorageAdapterConfig = {
-    enableEncryption: false,
-    maxRetryAttempts: 3,
-    syncInterval: 60_000,
-    offlineTimeout: 15_000,
-  }
-
-  const ensureApiClient = useCallback(async (userId: string): Promise<APIClientAdapter> => {
-    const tokens = AuthService.getInstance().getCurrentTokens()
-    const authToken = tokens?.access
-    if (!authToken) {
-      throw new Error('Usuario no autenticado. Inicie sesión para continuar.')
-    }
-
-    if (!apiClientRef.current || apiClientUserRef.current !== userId) {
-      const client = new APIClientAdapter(baseURL, authToken, apiConfig)
-      await client.initialize(userId)
-      apiClientRef.current = client
-      apiClientUserRef.current = userId
-    }
-    return apiClientRef.current!
-  }, [baseURL])
-
   // Función para convertir ChatState a ConversationSummary
   const createConversationSummary = useCallback((chatState: ChatState): ConversationSummary => {
     const lastUserMessage = chatState.history
@@ -118,146 +91,31 @@ export function useConversationHistory(): UseConversationHistoryReturn {
 
   // Cargar conversaciones del usuario con paginación
   const loadConversations = useCallback(async (userId: string, resetCache: boolean = true) => {
+    console.warn('⚠️ TODO FASE 3: loadConversations stub temporal - usar useSessionsList en su lugar')
+    // TODO FASE 3: Este hook debe ser reemplazado por useSessionsList
     setIsLoading(true)
-    setError(null)
-    setCurrentUserId(userId)
-    
-    if (resetCache) {
-      conversationCache.current.clear()
-      setConversations([])
-      setAllConversations([])
-      setNextPageToken(undefined)
-    }
-
-    try {
-      console.log(`🔄 Cargando conversaciones paginadas para usuario: ${userId}`)
-      const apiClient = await ensureApiClient(userId)
-      const paginationOptions: PaginationOptions = {
-        pageSize: 20, // Tamaño de página optimizado según el SDK
-        sortBy: 'lastUpdated',
-        sortOrder: 'desc'
-      }
-      const result = await apiClient.getUserSessions(paginationOptions)
-      
-      console.log(`📊 Cargada página con ${result.items.length} conversaciones de ${result.totalCount} totales`)
-      
-      const summaries = result.items.map(createConversationSummary)
-      
-      // Actualizar cache
-      summaries.forEach((summary: ConversationSummary) => {
-        conversationCache.current.set(summary.sessionId, summary)
-      })
-      
-      setAllConversations(summaries)
-      setConversations(summaries)
-      setHasNextPage(result.hasNextPage)
-      setTotalCount(result.totalCount)
-      setNextPageToken(result.nextPageToken)
-      lastLoadedUserId.current = userId
-      
-      console.log(`✅ Primera página de conversaciones cargada exitosamente`)
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(`Error cargando conversaciones: ${errorMessage}`)
-      console.error('❌ Error cargando conversaciones:', err)
-    } finally {
-      setIsLoading(false)
-    }
+    setConversations([])
+    setAllConversations([])
+    setHasNextPage(false)
+    setTotalCount(0)
+    setIsLoading(false)
   }, [createConversationSummary])
 
   // Cargar más conversaciones (lazy loading)
   const loadMoreConversations = useCallback(async () => {
-    if (!currentUserId || !hasNextPage || !nextPageToken || isLoadingMore) {
-      return
-    }
-
-    setIsLoadingMore(true)
-    setError(null)
-
-    try {
-      console.log(`🔄 Cargando más conversaciones...`)
-      const apiClient = await ensureApiClient(currentUserId)
-      const paginationOptions: PaginationOptions = {
-        pageSize: 20,
-        pageToken: nextPageToken,
-        sortBy: 'lastUpdated',
-        sortOrder: 'desc'
-      }
-      const result = await apiClient.getUserSessions(paginationOptions)
-      
-      console.log(`📊 Cargadas ${result.items.length} conversaciones adicionales`)
-      
-      const newSummaries = result.items.map(createConversationSummary)
-      
-      // Actualizar cache
-      newSummaries.forEach((summary: ConversationSummary) => {
-        conversationCache.current.set(summary.sessionId, summary)
-      })
-      
-      // Combinar con conversaciones existentes
-      const updatedConversations = [...allConversations, ...newSummaries]
-      
-      setAllConversations(updatedConversations)
-      setConversations(searchQuery ? 
-        updatedConversations.filter(conv => 
-          conv.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
-        ) : updatedConversations
-      )
-      setHasNextPage(result.hasNextPage)
-      setNextPageToken(result.nextPageToken)
-      
-      console.log(`✅ Conversaciones adicionales cargadas exitosamente`)
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(`Error cargando más conversaciones: ${errorMessage}`)
-      console.error('❌ Error cargando más conversaciones:', err)
-    } finally {
-      setIsLoadingMore(false)
-    }
+    console.warn('⚠️ TODO FASE 3: loadMoreConversations stub temporal')
+    return
   }, [currentUserId, hasNextPage, nextPageToken, isLoadingMore, allConversations, createConversationSummary, searchQuery])
 
   // Abrir conversación específica
   const openConversation = useCallback(async (sessionId: string): Promise<ChatState | null> => {
-    try {
-      setError(null)
-      const userId = currentUserId || AuthService.getInstance().getCurrentUser()?.id || ''
-      const apiClient = await ensureApiClient(userId)
-      const chatState = await apiClient.loadChatSession(sessionId)
-      
-      if (!chatState) {
-        throw new Error(`Conversación no encontrada: ${sessionId}`)
-      }
-      
-      console.log(`✅ Conversación cargada: ${sessionId}`)
-      return chatState
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(`Error abriendo conversación: ${errorMessage}`)
-      console.error('❌ Error abriendo conversación:', err)
-      return null
-    }
+    console.warn('⚠️ TODO FASE 3: openConversation stub temporal')
+    return null
   }, [])
 
   // Eliminar conversación
   const deleteConversation = useCallback(async (sessionId: string) => {
-    try {
-      setError(null)
-      const userId = currentUserId || AuthService.getInstance().getCurrentUser()?.id || ''
-      const apiClient = await ensureApiClient(userId)
-      await apiClient.deleteChatSession(sessionId)
-      
-      // Actualizar la lista local
-      const updatedConversations = allConversations.filter(conv => conv.sessionId !== sessionId)
-      setAllConversations(updatedConversations)
-      setConversations(updatedConversations)
-      
-      console.log(`✅ Conversación eliminada: ${sessionId}`)
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(`Error eliminando conversación: ${errorMessage}`)
-      console.error('❌ Error eliminando conversación:', err)
-    }
+    console.warn('⚠️ TODO FASE 3: deleteConversation stub temporal')
   }, [allConversations])
 
   // Buscar conversaciones
