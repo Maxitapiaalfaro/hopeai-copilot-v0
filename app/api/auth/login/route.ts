@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+export const runtime = 'nodejs'
 import bcrypt from 'bcryptjs'
 import { databaseService } from '@/lib/database'
 import { loggers } from '@/lib/logger'
@@ -9,6 +10,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email, password, deviceId: bodyDeviceId, deviceName, deviceType } = body || {}
+
+    try {
+      const safeEmail = typeof email === 'string' ? String(email).toLowerCase() : undefined
+      const hasPassword = typeof password === 'string' && password.length > 0
+      loggers.api.info('Login request received', { email: safeEmail, hasPassword })
+    } catch {}
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Missing email or password' }, { status: 400 })
@@ -23,18 +30,23 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await databaseService.users.findOne({ email: String(email).toLowerCase() })
+    try {
+      const exists = !!user
+      const hasKey = exists && typeof (user as any)?.encryptionKey === 'string'
+      loggers.api.info('Login user lookup', { exists, hasKey })
+    } catch {}
     if (!user) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      return NextResponse.json({ error: 'Invalid credentials: user not found' }, { status: 401 })
     }
 
     // Compare password against stored encryptionKey (bcrypt hash)
     // Guard against missing or invalid encryptionKey
     if (!user.encryptionKey || typeof user.encryptionKey !== 'string') {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      return NextResponse.json({ error: 'Invalid credentials: missing encryption key' }, { status: 401 })
     }
     const isValid = await bcrypt.compare(password, user.encryptionKey)
     if (!isValid) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      return NextResponse.json({ error: 'Invalid credentials: password mismatch' }, { status: 401 })
     }
 
     // Update last login timestamp

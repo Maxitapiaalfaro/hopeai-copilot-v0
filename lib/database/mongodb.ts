@@ -1,8 +1,8 @@
 import { MongoClient, Db } from 'mongodb';
 import { loggers } from '@/lib/logger';
 
-const uri = process.env.MONGODB_URI;
-const dbName = process.env.MONGODB_DB_NAME || 'aurora_clinic';
+const uri = process.env.MONGODB_URI || process.env.MONGOAURORA_MONGODB_URI || process.env.MONGODB_MONGOAURORA_DIRECT_URI;
+const dbName = process.env.MONGODB_DB_NAME || 'aurora';
 const disableLocalFallback = String(process.env.MONGODB_DISABLE_LOCAL_FALLBACK).toLowerCase() === 'true';
 
 let client: MongoClient;
@@ -43,7 +43,7 @@ export async function connectToDatabase(): Promise<Db> {
         const retryWrites = String(process.env.MONGODB_RETRY_WRITES || 'true').toLowerCase() === 'true';
         const tls = String(process.env.MONGODB_TLS || '').toLowerCase() === 'true' ? true : undefined;
         const compressors = process.env.MONGODB_COMPRESSORS || undefined;
-        const appName = process.env.MONGODB_APPNAME || 'aurora-clinic';
+        const appName = process.env.MONGODB_APPNAME || 'aurora-db';
         client = new MongoClient(useUri, {
           serverSelectionTimeoutMS,
           connectTimeoutMS,

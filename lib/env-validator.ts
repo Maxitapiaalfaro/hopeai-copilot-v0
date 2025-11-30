@@ -139,16 +139,16 @@ export function validateEnvironment(): EnvValidationResult {
   }
 
   const storageMode = process.env.HOPEAI_STORAGE_MODE;
-  const mongoUri = process.env.MONGODB_URI;
+  const mongoUri = process.env.MONGODB_URI || process.env.MONGOAURORA_MONGODB_URI || process.env.MONGODB_MONGOAURORA_DIRECT_URI;
   const mongoDb = process.env.MONGODB_DB_NAME;
-  const usesMongo = storageMode === 'mongodb' || process.env.USE_MONGODB_STORAGE === 'true' || !!process.env.NEXTAUTH_URL;
+  const usesMongo = storageMode === 'mongodb' || storageMode === 'aurora-db' || process.env.USE_MONGODB_STORAGE === 'true' || !!process.env.NEXTAUTH_URL;
   if (usesMongo) {
     if (!mongoUri) {
-      errors.push('Missing MongoDB URI: MONGODB_URI');
+      errors.push('Missing MongoDB URI (MONGODB_URI | MONGOAURORA_MONGODB_URI | MONGODB_MONGOAURORA_DIRECT_URI)');
     } else {
       const validUri = /^mongodb(\+srv)?:\/\//.test(mongoUri);
       if (!validUri) {
-        errors.push('Invalid MongoDB URI format: MONGODB_URI');
+        errors.push('Invalid MongoDB URI format');
       }
     }
     if (!mongoDb) {

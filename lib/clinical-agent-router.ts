@@ -431,11 +431,11 @@ Eres una supervisora clínica experta conversando con un colega.
       config: {
         ...clinicalModelConfig,
         model: "gemini-3-pro-preview", // Pro model for Socratic supervision
-        temperature: 1,
+        temperature: 1.0,
         topP: 0.95,
-        topK: 40,
+        topK: 64,
         thinkingConfig: {
-          thinkingLevel: "HIGH"
+          thinkingLevel: "LOW"
         },
       },
     })

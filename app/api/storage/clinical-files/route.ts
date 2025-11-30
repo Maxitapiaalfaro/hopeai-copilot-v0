@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import { authMiddleware } from '@/lib/auth/middleware';
 import { userIdentityFromRequest } from '@/lib/auth/server-identity';
 import { databaseService } from '@/lib/database';
@@ -42,11 +43,35 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return NextResponse.json({ success: false, message: 'Invalid JSON payload' }, { status: 400 });
   }
+  try {
+    const hasId = !!payload?.id
+    const hasFileId = !!payload?.fileId
+    const hasNestedId = !!payload?.file?.id
+    const size = typeof payload === 'object' ? Object.keys(payload || {}).length : 0
+    console.info('Clinical-files POST payload shape', { hasId, hasFileId, hasNestedId, size })
+  } catch {}
 
   // Expect a single ClinicalFile object in the payload
-  const file = payload?.id ? payload : payload?.file ?? null;
+  let file = payload?.id ? payload : payload?.file ?? null;
+  if (!file && payload?.fileId) {
+    file = {
+      id: payload.fileId,
+      name: payload.fileName,
+      type: payload.mimeType,
+      size: payload.size,
+      sessionId: payload.sessionId,
+      status: payload?.metadata?.status,
+      processingStatus: payload?.metadata?.processingStatus,
+      summary: payload?.metadata?.summary,
+      outline: payload?.metadata?.outline,
+      keywords: payload?.metadata?.keywords,
+      geminiFileId: payload?.metadata?.geminiFileId,
+      geminiFileUri: payload?.metadata?.geminiFileUri,
+    } as any
+  }
   if (!file || !file.id) {
-    return NextResponse.json({ success: false, message: 'Missing file data or id' }, { status: 400 });
+    const reason = !file ? 'no file payload' : 'missing id'
+    return NextResponse.json({ success: false, message: `Invalid file payload: ${reason}` }, { status: 400 });
   }
 
   const now = new Date();

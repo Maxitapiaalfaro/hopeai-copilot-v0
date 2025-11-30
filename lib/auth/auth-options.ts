@@ -5,8 +5,8 @@ import bcrypt from 'bcryptjs';
 import { databaseService } from '@/lib/database';
 import { deviceTrustService } from '@/lib/security/device-trust';
 
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const dbName = process.env.MONGODB_DB_NAME || 'aurora_clinic';
+const uri = process.env.MONGODB_URI || process.env.MONGOAURORA_MONGODB_URI || process.env.MONGODB_MONGOAURORA_DIRECT_URI || 'mongodb://localhost:27017';
+const dbName = process.env.MONGODB_DB_NAME || 'aurora';
 
 // Prepare a reusable MongoClient instance, but DO NOT connect at import time.
 // Connecting during module load can break builds when DNS/env are not ready.

@@ -32,7 +32,7 @@ export class ServerStorageAdapter {
       // Detectar entorno Vercel o modo memoria forzado
       const isVercel = !!process.env.VERCEL || typeof process.env.VERCEL_ENV !== 'undefined'
       const forceMemory = process.env.HOPEAI_STORAGE_MODE === 'memory'
-      const useMongo = process.env.HOPEAI_STORAGE_MODE === 'mongodb' || process.env.USE_MONGODB_STORAGE === 'true'
+      const useMongo = process.env.HOPEAI_STORAGE_MODE === 'mongodb' || process.env.HOPEAI_STORAGE_MODE === 'aurora-db' || process.env.USE_MONGODB_STORAGE === 'true'
 
       if (isVercel || forceMemory) {
         console.log('🔧 [ServerStorageAdapter] Using MemoryServerStorage (Vercel/serverless-safe)')
