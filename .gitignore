@@ -43,3 +43,6 @@ aurora-encryption-key.json
 *-key.json
 *.pem
 service-account*.json
+
+.vercel
+.env*.local

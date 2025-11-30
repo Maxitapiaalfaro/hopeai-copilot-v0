@@ -17,21 +17,18 @@ export async function connectToDatabase(): Promise<Db> {
     throw new Error('MongoDB connection URI is not configured (MONGODB_URI / MONGOAURORA_MONGODB_URI / MONGODB_MONGOAURORA_DIRECT_URI)');
   }
 
-  if (process.env.VERCEL && !process.env.MONGODB_URI) {
-    throw new Error('MONGODB_URI environment variable is required in Vercel environments');
-  }
-
   if (connectPromise) {
     return connectPromise;
   }
 
   const logger = loggers.storage.child({ component: 'mongodb', dbName });
-  const maxAttempts = Number(process.env.MONGODB_MAX_RETRIES || 4);
   const baseDelayMs = Number(process.env.MONGODB_RETRY_DELAY_MS || 500);
 
   connectPromise = (async () => {
     const isProd = process.env.NODE_ENV === 'production';
     const isVercel = !!process.env.VERCEL;
+    const defaultMaxAttempts = isVercel ? 1 : isProd ? 4 : 1;
+    const maxAttempts = Number(process.env.MONGODB_MAX_RETRIES || defaultMaxAttempts);
     let attempt = 0;
 
     try {
@@ -39,7 +36,7 @@ export async function connectToDatabase(): Promise<Db> {
         attempt++;
         try {
           const useUri = uri;
-          const defaultServerSelectionTimeout = isProd ? 15000 : 5000;
+          const defaultServerSelectionTimeout = isVercel ? 5000 : isProd ? 15000 : 5000;
           const serverSelectionTimeoutMS = Number(
             process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || defaultServerSelectionTimeout
           );
@@ -65,7 +62,12 @@ export async function connectToDatabase(): Promise<Db> {
             appName,
           });
           logger.info('Connecting to MongoDB', { attempt, uri: sanitizeUri(useUri), env: process.env.NODE_ENV });
-          await client.connect();
+          const overallConnectTimeoutMS = serverSelectionTimeoutMS;
+          await withTimeout(
+            client.connect(),
+            overallConnectTimeoutMS,
+            'MongoDB initial connection'
+          );
           const candidateDb = client.db(dbName);
           await candidateDb.command({ ping: 1 });
           db = candidateDb;
@@ -240,6 +242,24 @@ export async function closeDatabaseConnection(): Promise<void> {
 }
 
 export { db };
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      error => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 function sanitizeUri(u: string): string {
   try {
