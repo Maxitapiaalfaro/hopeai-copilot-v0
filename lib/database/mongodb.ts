@@ -7,106 +7,119 @@ const disableLocalFallback = String(process.env.MONGODB_DISABLE_LOCAL_FALLBACK).
 
 let client: MongoClient;
 let db: Db;
-let connecting = false;
+let connectPromise: Promise<Db> | null = null;
 
 export async function connectToDatabase(): Promise<Db> {
   if (db) {
     return db;
   }
-  if (connecting) {
-    while (connecting && !db) {
-      await new Promise(r => setTimeout(r, 50));
-    }
-    if (db) return db;
+  if (!uri) {
+    throw new Error('MongoDB connection URI is not configured (MONGODB_URI / MONGOAURORA_MONGODB_URI / MONGODB_MONGOAURORA_DIRECT_URI)');
+  }
+
+  if (process.env.VERCEL && !process.env.MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable is required in Vercel environments');
+  }
+
+  if (connectPromise) {
+    return connectPromise;
   }
 
   const logger = loggers.storage.child({ component: 'mongodb', dbName });
   const maxAttempts = Number(process.env.MONGODB_MAX_RETRIES || 4);
   const baseDelayMs = Number(process.env.MONGODB_RETRY_DELAY_MS || 500);
-  let attempt = 0;
-  connecting = true;
 
-  try {
-    if (!uri) {
-      throw new Error('MONGODB_URI environment variable is not set');
-    }
-    while (attempt < maxAttempts) {
-      attempt++;
-      try {
-        const useUri = uri;
-        const serverSelectionTimeoutMS = Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 15000);
-        const connectTimeoutMS = Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 15000);
-        const socketTimeoutMS = Number(process.env.MONGODB_SOCKET_TIMEOUT_MS || 45000);
-        const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE || 10);
-        const minPoolSize = Number(process.env.MONGODB_MIN_POOL_SIZE || 2);
-        const maxIdleTimeMS = Number(process.env.MONGODB_MAX_IDLE_TIME_MS || 0);
-        const retryWrites = String(process.env.MONGODB_RETRY_WRITES || 'true').toLowerCase() === 'true';
-        const tls = String(process.env.MONGODB_TLS || '').toLowerCase() === 'true' ? true : undefined;
-        const compressors = process.env.MONGODB_COMPRESSORS || undefined;
-        const appName = process.env.MONGODB_APPNAME || 'aurora-db';
-        client = new MongoClient(useUri, {
-          serverSelectionTimeoutMS,
-          connectTimeoutMS,
-          socketTimeoutMS,
-          maxPoolSize,
-          minPoolSize,
-          maxIdleTimeMS,
-          retryWrites,
-          tls,
-          compressors,
-          appName,
-        });
-        logger.info('Connecting to MongoDB', { attempt, uri: sanitizeUri(useUri), env: process.env.NODE_ENV });
-        await client.connect();
-        const candidateDb = client.db(dbName);
-        await candidateDb.command({ ping: 1 });
-        db = candidateDb;
-        logger.info('MongoDB connected', { attempt });
-        await createIndexes();
-        return db;
-      } catch (error) {
-        const code = (error as any)?.code ?? (error as any)?.name;
-        const msg = String((error as any)?.message || '');
-        logger.warn('MongoDB connection attempt failed', { attempt, code, message: truncate(msg, 300) });
+  connectPromise = (async () => {
+    const isProd = process.env.NODE_ENV === 'production';
+    const isVercel = !!process.env.VERCEL;
+    let attempt = 0;
 
-        const isAuthError = code === 18 || /auth/i.test(msg);
-        const isSrvDnsError = msg.includes('querySrv ENOTFOUND') || msg.includes('ENOTFOUND');
-        const isNetworkError = /ECONNREFUSED|ETIMEDOUT|ETIMEOUT|EHOSTUNREACH|ENETUNREACH/i.test(msg);
+    try {
+      while (attempt < maxAttempts) {
+        attempt++;
+        try {
+          const useUri = uri;
+          const defaultServerSelectionTimeout = isProd ? 15000 : 5000;
+          const serverSelectionTimeoutMS = Number(
+            process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || defaultServerSelectionTimeout
+          );
+          const connectTimeoutMS = Number(process.env.MONGODB_CONNECT_TIMEOUT_MS || 15000);
+          const socketTimeoutMS = Number(process.env.MONGODB_SOCKET_TIMEOUT_MS || 45000);
+          const maxPoolSize = Number(process.env.MONGODB_MAX_POOL_SIZE || 10);
+          const minPoolSize = Number(process.env.MONGODB_MIN_POOL_SIZE || 2);
+          const maxIdleTimeMS = Number(process.env.MONGODB_MAX_IDLE_TIME_MS || 0);
+          const retryWrites = String(process.env.MONGODB_RETRY_WRITES || 'true').toLowerCase() === 'true';
+          const tls = String(process.env.MONGODB_TLS || '').toLowerCase() === 'true' ? true : undefined;
+          const compressors = process.env.MONGODB_COMPRESSORS || undefined;
+          const appName = process.env.MONGODB_APPNAME || 'aurora-db';
+          client = new MongoClient(useUri, {
+            serverSelectionTimeoutMS,
+            connectTimeoutMS,
+            socketTimeoutMS,
+            maxPoolSize,
+            minPoolSize,
+            maxIdleTimeMS,
+            retryWrites,
+            tls,
+            compressors,
+            appName,
+          });
+          logger.info('Connecting to MongoDB', { attempt, uri: sanitizeUri(useUri), env: process.env.NODE_ENV });
+          await client.connect();
+          const candidateDb = client.db(dbName);
+          await candidateDb.command({ ping: 1 });
+          db = candidateDb;
+          logger.info('MongoDB connected', { attempt });
+          await createIndexes();
+          return db;
+        } catch (error) {
+          const code = (error as any)?.code ?? (error as any)?.name;
+          const msg = String((error as any)?.message || '');
+          logger.warn('MongoDB connection attempt failed', { attempt, code, message: truncate(msg, 300) });
 
-        if ((isSrvDnsError || isNetworkError) && process.env.NODE_ENV !== 'production' && !disableLocalFallback) {
-          try {
-            const fallbackUri = 'mongodb://127.0.0.1:27017';
-            const fallbackClient = new MongoClient(fallbackUri, { serverSelectionTimeoutMS: 3000 });
-            logger.warn('Falling back to local MongoDB', { fallbackUri });
-            await fallbackClient.connect();
-            const candidateDb = fallbackClient.db(dbName);
-            await candidateDb.command({ ping: 1 });
-            client = fallbackClient;
-            db = candidateDb;
-            logger.info('Local MongoDB fallback connected');
-            await createIndexes();
-            return db;
-          } catch (fallbackError) {
-            const fmsg = String((fallbackError as any)?.message || '');
-            logger.error('Local MongoDB fallback failed', fallbackError, { message: truncate(fmsg, 300) });
+          const isAuthError = code === 18 || /auth/i.test(msg);
+          const isSrvDnsError = msg.includes('querySrv ENOTFOUND') || msg.includes('ENOTFOUND');
+          const isNetworkError = /ECONNREFUSED|ETIMEDOUT|ETIMEOUT|EHOSTUNREACH|ENETUNREACH/i.test(msg);
+
+          if ((isSrvDnsError || isNetworkError) && process.env.NODE_ENV !== 'production' && !disableLocalFallback && !isVercel) {
+            try {
+              const fallbackUri = 'mongodb://127.0.0.1:27017';
+              const fallbackClient = new MongoClient(fallbackUri, { serverSelectionTimeoutMS: 3000 });
+              logger.warn('Falling back to local MongoDB', { fallbackUri });
+              await fallbackClient.connect();
+              const candidateDb = fallbackClient.db(dbName);
+              await candidateDb.command({ ping: 1 });
+              client = fallbackClient;
+              db = candidateDb;
+              logger.info('Local MongoDB fallback connected');
+              await createIndexes();
+              return db;
+            } catch (fallbackError) {
+              const fmsg = String((fallbackError as any)?.message || '');
+              logger.error('Local MongoDB fallback failed', fallbackError, { message: truncate(fmsg, 300) });
+            }
+          }
+
+          if (isAuthError) {
+            throw error;
+          }
+
+          const delay = baseDelayMs * Math.pow(2, attempt - 1);
+          await new Promise(r => setTimeout(r, Math.min(delay, 4000)));
+          if (attempt >= maxAttempts && (isNetworkError || isSrvDnsError)) {
+            throw error;
           }
         }
-
-        if (isAuthError) {
-          throw error;
-        }
-
-        const delay = baseDelayMs * Math.pow(2, attempt - 1);
-        await new Promise(r => setTimeout(r, Math.min(delay, 4000)));
-        if (attempt >= maxAttempts && (isNetworkError || isSrvDnsError)) {
-          throw error;
-        }
+      }
+      throw new Error('MongoDB connection retries exhausted');
+    } finally {
+      if (!db) {
+        connectPromise = null;
       }
     }
-    throw new Error('MongoDB connection retries exhausted');
-  } finally {
-    connecting = false;
-  }
+  })();
+
+  return connectPromise;
 }
 
 // Helper to compare key specs like { email: 1 } with existing index.key
@@ -221,6 +234,7 @@ export async function closeDatabaseConnection(): Promise<void> {
     await client.close();
     client = null as any;
     db = null as any;
+    connectPromise = null;
     loggers.storage.info('MongoDB disconnected');
   }
 }
