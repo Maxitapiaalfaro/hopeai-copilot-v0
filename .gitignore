@@ -37,3 +37,9 @@ next-env.d.ts
 *.db
 *.db-shm
 *.db-wal
+
+# Google Cloud Service Account Keys (NEVER commit)
+aurora-encryption-key.json
+*-key.json
+*.pem
+service-account*.json
