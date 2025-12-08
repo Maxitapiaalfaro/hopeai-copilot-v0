@@ -140,33 +140,21 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultTab = "login" }: 
     }
   }
 
-  const handleOAuthLogin = async (provider: 'google' | 'github' | 'auth0') => {
+  const handleOAuthLogin = async () => {
     setIsLoading(true)
     setError(null)
     
     try {
-      const result = await loginWithOAuth(provider)
-      
-      toast({
-        title: "¡Bienvenido!",
-        description: `Has iniciado sesión con ${provider}`,
-        className: "bg-green-50 border-green-200",
-      })
-
-      setTimeout(() => {
-        onClose()
-        onSuccess?.()
-      }, 1500)
-      
+      // This will redirect to Auth0 - page will navigate away
+      await loginWithOAuth('auth0')
     } catch (error) {
-      setError(error instanceof Error ? error.message : `Error con ${provider}`)
+      setIsLoading(false)
+      setError(error instanceof Error ? error.message : 'Error de autenticación')
       toast({
         title: "Error de autenticación",
-        description: error instanceof Error ? error.message : `No se pudo iniciar sesión con ${provider}`,
+        description: error instanceof Error ? error.message : 'No se pudo iniciar sesión',
         variant: "destructive",
       })
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -282,7 +270,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultTab = "login" }: 
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => handleOAuthLogin('auth0')}
+                  onClick={handleOAuthLogin}
                   disabled={isLoading}
                 >
                   Continuar con Google

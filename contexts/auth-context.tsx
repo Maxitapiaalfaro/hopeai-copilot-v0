@@ -211,52 +211,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithOAuth = useCallback(async (provider: 'google' | 'github' | 'auth0'): Promise<AuthResult> => {
     try {
-      // Use NextAuth's signIn for real OAuth flow
-      const result = await signIn(provider, { 
-        redirect: false,
+      // Use Auth0 for OAuth - redirect directly to Auth0 login page
+      // Auth0 handles Google/GitHub/etc. through its Universal Login
+      await signIn('auth0', { 
         callbackUrl: window.location.origin 
       })
       
-      if (result?.error) {
-        throw new Error(result.error)
-      }
+      // signIn with redirect will navigate away, so this code won't execute
+      // Session will be handled by useSession after redirect back from Auth0
       
-      // If successful, NextAuth handles session - we'll sync state via useSession
-      // Return a placeholder result since NextAuth manages the actual auth
-      const placeholderResult: AuthResult = {
-        user: {
-          id: 'pending',
-          email: '',
-          displayName: '',
-          metadata: {
-            createdAt: new Date(),
-            lastLoginAt: new Date(),
-            subscriptionType: 'free',
-            betaFeatures: []
-          },
-          preferences: {
-            language: 'es',
-            timezone: 'America/Santiago',
-            dataRetention: '90d'
-          },
-          security: {
-            twoFactorEnabled: false,
-            lastPasswordChange: new Date(),
-            loginAttempts: 0
-          }
-        },
+      // Return placeholder - this won't actually be used since page redirects
+      return {
+        user: { id: '', email: '', displayName: '', metadata: { createdAt: new Date(), lastLoginAt: new Date(), subscriptionType: 'free', betaFeatures: [] }, preferences: { language: 'es', timezone: 'America/Santiago', dataRetention: '90d' }, security: { twoFactorEnabled: false, lastPasswordChange: new Date(), loginAttempts: 0 } },
         tokens: { access: '', refresh: '' },
         deviceId: ''
       }
-      
-      closeAuthModal()
-      
-      // Reload page to sync NextAuth session state
-      if (result?.ok && !result?.error) {
-        window.location.reload()
-      }
-      
-      return placeholderResult
     } catch (error) {
       console.error('OAuth login error:', error)
       throw error
