@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 import { userIdentityFromRequest } from '@/lib/auth/server-identity'
+import { authMiddleware } from '@/lib/auth/middleware'
 import { deviceTrustService } from '@/lib/security/device-trust'
 
 // POST: Create new session
 export async function POST(request: NextRequest) {
   try {
-    const { mode, agent, patientSessionMeta, userId: userIdFromBody } = await request.json()
+    // Enforce authentication - don't fall back to client-provided userId
+    const authError = await authMiddleware(request)
+    if (authError) return authError
+    
+    const { mode, agent, patientSessionMeta } = await request.json()
     const identity = await userIdentityFromRequest(request)
-    const userId = identity?.userId || userIdFromBody
+    const userId = identity?.userId
     const deviceId = identity?.deviceId
     
     if (!userId) {
@@ -55,15 +60,17 @@ export async function POST(request: NextRequest) {
 // GET: Get user sessions
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
+    // Enforce authentication - don't fall back to query param userId
+    const authError = await authMiddleware(request)
+    if (authError) return authError
+    
     const identity = await userIdentityFromRequest(request)
-    const userIdFromQuery = searchParams.get('userId')
-    const userId = identity?.userId || userIdFromQuery
+    const userId = identity?.userId
     
     if (!userId) {
       return NextResponse.json(
-        { error: 'userId es requerido' },
-        { status: 400 }
+        { error: 'No authenticated user' },
+        { status: 401 }
       )
     }
     

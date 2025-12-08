@@ -11,6 +11,10 @@ export interface User {
   updatedAt: Date;
   lastLoginAt?: Date;
   preferences?: UserPreferences;
+  // OAuth fields
+  oauthProvider?: 'google' | 'github' | 'auth0';
+  oauthId?: string;
+  avatar?: string;
 }
 
 export interface Device {

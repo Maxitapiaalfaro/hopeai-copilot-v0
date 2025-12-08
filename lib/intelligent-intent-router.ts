@@ -1017,29 +1017,6 @@ ${(() => {
     return { functionName: 'activar_modo_socratico', parameters: {}, confidence: 0.75, requiresClarification: false };
   }
 
-  private extractFunctionCallsFromResult(result: any): Array<{ name?: string; args?: any }> {
-    try {
-      const calls: Array<{ name?: string; args?: any }> = [];
-      const candidates = result?.candidates || [];
-      for (const cand of candidates) {
-        const parts = cand?.content?.parts || [];
-        for (const part of parts) {
-          if (part?.functionCall && part.functionCall.name) {
-            calls.push({ name: part.functionCall.name, args: part.functionCall.args || {} });
-          }
-        }
-      }
-      // Fallback: some SDK shapes may expose functionCalls at root
-      const rootCalls = result?.functionCalls || [];
-      for (const rc of rootCalls) {
-        if (rc?.name) calls.push({ name: rc.name, args: rc.args || {} });
-      }
-      return calls;
-    } catch {
-      return [];
-    }
-  }
-
   /**
    * Formatea el contexto procesado por Context Window Manager para el prompt
    */
@@ -1118,6 +1095,38 @@ ${(() => {
            requiredFunctions.includes(functionCall.name) &&
            functionCall.args &&
            typeof functionCall.args === 'object';
+  }
+
+  /**
+   * Extracts function calls from API result, including thoughtSignature for Gemini 3 Pro
+   * thoughtSignature is REQUIRED for function calling with Gemini 3 Pro to maintain reasoning context
+   */
+  private extractFunctionCallsFromResult(result: any): Array<{ name?: string; args?: any; thoughtSignature?: string }> {
+    try {
+      const calls: Array<{ name?: string; args?: any; thoughtSignature?: string }> = [];
+      const candidates = result?.candidates || [];
+      for (const cand of candidates) {
+        const parts = cand?.content?.parts || [];
+        for (const part of parts) {
+          if (part?.functionCall && part.functionCall.name) {
+            calls.push({ 
+              name: part.functionCall.name, 
+              args: part.functionCall.args || {},
+              // Capture thoughtSignature - required for Gemini 3 Pro function calling
+              thoughtSignature: part.thoughtSignature 
+            });
+          }
+        }
+      }
+      // Fallback: some SDK shapes may expose functionCalls at root
+      const rootCalls = result?.functionCalls || [];
+      for (const rc of rootCalls) {
+        if (rc?.name) calls.push({ name: rc.name, args: rc.args || {}, thoughtSignature: rc.thoughtSignature });
+      }
+      return calls;
+    } catch {
+      return [];
+    }
   }
 
   /**

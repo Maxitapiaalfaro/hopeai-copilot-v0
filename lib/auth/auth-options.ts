@@ -1,6 +1,7 @@
 import { MongoDBAdapter } from '@auth/mongodb-adapter';
 import { MongoClient } from 'mongodb';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import Auth0Provider from 'next-auth/providers/auth0';
 import bcrypt from 'bcryptjs';
 import { databaseService } from '@/lib/database';
 import { deviceTrustService } from '@/lib/security/device-trust';
@@ -32,10 +33,25 @@ const client = global._mongoClient ?? new MongoClient(uri, {
 });
 global._mongoClient = client;
 
+// Check if Auth0 is configured
+const isAuth0Configured = !!(
+  process.env.AUTH0_CLIENT_ID && 
+  process.env.AUTH0_SECRET && 
+  process.env.AUTH0_ISSUER_BASE_URL
+);
+
 export const authOptions = {
   // Pass the client directly; the driver will lazily connect on first use
   adapter: MongoDBAdapter(client, { databaseName: dbName }),
   providers: [
+    // Auth0 Provider - handles Google, GitHub, etc. through Auth0 dashboard
+    ...(isAuth0Configured ? [
+      Auth0Provider({
+        clientId: process.env.AUTH0_CLIENT_ID!,
+        clientSecret: process.env.AUTH0_SECRET!,
+        issuer: process.env.AUTH0_ISSUER_BASE_URL!,
+      })
+    ] : []),
     CredentialsProvider({
       name: 'credentials',
       credentials: {
@@ -98,27 +114,112 @@ export const authOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
-    async jwt({ token, user }: { token: any; user: any }) {
+    async signIn({ user, account, profile }: { user: any; account: any; profile?: any }) {
+      // Sync Auth0/OAuth users with our custom users collection in MongoDB
+      if (account?.provider === 'auth0' && user?.email) {
+        try {
+          await databaseService.initialize();
+          
+          // Check if user already exists in our custom users collection
+          const existingUser = await databaseService.users.findOne({ 
+            email: user.email.toLowerCase() 
+          });
+
+          if (!existingUser) {
+            // Create new user in our custom users collection
+            const newUser = {
+              userId: user.id || `auth0_${Date.now()}`,
+              email: user.email.toLowerCase(),
+              name: user.name || profile?.name || user.email.split('@')[0],
+              role: 'psychologist' as const,
+              isActive: true,
+              devices: [],
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              lastLoginAt: new Date(),
+              oauthProvider: 'auth0' as const,
+              oauthId: account.providerAccountId,
+              avatar: user.image || (profile as any)?.picture,
+              preferences: {
+                theme: 'auto' as const,
+                language: 'es',
+                timezone: 'America/Santiago',
+                notifications: {
+                  email: true,
+                  push: false,
+                  clinicalAlerts: true
+                },
+                clinical: {
+                  defaultSessionDuration: 50,
+                  autoSaveInterval: 30,
+                  backupFrequency: 'daily' as const
+                }
+              }
+            };
+            await databaseService.users.insertOne(newUser as any);
+            console.log(`✅ Created Auth0 user in MongoDB: ${user.email}`);
+          } else {
+            // Update last login for existing user
+            await databaseService.users.updateOne(
+              { email: user.email.toLowerCase() },
+              { 
+                $set: { 
+                  lastLoginAt: new Date(),
+                  updatedAt: new Date(),
+                  // Update avatar if changed
+                  ...(user.image && { avatar: user.image })
+                } 
+              }
+            );
+            console.log(`✅ Updated Auth0 user last login: ${user.email}`);
+          }
+        } catch (error) {
+          console.error('Error syncing Auth0 user with MongoDB:', error);
+          // Don't block sign in on sync error - user can still use the app
+        }
+      }
+      return true;
+    },
+    async jwt({ token, user, account }: { token: any; user: any; account?: any }) {
       if (user) {
         token.id = user.id;
-        token.role = user.role;
+        token.role = user.role || 'psychologist';
+        token.provider = account?.provider || 'credentials';
         if (user.deviceId) token.deviceId = user.deviceId;
       }
+      
+      // Fetch role from custom users collection if not set
+      if (token.email && !token.role) {
+        try {
+          await databaseService.initialize();
+          const dbUser = await databaseService.users.findOne({ 
+            email: (token.email as string).toLowerCase() 
+          });
+          if (dbUser) {
+            token.role = dbUser.role;
+            token.id = dbUser.userId;
+          }
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+        }
+      }
+      
       return token;
     },
     async session({ session, token }: { session: any; token: any }) {
       if (token) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.role = (token.role as string) || 'psychologist';
+        session.user.provider = token.provider as string;
         if (token.deviceId) session.user.deviceId = token.deviceId as string;
       }
       return session;
     },
   },
+  // Use NextAuth's built-in pages for Auth0 OAuth flow
+  // Custom pages can be added later if needed
   pages: {
-    signIn: '/auth/signin',
-    signUp: '/auth/signup',
-    error: '/auth/error',
+    error: '/api/auth/error',
   },
   secret: process.env.NEXTAUTH_SECRET || 'your-secret-key',
 };

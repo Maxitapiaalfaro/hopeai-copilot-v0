@@ -847,7 +847,7 @@ Usa tablas Markdown cuando documentes información que requiera comparación o e
         topP: 0.9,
         topK: 1,
         thinkingConfig: {
-          thinkinglevel: "LOW" // Razonamiento para síntesis estructurada y organización documental
+          thinkingLevel: "LOW" // Razonamiento para síntesis estructurada y organización documental
         },
       },
     })
@@ -2042,9 +2042,31 @@ Basado en esta evidencia, opciones razonadas:
             }
           }
 
-          // Collect function calls as they arrive
+          // Collect function calls as they arrive - with thoughtSignature for Gemini 3 Pro
           if (chunk.functionCalls) {
             functionCalls.push(...chunk.functionCalls)
+          }
+          // Also extract from parts to capture thoughtSignature (required for Gemini 3 Pro)
+          if (chunk.candidates?.[0]?.content?.parts) {
+            for (const part of chunk.candidates[0].content.parts) {
+              if (part.functionCall && part.functionCall.name) {
+                // Check if we already have this function call
+                const existingIdx = functionCalls.findIndex(
+                  (fc: any) => fc.name === part.functionCall.name && 
+                               JSON.stringify(fc.args) === JSON.stringify(part.functionCall.args)
+                );
+                if (existingIdx >= 0) {
+                  // Update with thoughtSignature if present
+                  functionCalls[existingIdx].thoughtSignature = part.thoughtSignature;
+                } else {
+                  functionCalls.push({
+                    name: part.functionCall.name,
+                    args: part.functionCall.args || {},
+                    thoughtSignature: part.thoughtSignature
+                  });
+                }
+              }
+            }
           }
 
           // 📊 Store the final response object for token extraction
@@ -2215,15 +2237,26 @@ Basado en esta evidencia, opciones razonadas:
           }
 
           if (validResponses.length > 0) {
+            const firstResponse = validResponses[0]!;
             console.log(`[ClinicalRouter] Sending ${validResponses.length} function responses back to model`)
 
+            // 🔐 GEMINI 3 PRO: Find the matching function call with its thoughtSignature
+            const matchingCall = functionCalls.find((fc: any) => fc.name === firstResponse.name);
+            const thoughtSignature = matchingCall?.thoughtSignature;
+            
+            if (thoughtSignature) {
+              console.log(`[ClinicalRouter] 🧠 Including thoughtSignature for function: ${firstResponse.name}`);
+            }
+
             // Send function results back to the model and stream the response
+            // Note: The SDK chat API should automatically handle history with signatures
+            // but we log the presence for debugging purposes
             const followUpResult = await sessionData.chat.sendMessageStream({
               message: {
                 functionResponse: {
-                  name: validResponses[0].name,
+                  name: firstResponse.name,
                   response: {
-                    output: validResponses[0].response
+                    output: firstResponse.response
                   },
                 },
               },

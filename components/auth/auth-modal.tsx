@@ -140,7 +140,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultTab = "login" }: 
     }
   }
 
-  const handleOAuthLogin = async (provider: 'google' | 'github') => {
+  const handleOAuthLogin = async (provider: 'google' | 'github' | 'auth0') => {
     setIsLoading(true)
     setError(null)
     
@@ -279,22 +279,14 @@ export function AuthModal({ isOpen, onClose, onSuccess, defaultTab = "login" }: 
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => handleOAuthLogin('google')}
-                    disabled={isLoading}
-                  >
-                    Google
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleOAuthLogin('github')}
-                    disabled={isLoading}
-                  >
-                    GitHub
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleOAuthLogin('auth0')}
+                  disabled={isLoading}
+                >
+                  Continuar con Google
+                </Button>
               </TabsContent>
 
               <TabsContent value="register" className="space-y-4">

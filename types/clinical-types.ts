@@ -2,6 +2,22 @@ export type AgentType = "socratico" | "clinico" | "academico" | "orquestador"
 
 export type ClinicalMode = "therapeutic_assistance" | "clinical_supervision" | "research_support"
 
+/**
+ * Function call with thought signature support for Gemini 3 Pro
+ * thoughtSignature is REQUIRED for Gemini 3 Pro function calling to maintain reasoning context
+ * For Gemini 2.5, it's optional but recommended for quality
+ */
+export interface FunctionCallWithSignature {
+  name: string
+  args: Record<string, unknown>
+  /** 
+   * Encrypted representation of model's internal thought process.
+   * Required for Gemini 3 Pro - must be passed back exactly as received.
+   * Optional but recommended for Gemini 2.5.
+   */
+  thoughtSignature?: string
+}
+
 export interface ChatMessage {
   id: string
   content: string

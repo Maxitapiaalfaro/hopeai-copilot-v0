@@ -8,6 +8,11 @@ import { UserProfile, UserMetadata, DeviceInfo } from './user-profile'
 import { setCurrentUserId, clearCurrentUserId } from '@/lib/user-identity'
 import { auditLog } from '@/lib/security/audit-logger'
 
+// LocalStorage keys for session persistence
+const TOKENS_KEY = 'aurora_tokens'
+const USER_PROFILE_KEY = 'aurora_user_profile'
+const AUTH_DEVICE_ID_KEY = 'aurora_auth_device_id'
+
 export interface AuthResult {
   user: UserProfile
   tokens: TokenPair
@@ -36,6 +41,66 @@ export class AuthService {
 
   private constructor() {
     this.jwtManager = JWTManager.getInstance()
+    // Restore session from localStorage on init
+    this.restoreSession()
+  }
+  
+  /**
+   * Restore session from localStorage (for page refresh persistence)
+   */
+  private restoreSession(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const storedTokens = localStorage.getItem(TOKENS_KEY)
+      const storedUser = localStorage.getItem(USER_PROFILE_KEY)
+      const storedDeviceId = localStorage.getItem(AUTH_DEVICE_ID_KEY)
+      
+      if (storedTokens && storedUser) {
+        this.currentTokens = JSON.parse(storedTokens)
+        this.currentUser = JSON.parse(storedUser)
+        this.currentDeviceId = storedDeviceId || null
+        console.log('🔄 Session restored from localStorage for user:', this.currentUser?.id)
+      }
+    } catch (error) {
+      console.error('Failed to restore session:', error)
+      // Clear corrupted data
+      this.clearStoredSession()
+    }
+  }
+  
+  /**
+   * Persist session to localStorage
+   */
+  private persistSession(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      if (this.currentTokens && this.currentUser) {
+        localStorage.setItem(TOKENS_KEY, JSON.stringify(this.currentTokens))
+        localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(this.currentUser))
+        if (this.currentDeviceId) {
+          localStorage.setItem(AUTH_DEVICE_ID_KEY, this.currentDeviceId)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to persist session:', error)
+    }
+  }
+  
+  /**
+   * Clear stored session from localStorage
+   */
+  private clearStoredSession(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      localStorage.removeItem(TOKENS_KEY)
+      localStorage.removeItem(USER_PROFILE_KEY)
+      localStorage.removeItem(AUTH_DEVICE_ID_KEY)
+    } catch (error) {
+      console.error('Failed to clear stored session:', error)
+    }
   }
 
   static getInstance(): AuthService {
@@ -106,6 +171,9 @@ export class AuthService {
       this.currentUser = userProfile
       this.currentTokens = tokens
       this.currentDeviceId = deviceId
+      
+      // Persist session to localStorage for page refresh
+      this.persistSession()
       
       // Set the authenticated user ID in the identity system
       setCurrentUserId(userProfile.id)
@@ -203,6 +271,9 @@ export class AuthService {
       this.currentUser = userProfile
       this.currentTokens = tokens
       this.currentDeviceId = deviceId
+      
+      // Persist session to localStorage for page refresh
+      this.persistSession()
 
       // Set the authenticated user ID in the identity system
       setCurrentUserId(userProfile.id)
@@ -230,7 +301,7 @@ export class AuthService {
   /**
    * Login with OAuth provider
    */
-  async loginWithOAuth(provider: 'google' | 'github'): Promise<AuthResult> {
+  async loginWithOAuth(provider: 'google' | 'github' | 'auth0'): Promise<AuthResult> {
     try {
       // In a real implementation, this would redirect to OAuth provider
       // For now, we'll simulate a successful OAuth login
@@ -246,6 +317,9 @@ export class AuthService {
       this.currentUser = userProfile
       this.currentTokens = tokens
       this.currentDeviceId = deviceId
+      
+      // Persist session to localStorage for page refresh
+      this.persistSession()
       
       // Set the authenticated user ID in the identity system
       setCurrentUserId(userProfile.id)
@@ -329,6 +403,9 @@ export class AuthService {
       this.currentUser = null
       this.currentTokens = null
       this.currentDeviceId = null
+      
+      // Clear stored session from localStorage
+      this.clearStoredSession()
 
       // Clear authenticated user ID from identity system
       clearCurrentUserId()
@@ -473,7 +550,7 @@ export class AuthService {
     return this.createMockUserProfile(email, metadata)
   }
 
-  private async simulateBackendOAuth(provider: 'google' | 'github'): Promise<UserProfile> {
+  private async simulateBackendOAuth(provider: 'google' | 'github' | 'auth0'): Promise<UserProfile> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 500))
     
