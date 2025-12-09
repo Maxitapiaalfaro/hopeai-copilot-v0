@@ -55,6 +55,9 @@ export class ServerStorageAdapter {
     return this.storage
   }
 
+  private initializationError: Error | null = null
+  private usingFallback = false
+
   async initialize(): Promise<void> {
     console.log('🔧 [ServerStorageAdapter] initialize() called')
     if (this.initialized) {
@@ -63,12 +66,42 @@ export class ServerStorageAdapter {
     }
 
     console.log('🔧 [ServerStorageAdapter] Ensuring storage...')
-    const storage = await this.ensureStorage()
-    console.log('🔧 [ServerStorageAdapter] Calling storage.initialize()...')
-    await storage.initialize()
-    this.initialized = true
+    
+    try {
+      const storage = await this.ensureStorage()
+      console.log('🔧 [ServerStorageAdapter] Calling storage.initialize()...')
+      await storage.initialize()
+      this.initialized = true
+      console.log("✅ [ServerStorageAdapter] Initialized successfully")
+    } catch (error) {
+      console.error('⚠️ [ServerStorageAdapter] Primary storage initialization failed:', error)
+      this.initializationError = error as Error
+      
+      // Fallback to memory storage so the app can still work
+      console.log('🔄 [ServerStorageAdapter] Falling back to MemoryServerStorage...')
+      try {
+        const { MemoryServerStorage } = await import('./server-storage-memory')
+        this.storage = new MemoryServerStorage()
+        await this.storage.initialize()
+        this.initialized = true
+        this.usingFallback = true
+        console.log('⚠️ [ServerStorageAdapter] Running in DEGRADED MODE with memory storage')
+        console.log('⚠️ [ServerStorageAdapter] Data will NOT persist. Fix MongoDB connection.')
+      } catch (fallbackError) {
+        console.error('❌ [ServerStorageAdapter] Fallback storage also failed:', fallbackError)
+        // Still mark as initialized to prevent blocking - operations will fail gracefully
+        this.initialized = true
+        this.usingFallback = true
+      }
+    }
+  }
 
-    console.log("✅ [ServerStorageAdapter] Initialized (HIPAA-compliant with SQLite)")
+  isUsingFallback(): boolean {
+    return this.usingFallback
+  }
+
+  getInitializationError(): Error | null {
+    return this.initializationError
   }
 
   async saveChatSession(chatState: ChatState): Promise<void> {

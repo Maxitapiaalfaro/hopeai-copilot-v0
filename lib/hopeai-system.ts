@@ -67,22 +67,28 @@ export class HopeAISystem {
 
       // 🚀 OPTIMIZACIÓN: Inicializar componentes en PARALELO para reducir cold start
       const [storage, intentRouter, orchestrator] = await Promise.all([
-        // 1. Storage adapter
+        // 1. Storage adapter (non-blocking - errors are handled gracefully)
         (async () => {
           console.log('🔧 [HopeAISystem] Getting storage adapter...')
-          const storageAdapter = await getStorageAdapter()
-          console.log('✅ [HopeAISystem] Storage adapter obtained:', storageAdapter?.constructor?.name)
+          try {
+            const storageAdapter = await getStorageAdapter()
+            console.log('✅ [HopeAISystem] Storage adapter obtained:', storageAdapter?.constructor?.name)
 
-          // Asegurar que el storage esté inicializado
-          if (storageAdapter && typeof storageAdapter.initialize === 'function') {
-            console.log('🔧 [HopeAISystem] Calling storage.initialize()...')
-            await storageAdapter.initialize()
-            console.log('✅ [HopeAISystem] Storage initialized successfully')
-          } else {
-            console.warn('⚠️ [HopeAISystem] Storage does not have initialize method')
+            // Asegurar que el storage esté inicializado
+            if (storageAdapter && typeof storageAdapter.initialize === 'function') {
+              console.log('🔧 [HopeAISystem] Calling storage.initialize()...')
+              await storageAdapter.initialize()
+              console.log('✅ [HopeAISystem] Storage initialized successfully')
+            } else {
+              console.warn('⚠️ [HopeAISystem] Storage does not have initialize method')
+            }
+
+            return storageAdapter
+          } catch (storageError) {
+            console.error('⚠️ [HopeAISystem] Storage initialization failed (non-fatal):', storageError)
+            // Return null - the system will work without persistent storage
+            return null
           }
-
-          return storageAdapter
         })(),
 
         // 2. Intent router (independiente del storage)
