@@ -942,9 +942,12 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
 // Agregar el componente AuthModal al final del archivo
 export function MainInterfaceOptimizedWithAuth({ showDebugElements = true }: { showDebugElements?: boolean }) {
-  const { isAuthenticated, isLoading, isAuthModalOpen, openAuthModal, closeAuthModal, authModalMode } = useAuth()
+  const { isAuthenticated, isLoading, isFirebaseReady, isAuthModalOpen, openAuthModal, closeAuthModal, authModalMode } = useAuth()
 
-  if (isLoading) {
+  // Gate: block rendering until BOTH the legacy auth check AND Firebase Auth
+  // have resolved their initial state. This prevents use-hopeai-system.ts from
+  // initializing IndexedDB with an anonymous UID when a Firebase session exists.
+  if (isLoading || !isFirebaseReady) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="text-center">
